@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "214568690652",
+    "project_id": "logistics-app-7f9ff",
+    "storage_bucket": "logistics-app-7f9ff.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:214568690652:android:8f29f7d0ae7fd370b06519",
+        "android_client_info": {
+          "package_name": "com.example.logistics_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCLeasRMaNsaq3rRJ42YT--CVTbD1pGwn0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
