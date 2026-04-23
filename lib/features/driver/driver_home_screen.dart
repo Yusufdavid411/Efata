@@ -1,116 +1,95 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../shared/widgets/app_drawer.dart';
+import 'widgets/driver_status_toggle.dart';
+import 'widgets/available_jobs_section.dart';
+import 'widgets/driver_history_section.dart';
+import 'widgets/driver_earnings_summary.dart';
 
-class DriverHomeScreen extends StatelessWidget {
+class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
 
-  String formatPrice(dynamic price) {
-    if (price == null) return "Price not available";
+  @override
+  State<DriverHomeScreen> createState() => _DriverHomeScreenState();
+}
 
-    if (price is num) {
-      return "₦${price.toStringAsFixed(0)}";
+class _DriverHomeScreenState extends State<DriverHomeScreen> {
+  bool isOnline = false;
+
+  Future<void> handleStatusChange(bool value) async {
+    if (!value) {
+      final shouldGoOffline = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("Go Offline?"),
+          content: const Text(
+            "If you go offline, you will not receive the latest available jobs until you come online again.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("Go Offline"),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldGoOffline == true) {
+        setState(() {
+          isOnline = false;
+        });
+      }
+
+      return;
     }
 
-    final parsed = double.tryParse(price.toString());
-    if (parsed != null) {
-      return "₦${parsed.toStringAsFixed(0)}";
-    }
-
-    return "Price not available";
+    setState(() {
+      isOnline = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: const AppDrawer(isDriver: true),
       appBar: AppBar(
-        title: const Text('Available Jobs'),
-        centerTitle: true,
+        title: const Text("Driver Dashboard"),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('orders')
-            .where('status', isEqualTo: 'pending')
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Something went wrong\n${snapshot.error}'),
-            );
-          }
-
-          final jobs = snapshot.data?.docs ?? [];
-
-          jobs.sort((a, b) {
-            final aData = a.data() as Map<String, dynamic>;
-            final bData = b.data() as Map<String, dynamic>;
-
-            final aTime =
-                (aData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
-            final bTime =
-                (bData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
-
-            return bTime.compareTo(aTime);
-          });
-
-          if (jobs.isEmpty) {
-            return const Center(
-              child: Text(
-                "No available jobs right now",
-                style: TextStyle(fontSize: 16),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: ListView(
+          children: [
+            DriverStatusToggle(
+              isOnline: isOnline,
+              onChanged: handleStatusChange,
+            ),
+            const SizedBox(height: 20),
+            const DriverEarningsSummary(),
+            const SizedBox(height: 24),
+            const Text(
+              "Available Jobs",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: jobs.length,
-            itemBuilder: (context, index) {
-              final job = jobs[index];
-              final data = job.data() as Map<String, dynamic>;
-
-              final pickup =
-                  data['pickup']?.toString() ?? 'No pickup location';
-              final dropoff =
-                  data['dropoff']?.toString() ?? 'No drop-off location';
-              final item =
-                  data['item']?.toString() ?? 'No item description';
-              final price = data['price'];
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 14),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "$pickup → $dropoff",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text("Item: $item"),
-                      const SizedBox(height: 8),
-                      Text(
-                        formatPrice(price),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
+            ),
+            const SizedBox(height: 10),
+            AvailableJobsSection(isOnline: isOnline),
+            const SizedBox(height: 30),
+            const Text(
+              "Job History",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const DriverHistorySection(),
+          ],
+        ),
       ),
     );
   }
