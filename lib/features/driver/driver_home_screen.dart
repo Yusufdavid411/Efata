@@ -1,64 +1,116 @@
 import 'package:flutter/material.dart';
-import '../../shared/widgets/app_drawer.dart';
-import 'widgets/driver_status_toggle.dart';
-import 'widgets/available_jobs_section.dart';
-import 'widgets/driver_history_section.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class DriverHomeScreen extends StatefulWidget {
+class DriverHomeScreen extends StatelessWidget {
   const DriverHomeScreen({super.key});
 
-  @override
-  State<DriverHomeScreen> createState() => _DriverHomeScreenState();
-}
+  String formatPrice(dynamic price) {
+    if (price == null) return "Price not available";
 
-class _DriverHomeScreenState extends State<DriverHomeScreen> {
-  bool isOnline = false;
+    if (price is num) {
+      return "₦${price.toStringAsFixed(0)}";
+    }
+
+    final parsed = double.tryParse(price.toString());
+    if (parsed != null) {
+      return "₦${parsed.toStringAsFixed(0)}";
+    }
+
+    return "Price not available";
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const AppDrawer(isDriver: true),
       appBar: AppBar(
-        title: const Text("Driver Dashboard"),
+        title: const Text('Available Jobs'),
+        centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: ListView(
-          children: [
-            DriverStatusToggle(
-              isOnline: isOnline,
-              onChanged: (v) {
-                setState(() {
-                  isOnline = v;
-                });
-              },
-            ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('orders')
+            .where('status', isEqualTo: 'pending')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-            const SizedBox(height: 20),
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Something went wrong\n${snapshot.error}'),
+            );
+          }
 
-            const Text(
-              "Available Jobs",
-              style: TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+          final jobs = snapshot.data?.docs ?? [];
 
-            const SizedBox(height: 10),
+          jobs.sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
 
-            AvailableJobsSection(isOnline: isOnline),
+            final aTime =
+                (aData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+            final bTime =
+                (bData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
 
-            const SizedBox(height: 30),
+            return bTime.compareTo(aTime);
+          });
 
-            const Text(
-              "Job History",
-              style: TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+          if (jobs.isEmpty) {
+            return const Center(
+              child: Text(
+                "No available jobs right now",
+                style: TextStyle(fontSize: 16),
+              ),
+            );
+          }
 
-            const SizedBox(height: 10),
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: jobs.length,
+            itemBuilder: (context, index) {
+              final job = jobs[index];
+              final data = job.data() as Map<String, dynamic>;
 
-            const DriverHistorySection(),
-          ],
-        ),
+              final pickup =
+                  data['pickup']?.toString() ?? 'No pickup location';
+              final dropoff =
+                  data['dropoff']?.toString() ?? 'No drop-off location';
+              final item =
+                  data['item']?.toString() ?? 'No item description';
+              final price = data['price'];
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 14),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "$pickup → $dropoff",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text("Item: $item"),
+                      const SizedBox(height: 8),
+                      Text(
+                        formatPrice(price),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
