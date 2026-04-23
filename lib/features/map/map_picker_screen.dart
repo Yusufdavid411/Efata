@@ -14,6 +14,10 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final locationText =
+        'Selected location (${selectedLocation.latitude.toStringAsFixed(4)}, '
+        '${selectedLocation.longitude.toStringAsFixed(4)})';
+
     return Scaffold(
       appBar: AppBar(title: const Text('Pick Location')),
       body: Stack(
@@ -49,8 +53,21 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               ),
             ],
           ),
-
-          // Confirm button
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 90,
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  locationText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ),
+          ),
           Positioned(
             bottom: 20,
             left: 16,
@@ -59,9 +76,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               onPressed: () {
                 Navigator.pop(
                   context,
-                  'Selected location '
-                  '(${selectedLocation.latitude.toStringAsFixed(4)}, '
-                  '${selectedLocation.longitude.toStringAsFixed(4)})',
+                  {
+                    'address': locationText,
+                    'latitude': selectedLocation.latitude,
+                    'longitude': selectedLocation.longitude,
+                  },
                 );
               },
               child: const Text('Confirm Location'),

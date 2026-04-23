@@ -4,7 +4,6 @@ import 'widgets/customer_welcome_header.dart';
 import 'widgets/customer_summary_card.dart';
 import 'widgets/customer_primary_action.dart';
 import 'widgets/active_delivery_section.dart';
-import 'widgets/recent_orders_section.dart';
 import 'simple_order_form.dart';
 
 class CustomerHomeScreen extends StatelessWidget {
@@ -42,7 +41,6 @@ class CustomerHomeScreen extends StatelessWidget {
                   TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
-            const RecentOrdersSection(),
           ],
         ),
       ),
