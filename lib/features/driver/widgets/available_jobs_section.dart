@@ -1,67 +1,215 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../core/services/order_service.dart';
 
-class AvailableJobsSection extends StatelessWidget {
+class AvailableJobsSection extends StatefulWidget {
   final bool isOnline;
 
   const AvailableJobsSection({super.key, required this.isOnline});
 
   @override
-  Widget build(BuildContext context) {
-    if (!isOnline) {
-      return const SizedBox();
+  State<AvailableJobsSection> createState() => _AvailableJobsSectionState();
+}
+
+class _AvailableJobsSectionState extends State<AvailableJobsSection> {
+  List<QueryDocumentSnapshot> _cachedJobs = [];
+
+  String formatPrice(dynamic price) {
+    if (price == null) return "Price not available";
+
+    if (price is num) {
+      return "₦${price.toStringAsFixed(0)}";
     }
 
-    final orderService = OrderService();
+    final parsed = double.tryParse(price.toString());
+    if (parsed != null) {
+      return "₦${parsed.toStringAsFixed(0)}";
+    }
+
+    return "Price not available";
+  }
+
+  Future<void> acceptJob(String orderId, String driverId) async {
+    await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
+      'driverId': driverId,
+      'status': 'accepted',
+    });
+  }
+
+  Future<void> hideJobForDriver(String orderId, String driverId) async {
+    await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
+      'rejectedBy': FieldValue.arrayUnion([driverId]),
+    });
+  }
+
+  List<QueryDocumentSnapshot> _prepareJobs(
+    List<QueryDocumentSnapshot> docs,
+    String driverId,
+  ) {
+    final filtered = docs.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+
+      final status = data['status']?.toString() ?? '';
+      final rejectedByRaw = data['rejectedBy'];
+      final rejectedBy = rejectedByRaw is List ? rejectedByRaw : [];
+
+      return status == 'pending' && !rejectedBy.contains(driverId);
+    }).toList();
+
+    filtered.sort((a, b) {
+      final aData = a.data() as Map<String, dynamic>;
+      final bData = b.data() as Map<String, dynamic>;
+
+      final aTime =
+          (aData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+      final bTime =
+          (bData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+
+      return bTime.compareTo(aTime); // newest first
+    });
+
+    return filtered;
+  }
+
+  Widget _buildOfflineNotice() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "You are offline. You can still view already loaded jobs, but you will not receive the latest available jobs until you go online again.",
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildJobCard(
+    BuildContext context,
+    QueryDocumentSnapshot job,
+    String driverId,
+  ) {
+    final data = job.data() as Map<String, dynamic>;
+
+    final pickup = data['pickup']?.toString() ?? 'No pickup location';
+    final dropoff = data['dropoff']?.toString() ?? 'No drop-off location';
+    final item = data['item']?.toString() ?? 'No item description';
+    final price = data['price'];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "$pickup → $dropoff",
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text("Item: $item"),
+            const SizedBox(height: 8),
+            Text(
+              formatPrice(price),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      await acceptJob(job.id, driverId);
+                    },
+                    child: const Text("Accept"),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      await hideJobForDriver(job.id, driverId);
+                    },
+                    child: const Text("Reject"),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildJobList(BuildContext context, String driverId) {
+    if (_cachedJobs.isEmpty) {
+      return const Text("No available jobs");
+    }
+
+    return Column(
+      children: _cachedJobs.map((job) {
+        return _buildJobCard(context, job, driverId);
+      }).toList(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final driver = FirebaseAuth.instance.currentUser;
 
+    if (driver == null) {
+      return const Text("Driver not logged in");
+    }
+
+    if (!widget.isOnline) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildOfflineNotice(),
+          _buildJobList(context, driver.uid),
+        ],
+      );
+    }
+
     return StreamBuilder<QuerySnapshot>(
-      stream: orderService.getPendingOrders(),
+      stream: FirebaseFirestore.instance
+          .collection('orders')
+          .where('status', isEqualTo: 'pending')
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const CircularProgressIndicator();
+            _cachedJobs.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
         }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Text("No available jobs");
+        if (snapshot.hasError) {
+          return Text("Something went wrong: ${snapshot.error}");
         }
 
-        final jobs = snapshot.data!.docs;
+        if (snapshot.hasData) {
+          _cachedJobs = _prepareJobs(snapshot.data!.docs, driver.uid);
+        }
 
-        return Column(
-          children: jobs.map((job) {
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                title:
-                    Text("${job['pickup']} → ${job['dropoff']}"),
-                subtitle: const Text("Pending"),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ElevatedButton(
-                      onPressed: () async {
-                        await orderService.acceptOrder(
-                            job.id, driver!.uid);
-                      },
-                      child: const Text("Accept"),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton(
-                      onPressed: () async {
-                        await orderService.rejectOrder(job.id);
-                      },
-                      child: const Text("Reject"),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
-        );
+        return _buildJobList(context, driver.uid);
       },
     );
   }
