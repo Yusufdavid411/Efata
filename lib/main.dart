@@ -6,7 +6,8 @@ import 'package:logistics_app/features/booking/customer/order_history_screen.dar
 import 'package:logistics_app/features/booking/customer/simple_order_form.dart';
 import 'package:logistics_app/features/driver/driver_home_screen.dart';
 import 'package:logistics_app/features/driver/driver_profile_screen.dart';
-import 'features/auth/login_screen.dart';
+import 'package:logistics_app/features/driver/driver_onboarding_screen.dart';
+import 'package:logistics_app/features/auth/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +31,7 @@ class MyApp extends StatelessWidget {
         '/createOrder': (context) => const SimpleOrderForm(),
         '/customerProfile': (context) => const CustomerProfileScreen(),
         '/driverProfile': (context) => const DriverProfileScreen(),
+        '/driverOnboarding': (context) => const DriverOnboardingScreen(),
       },
     );
   }

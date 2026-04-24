@@ -72,6 +72,14 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
     );
   }
 
+  // 🔥 NEW: SKIP FUNCTION
+  void skipOnboarding() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
+    );
+  }
+
   @override
   void dispose() {
     nameController.dispose();
@@ -171,11 +179,20 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
 
             const SizedBox(height: 30),
 
+            // ✅ MAIN BUTTON
             ElevatedButton(
               onPressed: isSaving ? null : submit,
               child: Text(
                 isSaving ? 'Saving...' : 'Continue to Dashboard',
               ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // 🔥 NEW: SKIP BUTTON
+            TextButton(
+              onPressed: skipOnboarding,
+              child: const Text("Skip for now"),
             ),
           ],
         ),

@@ -30,7 +30,29 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
   }
 
   Future<void> acceptJob(String orderId, String driverId) async {
-    await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
+    final activeJobs = await FirebaseFirestore.instance
+        .collection('orders')
+        .where('driverId', isEqualTo: driverId)
+        .get();
+
+    final hasActive = activeJobs.docs.any((doc) {
+      final status = doc['status'];
+      return status == 'accepted' || status == 'inTransit';
+    });
+
+    if (hasActive) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Complete your current job first"),
+        ),
+      );
+      return;
+    }
+
+    await FirebaseFirestore.instance
+        .collection('orders')
+        .doc(orderId)
+        .update({
       'driverId': driverId,
       'status': 'accepted',
     });
