@@ -23,12 +23,7 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
   Future<void> submit() async {
     final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Driver not logged in")),
-      );
-      return;
-    }
+    if (user == null) return;
 
     if (nameController.text.trim().isEmpty ||
         phoneController.text.trim().isEmpty ||
@@ -42,9 +37,9 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
       return;
     }
 
-    setState(() {
-      isSaving = true;
-    });
+    setState(() => isSaving = true);
+
+    await user.updateDisplayName(nameController.text.trim());
 
     await FirebaseFirestore.instance.collection('drivers').doc(user.uid).set({
       'driverId': user.uid,
@@ -55,16 +50,15 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
       'plateNumber': plateController.text.trim(),
       'licenseUploaded': licenseUploaded,
       'verificationStatus': 'pending',
+      'profileCompleted': true,
+      'onboardingSkipped': false,
       'isOnline': false,
-      'createdAt': Timestamp.now(),
       'updatedAt': Timestamp.now(),
     }, SetOptions(merge: true));
 
     if (!mounted) return;
 
-    setState(() {
-      isSaving = false;
-    });
+    setState(() => isSaving = false);
 
     Navigator.pushReplacement(
       context,
@@ -72,8 +66,28 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
     );
   }
 
-  // 🔥 NEW: SKIP FUNCTION
-  void skipOnboarding() {
+  Future<void> skipOnboarding() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('drivers').doc(user.uid).set({
+        'driverId': user.uid,
+        'email': user.email,
+        'fullName': user.displayName ?? 'Driver profile not completed',
+        'phone': 'Not added',
+        'vehicleType': 'Not added',
+        'plateNumber': 'Not added',
+        'licenseUploaded': false,
+        'verificationStatus': 'incomplete',
+        'profileCompleted': false,
+        'onboardingSkipped': true,
+        'isOnline': false,
+        'updatedAt': Timestamp.now(),
+      }, SetOptions(merge: true));
+    }
+
+    if (!mounted) return;
+
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
@@ -101,21 +115,14 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
           children: [
             const Text(
               "Complete your driver profile",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 8),
-
             const Text(
-              "Your details will be reviewed before full verification.",
+              "You can skip now and update these details later from your profile.",
               style: TextStyle(color: Colors.grey),
             ),
-
             const SizedBox(height: 20),
-
             TextField(
               controller: nameController,
               decoration: const InputDecoration(
@@ -123,9 +130,7 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
-
             const SizedBox(height: 16),
-
             TextField(
               controller: phoneController,
               keyboardType: TextInputType.phone,
@@ -134,9 +139,7 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
-
             const SizedBox(height: 16),
-
             DropdownButtonFormField<String>(
               value: vehicleType,
               decoration: const InputDecoration(
@@ -152,9 +155,7 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
               ],
               onChanged: (v) => setState(() => vehicleType = v!),
             ),
-
             const SizedBox(height: 16),
-
             TextField(
               controller: plateController,
               decoration: const InputDecoration(
@@ -162,9 +163,7 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
-
             const SizedBox(height: 20),
-
             OutlinedButton.icon(
               icon: const Icon(Icons.upload_file),
               label: Text(
@@ -176,22 +175,14 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
                 setState(() => licenseUploaded = true);
               },
             ),
-
             const SizedBox(height: 30),
-
-            // ✅ MAIN BUTTON
             ElevatedButton(
               onPressed: isSaving ? null : submit,
-              child: Text(
-                isSaving ? 'Saving...' : 'Continue to Dashboard',
-              ),
+              child: Text(isSaving ? 'Saving...' : 'Continue to Dashboard'),
             ),
-
             const SizedBox(height: 10),
-
-            // 🔥 NEW: SKIP BUTTON
             TextButton(
-              onPressed: skipOnboarding,
+              onPressed: isSaving ? null : skipOnboarding,
               child: const Text("Skip for now"),
             ),
           ],

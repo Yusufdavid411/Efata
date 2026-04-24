@@ -1,72 +1,123 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:logistics_app/core/services/order_service.dart';
 
 class DriverActiveJobsScreen extends StatelessWidget {
   const DriverActiveJobsScreen({super.key});
 
+  Future<void> startTransit(String id) async {
+    await FirebaseFirestore.instance
+        .collection('orders')
+        .doc(id)
+        .update({
+      'status': 'inTransit',
+      'startedAt': Timestamp.now(),
+    });
+  }
+
+  Future<void> completeJob(String id) async {
+    await FirebaseFirestore.instance
+        .collection('orders')
+        .doc(id)
+        .update({
+      'status': 'completed',
+      'completedAt': Timestamp.now(),
+    });
+  }
+
+  String formatTime(Timestamp? ts) {
+    if (ts == null) return 'Not available';
+    final d = ts.toDate();
+    return "${d.day}/${d.month} ${d.hour}:${d.minute}";
+  }
+
   @override
   Widget build(BuildContext context) {
     final driver = FirebaseAuth.instance.currentUser;
-    final OrderService orderService = OrderService();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("My Active Jobs"),
-        centerTitle: true,
+        title: const Text("Current Job"),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: orderService.getDriverOrders(driver!.uid),
+        stream: FirebaseFirestore.instance
+            .collection('orders')
+            .where('driverId', isEqualTo: driver?.uid)
+            .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final jobs = snapshot.data!.docs;
+          final docs = snapshot.data!.docs;
 
-          if (jobs.isEmpty) {
-            return const Center(child: Text("No active jobs"));
+          // 🔥 FIND ONLY ACTIVE JOB
+          final active = docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final status = data['status'];
+            return status == 'accepted' || status == 'inTransit';
+          }).toList();
+
+          if (active.isEmpty) {
+            return const Center(child: Text("No active job"));
           }
 
-          return ListView.builder(
-            itemCount: jobs.length,
-            itemBuilder: (context, index) {
-              final job = jobs[index];
-              final status = job['status'];
+          final job = active.first;
+          final data = job.data() as Map<String, dynamic>;
 
-              return Card(
-                margin: const EdgeInsets.all(12),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("Pickup: ${job['pickup']}"),
-                      Text("Drop-off: ${job['dropoff']}"),
-                      Text("Status: ${status.toString().toUpperCase()}"),
-                      const SizedBox(height: 10),
+          final pickup = data['pickup'] ?? 'No pickup';
+          final dropoff = data['dropoff'] ?? 'No drop-off';
+          final item = data['item'] ?? 'No item';
+          final status = data['status'] ?? 'unknown';
+          final createdAt = data['createdAt'];
 
-                      if (status == 'accepted')
-                        ElevatedButton(
-                          onPressed: () {
-                            orderService.startTransit(job.id);
-                          },
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "$pickup → $dropoff",
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    Text("Item: $item"),
+                    const SizedBox(height: 6),
+                    Text("Status: $status"),
+                    const SizedBox(height: 6),
+                    Text("Created: ${formatTime(createdAt)}"),
+
+                    const SizedBox(height: 20),
+
+                    if (status == 'accepted')
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => startTransit(job.id),
                           child: const Text("Start Transit"),
                         ),
+                      ),
 
-                      if (status == 'inTransit')
-                        ElevatedButton(
-                          onPressed: () {
-                            orderService.completeOrder(job.id);
-                          },
+                    if (status == 'inTransit')
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => completeJob(job.id),
                           child: const Text("Mark Completed"),
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
-              );
-            },
+              ),
+            ),
           );
         },
       ),

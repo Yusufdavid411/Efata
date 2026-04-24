@@ -1,48 +1,200 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'driver_onboarding_screen.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 
-class DriverProfileScreen extends StatelessWidget {
+class DriverProfileScreen extends StatefulWidget {
   const DriverProfileScreen({super.key});
 
-  Color getStatusColor(String status) {
+  @override
+  State<DriverProfileScreen> createState() => _DriverProfileScreenState();
+}
+
+class _DriverProfileScreenState extends State<DriverProfileScreen> {
+  bool isUploading = false;
+
+  Color statusColor(String status) {
     switch (status) {
       case 'verified':
         return Colors.green;
-      case 'rejected':
-        return Colors.red;
       case 'pending':
         return Colors.orange;
+      case 'rejected':
+        return Colors.red;
       default:
         return Colors.grey;
     }
   }
 
-  String formatStatus(String status) {
+  String statusText(String status) {
     switch (status) {
       case 'verified':
         return 'Verified';
-      case 'rejected':
-        return 'Rejected';
       case 'pending':
         return 'Pending Verification';
+      case 'rejected':
+        return 'Rejected';
       default:
         return 'Incomplete Profile';
     }
   }
 
-  Widget infoTile(String title, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Text(
-            "$title: ",
-            style: const TextStyle(fontWeight: FontWeight.bold),
+  Future<void> uploadProfilePicture() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+
+    setState(() => isUploading = true);
+
+    final file = File(image.path);
+
+    final ref = FirebaseStorage.instance
+        .ref()
+        .child('driver_profile_pictures')
+        .child('${user.uid}.jpg');
+
+    await ref.putFile(file);
+
+    final imageUrl = await ref.getDownloadURL();
+
+    await FirebaseFirestore.instance.collection('drivers').doc(user.uid).set({
+      'photoUrl': imageUrl,
+      'updatedAt': Timestamp.now(),
+    }, SetOptions(merge: true));
+
+    if (mounted) {
+      setState(() => isUploading = false);
+    }
+  }
+
+  Future<void> updateField({
+    required String title,
+    required String field,
+    required String currentValue,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final controller = TextEditingController(
+      text: currentValue == 'Not added' || currentValue == 'Not set'
+          ? ''
+          : currentValue,
+    );
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Update $title"),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            labelText: title,
+            border: const OutlineInputBorder(),
           ),
-          Expanded(child: Text(value)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final value = controller.text.trim();
+
+              if (value.isEmpty) return;
+
+              await FirebaseFirestore.instance
+                  .collection('drivers')
+                  .doc(user.uid)
+                  .set({
+                field: value,
+                if (field == 'fullName') 'profileCompleted': true,
+                'updatedAt': Timestamp.now(),
+              }, SetOptions(merge: true));
+
+              if (field == 'fullName') {
+                await user.updateDisplayName(value);
+              }
+
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text("Save"),
+          ),
         ],
+      ),
+    );
+  }
+
+  Future<void> updateVehicleType(String currentValue) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    String selected = currentValue == 'Not added' || currentValue == 'Not set'
+        ? 'Car'
+        : currentValue;
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Update Vehicle Type"),
+        content: DropdownButtonFormField<String>(
+          value: selected,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+          ),
+          items: const [
+            DropdownMenuItem(value: 'Car', child: Text('Car')),
+            DropdownMenuItem(value: 'Van', child: Text('Van')),
+            DropdownMenuItem(value: 'Truck', child: Text('Truck')),
+            DropdownMenuItem(value: 'Bike', child: Text('Bike')),
+            DropdownMenuItem(value: 'Pickup', child: Text('Pickup')),
+          ],
+          onChanged: (value) {
+            if (value != null) selected = value;
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance
+                  .collection('drivers')
+                  .doc(user.uid)
+                  .set({
+                'vehicleType': selected,
+                'updatedAt': Timestamp.now(),
+              }, SetOptions(merge: true));
+
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget editableTile({
+    required IconData icon,
+    required String title,
+    required String value,
+    required VoidCallback onEdit,
+  }) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(value),
+      trailing: IconButton(
+        icon: const Icon(Icons.edit_outlined),
+        onPressed: onEdit,
       ),
     );
   }
@@ -53,132 +205,157 @@ class DriverProfileScreen extends StatelessWidget {
 
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text("Profile")),
-        body: const Center(child: Text("Not logged in")),
+        appBar: AppBar(title: const Text("Driver Profile")),
+        body: const Center(child: Text("Driver not logged in")),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("My Profile")),
+      appBar: AppBar(title: const Text("Driver Profile")),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('drivers')
             .doc(user.uid)
             .snapshots(),
         builder: (context, snapshot) {
-          final exists = snapshot.hasData && snapshot.data!.exists;
-          final data = exists
+          final data = snapshot.hasData && snapshot.data!.exists
               ? snapshot.data!.data() as Map<String, dynamic>
-              : null;
+              : <String, dynamic>{};
 
-          final fullName = data?['fullName'] ?? user.displayName ?? "No name";
-          final email = user.email ?? "";
-          final phone = data?['phone'] ?? "Not added";
-          final vehicle = data?['vehicleType'] ?? "Not set";
-          final plate = data?['plateNumber'] ?? "Not set";
-          final status = data?['verificationStatus'] ?? "incomplete";
-          final licenseUploaded = data?['licenseUploaded'] == true;
+          final fullName = data['fullName']?.toString() ??
+              user.displayName ??
+              'Driver profile not completed';
+          final phone = data['phone']?.toString() ?? 'Not added';
+          final email = user.email ?? 'No email';
+          final vehicle = data['vehicleType']?.toString() ?? 'Not set';
+          final plate = data['plateNumber']?.toString() ?? 'Not set';
+          final status = data['verificationStatus']?.toString() ?? 'incomplete';
+          final photoUrl = data['photoUrl']?.toString();
 
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // 👤 HEADER
-              Column(
-                children: [
-                  const CircleAvatar(
-                    radius: 40,
-                    child: Icon(Icons.person, size: 40),
-                  ),
-                  const SizedBox(height: 10),
-
-                  Text(
-                    fullName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+              Center(
+                child: Column(
+                  children: [
+                    Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 52,
+                          backgroundImage:
+                              photoUrl != null ? NetworkImage(photoUrl) : null,
+                          child: photoUrl == null
+                              ? const Icon(Icons.person, size: 52)
+                              : null,
+                        ),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: Colors.deepPurple,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: isUploading
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.camera_alt,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                              onPressed:
+                                  isUploading ? null : uploadProfilePicture,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-
-                  Text(
-                    email,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: getStatusColor(status).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      formatStatus(status),
-                      style: TextStyle(
-                        color: getStatusColor(status),
+                    const SizedBox(height: 12),
+                    Text(
+                      fullName,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor(status).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        statusText(status),
+                        style: TextStyle(
+                          color: statusColor(status),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
 
-              const SizedBox(height: 25),
+              const SizedBox(height: 24),
 
-              // 📋 DETAILS
               Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      infoTile("Phone", phone),
-                      infoTile("Vehicle", vehicle),
-                      infoTile("Plate", plate),
-                      infoTile(
-                        "License",
-                        licenseUploaded ? "Uploaded" : "Not uploaded",
+                child: Column(
+                  children: [
+                    editableTile(
+                      icon: Icons.person_outline,
+                      title: "Full Name",
+                      value: fullName,
+                      onEdit: () => updateField(
+                        title: "Full Name",
+                        field: "fullName",
+                        currentValue: fullName,
                       ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // 🔥 COMPLETE PROFILE BUTTON
-              if (!exists || status == 'incomplete')
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DriverOnboardingScreen(),
+                    ),
+                    editableTile(
+                      icon: Icons.phone_outlined,
+                      title: "Phone Number",
+                      value: phone,
+                      onEdit: () => updateField(
+                        title: "Phone Number",
+                        field: "phone",
+                        currentValue: phone,
                       ),
-                    );
-                  },
-                  child: const Text("Complete Profile"),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.email_outlined),
+                      title: const Text("Email"),
+                      subtitle: Text(email),
+                    ),
+                    editableTile(
+                      icon: Icons.local_shipping_outlined,
+                      title: "Vehicle Type",
+                      value: vehicle,
+                      onEdit: () => updateVehicleType(vehicle),
+                    ),
+                    editableTile(
+                      icon: Icons.confirmation_number_outlined,
+                      title: "Plate Number",
+                      value: plate,
+                      onEdit: () => updateField(
+                        title: "Plate Number",
+                        field: "plateNumber",
+                        currentValue: plate,
+                      ),
+                    ),
+                  ],
                 ),
-
-              const SizedBox(height: 10),
-
-              // ✏️ EDIT (future)
-              OutlinedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Edit coming soon")),
-                  );
-                },
-                child: const Text("Edit Profile"),
-              ),
-
-              const SizedBox(height: 10),
-
-              // 🌙 DARK MODE UI
-              SwitchListTile(
-                value: false,
-                onChanged: (_) {},
-                title: const Text("Dark Mode"),
               ),
             ],
           );
