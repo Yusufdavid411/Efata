@@ -2,18 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppSettingsController extends ChangeNotifier {
-  ThemeMode themeMode = ThemeMode.system;
+  ThemeMode themeMode = ThemeMode.light;
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedTheme = prefs.getString('themeMode') ?? 'system';
+    final savedTheme = prefs.getString('themeMode') ?? 'light';
 
-    if (savedTheme == 'light') {
-      themeMode = ThemeMode.light;
-    } else if (savedTheme == 'dark') {
+    if (savedTheme == 'dark') {
       themeMode = ThemeMode.dark;
     } else {
-      themeMode = ThemeMode.system;
+      themeMode = ThemeMode.light;
     }
 
     notifyListeners();
@@ -24,12 +22,10 @@ class AppSettingsController extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
 
-    if (mode == ThemeMode.light) {
-      await prefs.setString('themeMode', 'light');
-    } else if (mode == ThemeMode.dark) {
+    if (mode == ThemeMode.dark) {
       await prefs.setString('themeMode', 'dark');
     } else {
-      await prefs.setString('themeMode', 'system');
+      await prefs.setString('themeMode', 'light');
     }
 
     notifyListeners();
