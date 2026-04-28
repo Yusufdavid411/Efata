@@ -151,8 +151,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    String selected =
-        currentValue == 'Not added' ? 'Car' : currentValue;
+    String selected = currentValue == 'Not added' ? 'Car' : currentValue;
 
     await showDialog(
       context: context,
@@ -269,43 +268,61 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               Center(
-                child: Stack(
+                child: Column(
                   children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundImage:
-                          photoUrl != null ? NetworkImage(photoUrl) : null,
-                      child: photoUrl == null
-                          ? const Icon(Icons.person, size: 50)
-                          : null,
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: CircleAvatar(
-                        backgroundColor: Colors.deepPurple,
-                        child: IconButton(
-                          icon: isUploading
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.camera_alt,
-                                  color: Colors.white,
-                                ),
-                          onPressed: isUploading ? null : uploadProfilePicture,
+                    Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundImage:
+                              photoUrl != null ? NetworkImage(photoUrl) : null,
+                          child: photoUrl == null
+                              ? const Icon(Icons.person, size: 50)
+                              : null,
                         ),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: CircleAvatar(
+                            backgroundColor: Colors.deepPurple,
+                            child: IconButton(
+                              icon: isUploading
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.camera_alt,
+                                      color: Colors.white,
+                                    ),
+                              onPressed:
+                                  isUploading ? null : uploadProfilePicture,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    Text(
+                      name,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
               ),
+
               const SizedBox(height: 20),
+
               Card(
                 child: Column(
                   children: [
