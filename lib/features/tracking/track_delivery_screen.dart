@@ -1,12 +1,12 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-class LiveTrackingScreen extends StatelessWidget {
+class TrackDeliveryScreen extends StatelessWidget {
   final String orderId;
 
-  const LiveTrackingScreen({
+  const TrackDeliveryScreen({
     super.key,
     required this.orderId,
   });
@@ -15,7 +15,8 @@ class LiveTrackingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Live Tracking'),
+        title: const Text('Track Delivery'),
+        centerTitle: true,
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
@@ -23,43 +24,41 @@ class LiveTrackingScreen extends StatelessWidget {
             .doc(orderId)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
           if (!snapshot.hasData || !snapshot.data!.exists) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+
+          final pickupLat = data['pickupLat'];
+          final pickupLng = data['pickupLng'];
+
+          final dropoffLat = data['dropoffLat'];
+          final dropoffLng = data['dropoffLng'];
+
+          final driverLat = data['driverLat'];
+          final driverLng = data['driverLng'];
+
+          final status = data['status'] ?? 'pending';
+
+          if (pickupLat == null || dropoffLat == null) {
             return const Center(
-              child: Text('Order not found'),
+              child: Text("Location data missing"),
             );
           }
 
-          final order = snapshot.data!.data() as Map<String, dynamic>;
+          final pickupPoint =
+              LatLng((pickupLat as num).toDouble(), (pickupLng as num).toDouble());
 
-          final pickupLat = order['pickupLat'];
-          final pickupLng = order['pickupLng'];
-          final dropoffLat = order['dropoffLat'];
-          final dropoffLng = order['dropoffLng'];
-          final driverLat = order['driverLat'];
-          final driverLng = order['driverLng'];
-          final status = order['status'] ?? 'pending';
+          final dropoffPoint =
+              LatLng((dropoffLat as num).toDouble(), (dropoffLng as num).toDouble());
 
-          if (pickupLat == null ||
-              pickupLng == null ||
-              dropoffLat == null ||
-              dropoffLng == null) {
-            return const Center(
-              child: Text('Location data is missing'),
-            );
-          }
-
-          final pickupPoint = LatLng(pickupLat, pickupLng);
-          final dropoffPoint = LatLng(dropoffLat, dropoffLng);
-
-          final driverPoint = driverLat != null && driverLng != null
-              ? LatLng(driverLat, driverLng)
+          final driverPoint = (driverLat != null && driverLng != null)
+              ? LatLng((driverLat as num).toDouble(),
+                  (driverLng as num).toDouble())
               : null;
+
+          final center = driverPoint ?? pickupPoint;
 
           return Column(
             children: [
@@ -68,25 +67,21 @@ class LiveTrackingScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 color: Colors.blue.shade50,
                 child: Text(
-                  'Order Status: $status',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  "Status: $status",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
 
               Expanded(
                 child: FlutterMap(
                   options: MapOptions(
-                    initialCenter: driverPoint ?? pickupPoint,
-                    initialZoom: 13,
+                    initialCenter: center,
+                    initialZoom: 14,
                   ),
                   children: [
                     TileLayer(
                       urlTemplate:
                           'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.logistics_app',
                     ),
 
                     MarkerLayer(
