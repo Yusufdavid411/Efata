@@ -5,88 +5,82 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class DriverHistorySection extends StatelessWidget {
   const DriverHistorySection({super.key});
 
-  String formatPrice(dynamic price) {
-    if (price == null) return "Price not available";
-
-    if (price is num) {
-      return "₦${price.toStringAsFixed(0)}";
-    }
-
-    final parsed = double.tryParse(price.toString());
-    if (parsed != null) {
-      return "₦${parsed.toStringAsFixed(0)}";
-    }
-
-    return "Price not available";
+  String formatTime(Timestamp? ts) {
+    if (ts == null) return '';
+    final d = ts.toDate();
+    return "${d.day}/${d.month}/${d.year}  ${d.hour}:${d.minute}";
   }
 
   @override
   Widget build(BuildContext context) {
     final driver = FirebaseAuth.instance.currentUser;
 
-    if (driver == null) {
-      return const Text("Driver not logged in");
-    }
-
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('orders')
-          .where('driverId', isEqualTo: driver.uid)
-          .where('status', isEqualTo: 'completed')
+          .where('driverId', isEqualTo: driver?.uid)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+        if (!snapshot.hasData) return const SizedBox();
 
-        if (snapshot.hasError) {
-          return Text("Something went wrong: ${snapshot.error}");
-        }
+        final docs = snapshot.data!.docs;
 
-        final history = snapshot.data?.docs ?? [];
+        final current = docs.where((d) {
+          final s = d['status'];
+          return s == 'accepted' || s == 'inTransit';
+        }).toList();
 
-        history.sort((a, b) {
-          final aData = a.data() as Map<String, dynamic>;
-          final bData = b.data() as Map<String, dynamic>;
-
-          final aTime =
-              (aData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
-          final bTime =
-              (bData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
-
-          return bTime.compareTo(aTime);
-        });
-
-        if (history.isEmpty) {
-          return const Text("No completed jobs yet");
-        }
+        final completed = docs.where((d) {
+          return d['status'] == 'completed';
+        }).toList();
 
         return Column(
-          children: history.map((job) {
-            final data = job.data() as Map<String, dynamic>;
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (current.isNotEmpty) ...[
+              const Text(
+                "Current Job",
+                style: TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              ...current.map((job) {
+                final data = job.data() as Map<String, dynamic>;
+                return Card(
+                  child: ListTile(
+                    title: Text(
+                        "${data['pickup']} → ${data['dropoff']}"),
+                    subtitle: Text("Status: ${data['status']}"),
+                  ),
+                );
+              }),
+              const SizedBox(height: 20),
+            ],
 
-            final pickup =
-                data['pickup']?.toString() ?? 'No pickup location';
-            final dropoff =
-                data['dropoff']?.toString() ?? 'No drop-off location';
-            final price = data['price'];
+            const Text(
+              "Recent Jobs",
+              style:
+                  TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
 
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                title: Text("$pickup → $dropoff"),
-                subtitle: const Text("Completed"),
-                trailing: Text(
-                  formatPrice(price),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
+            const SizedBox(height: 10),
+
+            if (completed.isEmpty)
+              const Text("No completed jobs yet"),
+
+            ...completed.map((job) {
+              final data = job.data() as Map<String, dynamic>;
+              return Card(
+                child: ListTile(
+                  title: Text(
+                      "${data['pickup']} → ${data['dropoff']}"),
+                  subtitle: Text(
+                    "Completed: ${formatTime(data['completedAt'])}",
                   ),
                 ),
-              ),
-            );
-          }).toList(),
+              );
+            }),
+          ],
         );
       },
     );

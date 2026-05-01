@@ -5,19 +5,15 @@ class DriverRegisterScreen extends StatefulWidget {
   const DriverRegisterScreen({super.key});
 
   @override
-  State<DriverRegisterScreen> createState() =>
-      _DriverRegisterScreenState();
+  State<DriverRegisterScreen> createState() => _DriverRegisterScreenState();
 }
 
-class _DriverRegisterScreenState
-    extends State<DriverRegisterScreen> {
+class _DriverRegisterScreenState extends State<DriverRegisterScreen> {
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
 
-  final TextEditingController nameController =
-      TextEditingController();
-  final TextEditingController emailController =
-      TextEditingController();
-  final TextEditingController passwordController =
-      TextEditingController();
+  bool isLoading = false;
 
   @override
   void dispose() {
@@ -28,6 +24,19 @@ class _DriverRegisterScreenState
   }
 
   Future<void> registerDriver() async {
+    if (nameController.text.trim().isEmpty ||
+        emailController.text.trim().isEmpty ||
+        passwordController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please complete all fields')),
+      );
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
     final authService = AuthService();
 
     try {
@@ -40,13 +49,24 @@ class _DriverRegisterScreenState
       if (!mounted) return;
 
       if (user != null) {
-        Navigator.pushReplacementNamed(context, '/driverHome');
+        await user.updateDisplayName(nameController.text.trim());
+
+        if (!mounted) return;
+
+        Navigator.pushReplacementNamed(context, '/driverOnboarding');
       }
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString())),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -71,6 +91,7 @@ class _DriverRegisterScreenState
             const SizedBox(height: 20),
             TextField(
               controller: emailController,
+              keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(
                 labelText: 'Email',
                 border: OutlineInputBorder(),
@@ -86,9 +107,15 @@ class _DriverRegisterScreenState
               ),
             ),
             const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: registerDriver,
-              child: const Text('Register as Driver'),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: isLoading ? null : registerDriver,
+                child: Text(
+                  isLoading ? 'Creating account...' : 'Register as Driver',
+                ),
+              ),
             ),
           ],
         ),

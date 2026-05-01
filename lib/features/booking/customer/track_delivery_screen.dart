@@ -1,42 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 class TrackDeliveryScreen extends StatelessWidget {
   final String orderId;
 
-  const TrackDeliveryScreen({super.key, required this.orderId});
-
-  String getStatusMessage(String status) {
-    switch (status) {
-      case 'pending':
-        return 'Waiting for a driver to accept your request';
-      case 'accepted':
-        return 'Driver has accepted your delivery';
-      case 'inTransit':
-        return 'Your delivery is on the way';
-      case 'completed':
-        return 'Delivery completed successfully';
-      case 'rejected':
-        return 'Delivery request was rejected';
-      default:
-        return 'Processing...';
-    }
-  }
-
-  double getProgressValue(String status) {
-    switch (status) {
-      case 'pending':
-        return 0.2;
-      case 'accepted':
-        return 0.4;
-      case 'inTransit':
-        return 0.7;
-      case 'completed':
-        return 1.0;
-      default:
-        return 0.1;
-    }
-  }
+  const TrackDeliveryScreen({
+    super.key,
+    required this.orderId,
+  });
 
   Color getStatusColor(String status) {
     switch (status) {
@@ -52,6 +25,23 @@ class TrackDeliveryScreen extends StatelessWidget {
         return Colors.red;
       default:
         return Colors.grey;
+    }
+  }
+
+  String getStatusLabel(String status) {
+    switch (status) {
+      case 'pending':
+        return "Waiting for driver";
+      case 'accepted':
+        return "Driver assigned";
+      case 'inTransit':
+        return "Driver is on the way";
+      case 'completed':
+        return "Delivery completed";
+      case 'rejected':
+        return "Rejected";
+      default:
+        return status;
     }
   }
 
@@ -72,77 +62,117 @@ class TrackDeliveryScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final order = snapshot.data!;
-          final status = order['status'] ?? 'pending';
+          final data = snapshot.data!.data() as Map<String, dynamic>;
 
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const SizedBox(height: 20),
+          final pickup = data['pickup']?.toString() ?? 'No pickup';
+          final dropoff = data['dropoff']?.toString() ?? 'No drop-off';
+          final item = data['item']?.toString() ?? 'No item';
+          final status = data['status']?.toString() ?? 'pending';
 
-                Icon(
-                  Icons.local_shipping,
-                  size: 80,
-                  color: getStatusColor(status),
-                ),
+          final driverLat = data['driverLat'];
+          final driverLng = data['driverLng'];
 
-                const SizedBox(height: 20),
+          final hasDriverLocation =
+              driverLat != null && driverLng != null;
 
-                Text(
-                  getStatusMessage(status),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+          final LatLng mapCenter = hasDriverLocation
+              ? LatLng(
+                  (driverLat as num).toDouble(),
+                  (driverLng as num).toDouble(),
+                )
+              : const LatLng(6.5244, 3.3792); // Lagos fallback
+
+          return Column(
+            children: [
+              Expanded(
+                flex: 3,
+                child: FlutterMap(
+                  options: MapOptions(
+                    initialCenter: mapCenter,
+                    initialZoom: 14,
                   ),
-                ),
-
-                const SizedBox(height: 8),
-
-                Text(
-                  "Status: $status",
-                  style: const TextStyle(color: Colors.grey),
-                ),
-
-                const SizedBox(height: 20),
-
-                LinearProgressIndicator(
-                  value: getProgressValue(status),
-                ),
-
-                const SizedBox(height: 30),
-
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        _infoRow("Pickup", order['pickup']),
-                        const SizedBox(height: 10),
-                        _infoRow("Drop-off", order['dropoff']),
-                        const SizedBox(height: 10),
-                        _infoRow("Item", order['item']),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        if (hasDriverLocation)
+                          Marker(
+                            point: mapCenter,
+                            width: 45,
+                            height: 45,
+                            child: const Icon(
+                              Icons.local_shipping,
+                              color: Colors.blue,
+                              size: 40,
+                            ),
+                          ),
                       ],
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+
+              Expanded(
+                flex: 2,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.circle,
+                          color: getStatusColor(status),
+                          size: 14,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          getStatusLabel(status),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("Pickup: $pickup"),
+                            const SizedBox(height: 8),
+                            Text("Drop-off: $dropoff"),
+                            const SizedBox(height: 8),
+                            Text("Item: $item"),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    if (!hasDriverLocation)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(14),
+                          child: Text(
+                            "Driver location will appear here once the driver starts sharing location.",
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           );
         },
       ),
-    );
-  }
-
-  Widget _infoRow(String label, String value) {
-    return Row(
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-        const Spacer(),
-        Text(value),
-      ],
     );
   }
 }
