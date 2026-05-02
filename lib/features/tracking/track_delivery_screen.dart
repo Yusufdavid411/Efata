@@ -1,133 +1,64 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:logistics_app/features/booking/customer/track_delivery_screen.dart';
 
-class TrackDeliveryScreen extends StatelessWidget {
-  final String orderId;
+// ✅ IMPORT TRACK SCREEN
+import '../../tracking/track_delivery_screen.dart';
 
-  const TrackDeliveryScreen({
-    super.key,
-    required this.orderId,
-  });
+class RecentOrdersSection extends StatelessWidget {
+  const RecentOrdersSection({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Track Delivery'),
-        centerTitle: true,
-      ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('orders')
-            .doc(orderId)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData || !snapshot.data!.exists) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    final user = FirebaseAuth.instance.currentUser;
 
-          final data = snapshot.data!.data() as Map<String, dynamic>;
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('orders')
+          .where('customerId', isEqualTo: user?.uid)
+          .orderBy('createdAt', descending: true)
+          .limit(3)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox();
 
-          final pickupLat = data['pickupLat'];
-          final pickupLng = data['pickupLng'];
+        final orders = snapshot.data!.docs;
 
-          final dropoffLat = data['dropoffLat'];
-          final dropoffLng = data['dropoffLng'];
+        if (orders.isEmpty) {
+          return const Text("No recent orders");
+        }
 
-          final driverLat = data['driverLat'];
-          final driverLng = data['driverLng'];
+        return Column(
+          children: orders.map((doc) {
+            final order = doc.data() as Map<String, dynamic>;
+            final orderId = doc.id;
 
-          final status = data['status'] ?? 'pending';
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              child: ListTile(
+                title: Text("${order['pickup']} → ${order['dropoff']}"),
 
-          if (pickupLat == null || dropoffLat == null) {
-            return const Center(
-              child: Text("Location data missing"),
+                subtitle: Text("Status: ${order['status']}"),
+
+                // ✅ TRACK BUTTON ADDED HERE
+                trailing: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            TrackDeliveryScreen(orderId: orderId),
+                      ),
+                    );
+                  },
+                  child: const Text("Track"),
+                ),
+              ),
             );
-          }
-
-          final pickupPoint =
-              LatLng((pickupLat as num).toDouble(), (pickupLng as num).toDouble());
-
-          final dropoffPoint =
-              LatLng((dropoffLat as num).toDouble(), (dropoffLng as num).toDouble());
-
-          final driverPoint = (driverLat != null && driverLng != null)
-              ? LatLng((driverLat as num).toDouble(),
-                  (driverLng as num).toDouble())
-              : null;
-
-          final center = driverPoint ?? pickupPoint;
-
-          return Column(
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                color: Colors.blue.shade50,
-                child: Text(
-                  "Status: $status",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-
-              Expanded(
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: center,
-                    initialZoom: 14,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-                    ),
-
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: pickupPoint,
-                          width: 40,
-                          height: 40,
-                          child: const Icon(
-                            Icons.location_on,
-                            color: Colors.green,
-                            size: 40,
-                          ),
-                        ),
-
-                        Marker(
-                          point: dropoffPoint,
-                          width: 40,
-                          height: 40,
-                          child: const Icon(
-                            Icons.flag,
-                            color: Colors.red,
-                            size: 40,
-                          ),
-                        ),
-
-                        if (driverPoint != null)
-                          Marker(
-                            point: driverPoint,
-                            width: 45,
-                            height: 45,
-                            child: const Icon(
-                              Icons.local_shipping,
-                              color: Colors.blue,
-                              size: 40,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+          }).toList(),
+        );
+      },
     );
   }
 }
