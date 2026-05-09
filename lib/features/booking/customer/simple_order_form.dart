@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:logistics_app/features/booking/customer/track_delivery_screen.dart';
 import 'package:logistics_app/features/map/map_picker_screen.dart';
+import 'package:logistics_app/features/tracking/track_delivery_screen.dart';
 import 'package:latlong2/latlong.dart';
 
 class SimpleOrderForm extends StatefulWidget {
@@ -17,19 +17,16 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   final TextEditingController dropoffController = TextEditingController();
   final TextEditingController itemController = TextEditingController();
 
-  // ✅ Coordinates
   double? pickupLat;
   double? pickupLng;
   double? dropoffLat;
   double? dropoffLng;
 
-  // ✅ Distance & Price
   double distanceKm = 0;
   double estimatedPrice = 0;
 
   final Distance distance = Distance();
 
-  // ================= MAP PICKER =================
   Future<void> openMapPicker(bool isPickup) async {
     final result = await Navigator.push(
       context,
@@ -43,13 +40,13 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     if (result != null && result is Map) {
       setState(() {
         if (isPickup) {
-          pickupController.text = result['address'];
-          pickupLat = result['latitude'];
-          pickupLng = result['longitude'];
+          pickupController.text = result['address']?.toString() ?? '';
+          pickupLat = (result['latitude'] as num).toDouble();
+          pickupLng = (result['longitude'] as num).toDouble();
         } else {
-          dropoffController.text = result['address'];
-          dropoffLat = result['latitude'];
-          dropoffLng = result['longitude'];
+          dropoffController.text = result['address']?.toString() ?? '';
+          dropoffLat = (result['latitude'] as num).toDouble();
+          dropoffLng = (result['longitude'] as num).toDouble();
         }
 
         calculateDistanceAndPrice();
@@ -57,35 +54,43 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     }
   }
 
-  // ================= DISTANCE + PRICE =================
   void calculateDistanceAndPrice() {
     if (pickupLat != null &&
         pickupLng != null &&
         dropoffLat != null &&
         dropoffLng != null) {
-
       final km = distance.as(
         LengthUnit.Kilometer,
         LatLng(pickupLat!, pickupLng!),
         LatLng(dropoffLat!, dropoffLng!),
       );
 
-      setState(() {
-        distanceKm = km;
-        estimatedPrice = 500 + (km * 100); // simple pricing
-      });
+      distanceKm = km;
+      estimatedPrice = 500 + (km * 100);
     }
   }
 
-  // ================= SUBMIT ORDER =================
   Future<void> submitOrder() async {
     final currentUser = FirebaseAuth.instance.currentUser;
 
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login first')),
+      );
+      return;
+    }
+
     if (pickupController.text.isEmpty ||
         dropoffController.text.isEmpty ||
-        itemController.text.isEmpty) {
+        itemController.text.isEmpty ||
+        pickupLat == null ||
+        pickupLng == null ||
+        dropoffLat == null ||
+        dropoffLng == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please complete all fields")),
+        const SnackBar(
+          content: Text('Please complete all fields and select locations'),
+        ),
       );
       return;
     }
@@ -94,16 +99,16 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
       'pickup': pickupController.text.trim(),
       'dropoff': dropoffController.text.trim(),
       'item': itemController.text.trim(),
-      'customerId': currentUser!.uid,
+      'customerId': currentUser.uid,
       'driverId': null,
       'status': 'pending',
       'createdAt': Timestamp.now(),
-
-      // ✅ NEW DATA
       'pickupLat': pickupLat,
       'pickupLng': pickupLng,
       'dropoffLat': dropoffLat,
       'dropoffLng': dropoffLng,
+      'driverLat': null,
+      'driverLng': null,
       'distanceKm': distanceKm,
       'price': estimatedPrice,
     });
@@ -118,7 +123,6 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     );
   }
 
-  // ================= UI HELPERS =================
   Widget locationField({
     required String label,
     required String hint,
@@ -136,6 +140,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
             Expanded(
               child: TextField(
                 controller: controller,
+                readOnly: true,
                 decoration: InputDecoration(
                   hintText: hint,
                   prefixIcon: Icon(icon),
@@ -143,6 +148,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
+                onTap: onMapTap,
               ),
             ),
             const SizedBox(width: 10),
@@ -174,12 +180,13 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     super.dispose();
   }
 
-  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Delivery')),
-      body: Padding(
+      appBar: AppBar(
+        title: const Text('Create Delivery'),
+      ),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
@@ -207,14 +214,15 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // ✅ PRICE SECTION
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
                   children: [
-                    summaryRow('Distance', '${distanceKm.toStringAsFixed(2)} km'),
+                    summaryRow(
+                      'Distance',
+                      '${distanceKm.toStringAsFixed(2)} km',
+                    ),
                     const SizedBox(height: 6),
                     summaryRow(
                       'Estimated Price',
@@ -224,12 +232,13 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
-
-            ElevatedButton(
-              onPressed: submitOrder,
-              child: const Text('Submit Order'),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: submitOrder,
+                child: const Text('Submit Order'),
+              ),
             ),
           ],
         ),

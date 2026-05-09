@@ -1,64 +1,123 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:logistics_app/features/booking/customer/track_delivery_screen.dart';
+import 'package:latlong2/latlong.dart';
 
-// ✅ IMPORT TRACK SCREEN
-import '../../tracking/track_delivery_screen.dart';
+import '../../shared/widgets/app_live_map.dart';
 
-class RecentOrdersSection extends StatelessWidget {
-  const RecentOrdersSection({super.key});
+class TrackDeliveryScreen extends StatelessWidget {
+  final String orderId;
+
+  const TrackDeliveryScreen({
+    super.key,
+    required this.orderId,
+  });
+
+  double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  String _formatStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'intransit':
+        return 'In Transit';
+      case 'accepted':
+        return 'Accepted';
+      case 'pending':
+        return 'Pending';
+      case 'completed':
+        return 'Completed';
+      case 'rejected':
+        return 'Rejected';
+      default:
+        return status;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Track Delivery'),
+        centerTitle: true,
+      ),
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('orders')
+            .doc(orderId)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('customerId', isEqualTo: user?.uid)
-          .orderBy('createdAt', descending: true)
-          .limit(3)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox();
+          if (snapshot.hasError) {
+            return const Center(child: Text('Something went wrong'));
+          }
 
-        final orders = snapshot.data!.docs;
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+            return const Center(child: Text('Order not found'));
+          }
 
-        if (orders.isEmpty) {
-          return const Text("No recent orders");
-        }
+          final data = snapshot.data!.data() as Map<String, dynamic>;
 
-        return Column(
-          children: orders.map((doc) {
-            final order = doc.data() as Map<String, dynamic>;
-            final orderId = doc.id;
+          final pickupLat = _toDouble(data['pickupLat']);
+          final pickupLng = _toDouble(data['pickupLng']);
+          final dropoffLat = _toDouble(data['dropoffLat']);
+          final dropoffLng = _toDouble(data['dropoffLng']);
+          final driverLat = _toDouble(data['driverLat']);
+          final driverLng = _toDouble(data['driverLng']);
 
-            return Card(
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              child: ListTile(
-                title: Text("${order['pickup']} → ${order['dropoff']}"),
+          final status = data['status']?.toString() ?? 'pending';
 
-                subtitle: Text("Status: ${order['status']}"),
-
-                // ✅ TRACK BUTTON ADDED HERE
-                trailing: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            TrackDeliveryScreen(orderId: orderId),
-                      ),
-                    );
-                  },
-                  child: const Text("Track"),
+          if (pickupLat == null ||
+              pickupLng == null ||
+              dropoffLat == null ||
+              dropoffLng == null) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'Location data is missing. Please create the order using the map picker.',
+                  textAlign: TextAlign.center,
                 ),
               ),
             );
-          }).toList(),
-        );
-      },
+          }
+
+          final pickupPoint = LatLng(pickupLat, pickupLng);
+          final dropoffPoint = LatLng(dropoffLat, dropoffLng);
+
+          final driverPoint = driverLat != null && driverLng != null
+              ? LatLng(driverLat, driverLng)
+              : null;
+
+          return Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                color: Colors.blue.shade50,
+                child: Text(
+                  'Status: ${_formatStatus(status)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: AppLiveMap(
+                  pickupPoint: pickupPoint,
+                  dropoffPoint: dropoffPoint,
+                  driverPoint: driverPoint,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
