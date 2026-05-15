@@ -13,7 +13,6 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-
   @override
   void initState() {
     super.initState();
@@ -36,24 +35,23 @@ class _SplashScreenState extends State<SplashScreen> {
       if (role == 'customer') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => const CustomerHomeScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
+        );
+      } else if (role == 'driver') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
         );
       } else {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => const DriverHomeScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
         );
       }
     } else {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => const LoginScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
     }
   }
@@ -61,19 +59,47 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Color(0xFFF5F7FB),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.local_shipping, size: 80, color: Colors.blue),
-            SizedBox(height: 20),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: Color(0xFF0F766E),
+                borderRadius: BorderRadius.all(Radius.circular(24)),
+              ),
+              child: SizedBox(
+                width: 88,
+                height: 88,
+                child: Icon(
+                  Icons.local_shipping_rounded,
+                  size: 46,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            SizedBox(height: 22),
             Text(
-              'Logistics App',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              'EFATA',
+              style: TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Move goods with confidence',
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
             ),
             SizedBox(height: 30),
-            CircularProgressIndicator(),
+            SizedBox(
+              width: 26,
+              height: 26,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            ),
           ],
         ),
       ),

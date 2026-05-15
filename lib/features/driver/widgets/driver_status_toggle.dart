@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 class DriverStatusToggle extends StatelessWidget {
   final bool isOnline;
+  final bool isLoading;
   final ValueChanged<bool> onChanged;
 
   const DriverStatusToggle({
     super.key,
     required this.isOnline,
+    this.isLoading = false,
     required this.onChanged,
   });
 
@@ -18,8 +20,13 @@ class DriverStatusToggle extends StatelessWidget {
           isOnline ? 'You are Online' : 'You are Offline',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
+        subtitle: Text(
+          isOnline
+              ? 'Available to receive delivery requests'
+              : 'Not receiving new delivery requests',
+        ),
         value: isOnline,
-        onChanged: onChanged,
+        onChanged: isLoading ? null : onChanged,
       ),
     );
   }

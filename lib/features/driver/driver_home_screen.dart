@@ -19,16 +19,54 @@ class DriverHomeScreen extends StatefulWidget {
 
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
   bool isOnline = false;
+  bool isLoadingAvailability = true;
+
+  @override
+  void initState() {
+    super.initState();
+    loadDriverAvailability();
+  }
+
+  Future<void> loadDriverAvailability() async {
+    final driver = FirebaseAuth.instance.currentUser;
+
+    if (driver == null) {
+      if (mounted) setState(() => isLoadingAvailability = false);
+      return;
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(driver.uid)
+          .get();
+
+      final data = doc.data();
+      final savedStatus =
+          data?['isOnline'] == true || data?['isAvailable'] == true;
+
+      if (!mounted) return;
+
+      setState(() {
+        isOnline = savedStatus;
+        isLoadingAvailability = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => isLoadingAvailability = false);
+    }
+  }
 
   Future<void> handleStatusChange(bool value) async {
+    final driver = FirebaseAuth.instance.currentUser;
+
+    if (driver == null) return;
+
     if (!value) {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
           title: const Text("Go Offline?"),
-          content: const Text(
-            "You won’t receive new jobs while offline.",
-          ),
+          content: const Text("You won’t receive new jobs while offline."),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -44,6 +82,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
       if (confirm != true) return;
     }
+
+    await FirebaseFirestore.instance.collection('drivers').doc(driver.uid).set({
+      'isOnline': value,
+      'isAvailable': value,
+      'availabilityUpdatedAt': Timestamp.now(),
+      'updatedAt': Timestamp.now(),
+    }, SetOptions(merge: true));
 
     setState(() => isOnline = value);
   }
@@ -77,6 +122,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         final pickup = data['pickup']?.toString() ?? 'No pickup location';
         final dropoff = data['dropoff']?.toString() ?? 'No drop-off location';
         final status = data['status']?.toString() ?? 'accepted';
+        final vehicleType = data['vehicleType']?.toString();
 
         return Card(
           color: Colors.blue.shade50,
@@ -88,15 +134,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               children: [
                 const Text(
                   "Current Job",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
-                Text("$pickup → $dropoff"),
+                Text("$pickup -> $dropoff"),
                 const SizedBox(height: 6),
                 Text("Status: $status"),
+                if (vehicleType != null && vehicleType.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text("Vehicle: $vehicleType"),
+                ],
                 const SizedBox(height: 12),
                 ElevatedButton(
                   onPressed: () {
@@ -121,9 +168,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: const AppDrawer(isDriver: true),
-      appBar: AppBar(
-        title: const Text("Driver Dashboard"),
-      ),
+      appBar: AppBar(title: const Text("Driver Dashboard")),
       body: Stack(
         children: [
           Padding(
@@ -135,6 +180,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
                 DriverStatusToggle(
                   isOnline: isOnline,
+                  isLoading: isLoadingAvailability,
                   onChanged: handleStatusChange,
                 ),
 
@@ -144,10 +190,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
                 const Text(
                   "Available Jobs",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
 
                 const SizedBox(height: 10),
@@ -158,10 +201,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
                 const Text(
                   "Job History",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
 
                 const SizedBox(height: 10),

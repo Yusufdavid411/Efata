@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class DriverActiveJobsScreen extends StatefulWidget {
   const DriverActiveJobsScreen({super.key});
@@ -25,7 +26,53 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     startLiveLocationTracking(id);
   }
 
-  Future<void> completeJob(String id) async {
+  Future<void> completeJob(String id, Map<String, dynamic> data) async {
+    bool paymentReceived =
+        data['paymentStatus']?.toString().toLowerCase() == 'paid';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("Complete Delivery?"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Confirm that the goods have been delivered to the customer.",
+                  ),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: paymentReceived,
+                    title: const Text("Payment received"),
+                    onChanged: (value) {
+                      setDialogState(() => paymentReceived = value ?? false);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text("Confirm"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
     await locationSubscription?.cancel();
     locationSubscription = null;
     trackingOrderId = null;
@@ -33,6 +80,9 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     await FirebaseFirestore.instance.collection('orders').doc(id).update({
       'status': 'completed',
       'completedAt': Timestamp.now(),
+      'deliveryCompletedConfirmed': true,
+      'paymentStatus': paymentReceived ? 'paid' : 'pending',
+      'paymentConfirmedAt': paymentReceived ? Timestamp.now() : null,
     });
   }
 
@@ -77,18 +127,19 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
 
     trackingOrderId = orderId;
 
-    locationSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10,
-      ),
-    ).listen((position) {
-      FirebaseFirestore.instance.collection('orders').doc(orderId).update({
-        'driverLat': position.latitude,
-        'driverLng': position.longitude,
-        'lastLocationUpdate': Timestamp.now(),
-      });
-    });
+    locationSubscription =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+          ),
+        ).listen((position) {
+          FirebaseFirestore.instance.collection('orders').doc(orderId).update({
+            'driverLat': position.latitude,
+            'driverLng': position.longitude,
+            'lastLocationUpdate': Timestamp.now(),
+          });
+        });
   }
 
   String formatTime(dynamic ts) {
@@ -99,6 +150,47 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     final minute = d.minute.toString().padLeft(2, '0');
 
     return "${d.day}/${d.month}/${d.year} at $hour:$minute";
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  Future<void> openTurnByTurnNavigation(Map<String, dynamic> data) async {
+    final pickupLat = _toDouble(data['pickupLat']);
+    final pickupLng = _toDouble(data['pickupLng']);
+    final dropoffLat = _toDouble(data['dropoffLat']);
+    final dropoffLng = _toDouble(data['dropoffLng']);
+    final status = data['status']?.toString() ?? 'accepted';
+
+    if (pickupLat == null ||
+        pickupLng == null ||
+        dropoffLat == null ||
+        dropoffLng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Route location data is missing")),
+      );
+      return;
+    }
+
+    final destination = status == 'accepted'
+        ? '$pickupLat,$pickupLng'
+        : '$dropoffLat,$dropoffLng';
+
+    final uri = Uri.parse('google.navigation:q=$destination&mode=d');
+
+    final fallbackUri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$destination&travelmode=driving',
+    );
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -119,10 +211,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Current Job"),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text("Current Job"), centerTitle: true),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('orders')
@@ -152,7 +241,11 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
           final dropoff = data['dropoff']?.toString() ?? 'No drop-off';
           final item = data['item']?.toString() ?? 'No item';
           final status = data['status']?.toString() ?? 'accepted';
+          final vehicleType = data['vehicleType']?.toString();
           final price = data['price'];
+          final paymentMethod =
+              data['paymentMethod']?.toString() ?? 'Cash on Delivery';
+          final paymentStatus = data['paymentStatus']?.toString() ?? 'pending';
           final createdAt = data['createdAt'];
 
           if (status == 'inTransit') {
@@ -183,6 +276,10 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                       Text("Drop-off: $dropoff"),
                       const SizedBox(height: 8),
                       Text("Item: $item"),
+                      if (vehicleType != null && vehicleType.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text("Vehicle: $vehicleType"),
+                      ],
                       const SizedBox(height: 8),
                       Text("Status: $status"),
                       const SizedBox(height: 8),
@@ -192,25 +289,53 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                         const SizedBox(height: 8),
                         Text("Price: ₦$price"),
                       ],
+                      const SizedBox(height: 8),
+                      Text("Payment: $paymentMethod ($paymentStatus)"),
 
                       const SizedBox(height: 24),
 
                       if (status == 'accepted')
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () => startTransit(job.id),
-                            child: const Text("Start Transit"),
-                          ),
+                        Column(
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () => openTurnByTurnNavigation(data),
+                                icon: const Icon(Icons.navigation_outlined),
+                                label: const Text("Navigate to Pickup"),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () => startTransit(job.id),
+                                child: const Text("Start Transit"),
+                              ),
+                            ),
+                          ],
                         ),
 
                       if (status == 'inTransit')
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () => completeJob(job.id),
-                            child: const Text("Mark Completed"),
-                          ),
+                        Column(
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () => openTurnByTurnNavigation(data),
+                                icon: const Icon(Icons.navigation_outlined),
+                                label: const Text("Navigate to Drop-off"),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () => completeJob(job.id, data),
+                                child: const Text("Mark Completed"),
+                              ),
+                            ),
+                          ],
                         ),
                     ],
                   ),

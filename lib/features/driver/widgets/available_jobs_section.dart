@@ -40,21 +40,19 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
       return status == 'accepted' || status == 'inTransit';
     });
 
+    if (!mounted) return;
+
     if (hasActive) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Complete your current job first"),
-        ),
+        const SnackBar(content: Text("Complete your current job first")),
       );
       return;
     }
 
-    await FirebaseFirestore.instance
-        .collection('orders')
-        .doc(orderId)
-        .update({
+    await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
       'driverId': driverId,
       'status': 'accepted',
+      'acceptedAt': Timestamp.now(),
     });
   }
 
@@ -128,6 +126,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     final pickup = data['pickup']?.toString() ?? 'No pickup location';
     final dropoff = data['dropoff']?.toString() ?? 'No drop-off location';
     final item = data['item']?.toString() ?? 'No item description';
+    final vehicleType = data['vehicleType']?.toString();
     final price = data['price'];
 
     return Card(
@@ -138,14 +137,15 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "$pickup → $dropoff",
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-              ),
+              "$pickup -> $dropoff",
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
             const SizedBox(height: 8),
             Text("Item: $item"),
+            if (vehicleType != null && vehicleType.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text("Vehicle: $vehicleType"),
+            ],
             const SizedBox(height: 8),
             Text(
               formatPrice(price),
@@ -205,10 +205,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     if (!widget.isOnline) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildOfflineNotice(),
-          _buildJobList(context, driver.uid),
-        ],
+        children: [_buildOfflineNotice(), _buildJobList(context, driver.uid)],
       );
     }
 

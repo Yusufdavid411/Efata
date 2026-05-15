@@ -7,8 +7,7 @@ class DriverOnboardingScreen extends StatefulWidget {
   const DriverOnboardingScreen({super.key});
 
   @override
-  State<DriverOnboardingScreen> createState() =>
-      _DriverOnboardingScreenState();
+  State<DriverOnboardingScreen> createState() => _DriverOnboardingScreenState();
 }
 
 class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
@@ -16,7 +15,7 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController plateController = TextEditingController();
 
-  String vehicleType = 'Car';
+  String vehicleType = 'Truck';
   bool licenseUploaded = false;
   bool isSaving = false;
 
@@ -141,16 +140,19 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: vehicleType,
+              initialValue: vehicleType,
               decoration: const InputDecoration(
                 labelText: 'Vehicle Type',
                 border: OutlineInputBorder(),
               ),
               items: const [
-                DropdownMenuItem(value: 'Car', child: Text('Car')),
-                DropdownMenuItem(value: 'Van', child: Text('Van')),
                 DropdownMenuItem(value: 'Truck', child: Text('Truck')),
-                DropdownMenuItem(value: 'Bike', child: Text('Bike')),
+                DropdownMenuItem(value: 'Tipper', child: Text('Tipper')),
+                DropdownMenuItem(
+                  value: 'Petrol Tanker',
+                  child: Text('Petrol Tanker'),
+                ),
+                DropdownMenuItem(value: 'Van', child: Text('Van')),
                 DropdownMenuItem(value: 'Pickup', child: Text('Pickup')),
               ],
               onChanged: (v) => setState(() => vehicleType = v!),

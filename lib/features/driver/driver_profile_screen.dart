@@ -41,7 +41,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       final data = jsonDecode(resBody);
 
       if (response.statusCode != 200 && response.statusCode != 201) {
-        throw Exception(data['error']?['message'] ?? 'Cloudinary upload failed');
+        throw Exception(
+          data['error']?['message'] ?? 'Cloudinary upload failed',
+        );
       }
 
       final imageUrl = data['secure_url'];
@@ -55,14 +57,14 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       }, SetOptions(merge: true));
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Profile picture updated")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Profile picture updated")));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Upload failed: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
     } finally {
       if (mounted) {
         setState(() => isUploading = false);
@@ -79,7 +81,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     if (user == null) return;
 
     final controller = TextEditingController(
-      text: currentValue == 'Not added' ||
+      text:
+          currentValue == 'Not added' ||
               currentValue == 'Driver profile not completed'
           ? ''
           : currentValue,
@@ -117,9 +120,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     .collection('drivers')
                     .doc(user.uid)
                     .set({
-                  field: value,
-                  'updatedAt': Timestamp.now(),
-                }, SetOptions(merge: true));
+                      field: value,
+                      'updatedAt': Timestamp.now(),
+                    }, SetOptions(merge: true));
 
                 if (field == 'fullName') {
                   await user.updateDisplayName(value);
@@ -134,9 +137,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Update failed: $e")),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text("Update failed: $e")));
                 }
               }
             },
@@ -151,7 +154,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    String selected = currentValue == 'Not added' ? 'Car' : currentValue;
+    String selected = currentValue == 'Not added' ? 'Truck' : currentValue;
 
     await showDialog(
       context: context,
@@ -160,16 +163,19 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         content: StatefulBuilder(
           builder: (context, setDialogState) {
             return DropdownButtonFormField<String>(
-              value: selected,
+              initialValue: selected,
               decoration: const InputDecoration(
                 labelText: "Vehicle Type",
                 border: OutlineInputBorder(),
               ),
               items: const [
-                DropdownMenuItem(value: 'Car', child: Text('Car')),
-                DropdownMenuItem(value: 'Van', child: Text('Van')),
                 DropdownMenuItem(value: 'Truck', child: Text('Truck')),
-                DropdownMenuItem(value: 'Bike', child: Text('Bike')),
+                DropdownMenuItem(value: 'Tipper', child: Text('Tipper')),
+                DropdownMenuItem(
+                  value: 'Petrol Tanker',
+                  child: Text('Petrol Tanker'),
+                ),
+                DropdownMenuItem(value: 'Van', child: Text('Van')),
                 DropdownMenuItem(value: 'Pickup', child: Text('Pickup')),
               ],
               onChanged: (value) {
@@ -192,22 +198,24 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     .collection('drivers')
                     .doc(user.uid)
                     .set({
-                  'vehicleType': selected,
-                  'updatedAt': Timestamp.now(),
-                }, SetOptions(merge: true));
+                      'vehicleType': selected,
+                      'updatedAt': Timestamp.now(),
+                    }, SetOptions(merge: true));
 
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
 
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Vehicle updated successfully")),
+                    const SnackBar(
+                      content: Text("Vehicle updated successfully"),
+                    ),
                   );
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Update failed: $e")),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text("Update failed: $e")));
                 }
               }
             },
@@ -240,9 +248,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      return const Scaffold(
-        body: Center(child: Text("Not logged in")),
-      );
+      return const Scaffold(body: Center(child: Text("Not logged in")));
     }
 
     return Scaffold(
@@ -274,8 +280,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       children: [
                         CircleAvatar(
                           radius: 50,
-                          backgroundImage:
-                              photoUrl != null ? NetworkImage(photoUrl) : null,
+                          backgroundImage: photoUrl != null
+                              ? NetworkImage(photoUrl)
+                              : null,
                           child: photoUrl == null
                               ? const Icon(Icons.person, size: 50)
                               : null,
@@ -299,8 +306,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                       Icons.camera_alt,
                                       color: Colors.white,
                                     ),
-                              onPressed:
-                                  isUploading ? null : uploadProfilePicture,
+                              onPressed: isUploading
+                                  ? null
+                                  : uploadProfilePicture,
                             ),
                           ),
                         ),

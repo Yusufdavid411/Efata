@@ -7,10 +7,7 @@ import '../../shared/widgets/app_live_map.dart';
 class TrackDeliveryScreen extends StatelessWidget {
   final String orderId;
 
-  const TrackDeliveryScreen({
-    super.key,
-    required this.orderId,
-  });
+  const TrackDeliveryScreen({super.key, required this.orderId});
 
   double? _toDouble(dynamic value) {
     if (value == null) return null;
@@ -35,13 +32,33 @@ class TrackDeliveryScreen extends StatelessWidget {
     }
   }
 
+  String _formatPrice(dynamic price) {
+    if (price == null) return 'Not available';
+    if (price is num) return '₦${price.toStringAsFixed(0)}';
+
+    final parsed = double.tryParse(price.toString());
+    if (parsed == null) return price.toString();
+
+    return '₦${parsed.toStringAsFixed(0)}';
+  }
+
+  String _formatPaymentStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return 'Paid';
+      case 'pending':
+        return 'Pending';
+      case 'failed':
+        return 'Failed';
+      default:
+        return status;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Track Delivery'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Track Delivery'), centerTitle: true),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('orders')
@@ -71,6 +88,11 @@ class TrackDeliveryScreen extends StatelessWidget {
           final driverLng = _toDouble(data['driverLng']);
 
           final status = data['status']?.toString() ?? 'pending';
+          final paymentMethod =
+              data['paymentMethod']?.toString() ?? 'Cash on Delivery';
+          final paymentStatus = data['paymentStatus']?.toString() ?? 'pending';
+          final price = data['price'];
+          final isCompleted = status.toLowerCase() == 'completed';
 
           if (pickupLat == null ||
               pickupLng == null ||
@@ -99,12 +121,28 @@ class TrackDeliveryScreen extends StatelessWidget {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
-                color: Colors.blue.shade50,
-                child: Text(
-                  'Status: ${_formatStatus(status)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
+                color: isCompleted ? Colors.green.shade50 : Colors.blue.shade50,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Status: ${_formatStatus(status)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Text('Amount: ${_formatPrice(price)}'),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Payment: $paymentMethod - ${_formatPaymentStatus(paymentStatus)}',
+                    ),
+                    if (isCompleted) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Delivery completed successfully.',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               Expanded(
