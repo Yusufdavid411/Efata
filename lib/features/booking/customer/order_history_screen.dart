@@ -1,44 +1,16 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
-import '../../tracking/track_delivery_screen.dart';
+import 'widgets/active_delivery_section.dart';
 
 class OrderHistoryScreen extends StatelessWidget {
   const OrderHistoryScreen({super.key});
 
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return Colors.orange;
-      case 'accepted':
-        return Colors.blue;
-      case 'intransit':
-        return Colors.purple;
-      case 'completed':
-        return Colors.green;
-      case 'rejected':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _formatStatus(String status) {
-    switch (status.toLowerCase()) {
-      case 'intransit':
-        return 'In Transit';
-      case 'accepted':
-        return 'Accepted';
-      case 'pending':
-        return 'Pending';
-      case 'completed':
-        return 'Completed';
-      case 'rejected':
-        return 'Rejected';
-      default:
-        return status;
-    }
+  bool isCurrentOrder(QueryDocumentSnapshot order) {
+    final data = order.data() as Map<String, dynamic>;
+    final status = data['status']?.toString() ?? '';
+    return status == 'pending' || status == 'accepted' || status == 'inTransit';
   }
 
   @override
@@ -46,10 +18,7 @@ class OrderHistoryScreen extends StatelessWidget {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Orders'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('My Orders')),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('orders')
@@ -72,68 +41,61 @@ class OrderHistoryScreen extends StatelessWidget {
             return const Center(child: Text('No orders yet'));
           }
 
-          return ListView.builder(
+          final currentOrders = orders.where(isCurrentOrder).toList();
+          final previousOrders = orders
+              .where((order) => !isCurrentOrder(order))
+              .toList();
+
+          return ListView(
             padding: const EdgeInsets.all(16),
-            itemCount: orders.length,
-            itemBuilder: (context, index) {
-              final order = orders[index];
-              final data = order.data() as Map<String, dynamic>;
-
-              final pickup = data['pickup']?.toString() ?? 'No pickup';
-              final dropoff = data['dropoff']?.toString() ?? 'No drop-off';
-              final status = data['status']?.toString() ?? 'unknown';
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 14),
-                elevation: 3,
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$pickup → $dropoff',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          const Text('Status: '),
-                          Text(
-                            _formatStatus(status),
-                            style: TextStyle(
-                              color: _getStatusColor(status),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => TrackDeliveryScreen(
-                                  orderId: order.id,
-                                ),
-                              ),
-                            );
-                          },
-                          child: const Text('Track'),
-                        ),
-                      ),
-                    ],
+            children: [
+              if (currentOrders.isNotEmpty) ...[
+                const _SectionTitle(title: 'Current order'),
+                ...currentOrders.map(
+                  (order) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: OrderPreviewCard(
+                      order: order,
+                      title: currentOrders.first == order ? 'Active now' : null,
+                      isPrimary: currentOrders.first == order,
+                    ),
                   ),
                 ),
-              );
-            },
+                const SizedBox(height: 8),
+              ],
+              if (previousOrders.isNotEmpty) ...[
+                const _SectionTitle(title: 'Previous orders'),
+                ...previousOrders.map(
+                  (order) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: OrderPreviewCard(order: order),
+                  ),
+                ),
+              ],
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Color(0xFF0F172A),
+          fontSize: 18,
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }

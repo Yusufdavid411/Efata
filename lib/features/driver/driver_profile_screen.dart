@@ -55,6 +55,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         'photoUrl': imageUrl,
         'updatedAt': Timestamp.now(),
       }, SetOptions(merge: true));
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'photoUrl': imageUrl,
+        'updatedAt': Timestamp.now(),
+      }, SetOptions(merge: true));
 
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -124,23 +128,37 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       'updatedAt': Timestamp.now(),
                     }, SetOptions(merge: true));
 
+                final userUpdates = <String, dynamic>{
+                  'updatedAt': Timestamp.now(),
+                };
+
+                if (field == 'fullName') {
+                  userUpdates['fullName'] = value;
+                  userUpdates['name'] = value;
+                } else {
+                  userUpdates[field] = value;
+                }
+
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .set(userUpdates, SetOptions(merge: true));
+
                 if (field == 'fullName') {
                   await user.updateDisplayName(value);
                 }
 
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
 
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("$title updated successfully")),
-                  );
-                }
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("$title updated successfully")),
+                );
               } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text("Update failed: $e")));
-                }
+                if (!mounted) return;
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text("Update failed: $e")));
               }
             },
             child: const Text("Save"),
@@ -201,22 +219,25 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       'vehicleType': selected,
                       'updatedAt': Timestamp.now(),
                     }, SetOptions(merge: true));
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .set({
+                      'vehicleType': selected,
+                      'updatedAt': Timestamp.now(),
+                    }, SetOptions(merge: true));
 
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
 
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Vehicle updated successfully"),
-                    ),
-                  );
-                }
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Vehicle updated successfully")),
+                );
               } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text("Update failed: $e")));
-                }
+                if (!mounted) return;
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text("Update failed: $e")));
               }
             },
             child: const Text("Save"),
@@ -264,7 +285,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               : <String, dynamic>{};
 
           final name =
-              data['fullName']?.toString() ?? 'Driver profile not completed';
+              data['fullName']?.toString() ??
+              data['name']?.toString() ??
+              'Driver profile not completed';
           final phone = data['phone']?.toString() ?? 'Not added';
           final vehicle = data['vehicleType']?.toString() ?? 'Not added';
           final plate = data['plateNumber']?.toString() ?? 'Not added';

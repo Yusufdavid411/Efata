@@ -42,7 +42,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       final data = jsonDecode(resBody);
 
       if (response.statusCode != 200 && response.statusCode != 201) {
-        throw Exception(data['error']?['message'] ?? 'Cloudinary upload failed');
+        throw Exception(
+          data['error']?['message'] ?? 'Cloudinary upload failed',
+        );
       }
 
       final imageUrl = data['secure_url'];
@@ -50,22 +52,22 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         throw Exception('No image URL returned from Cloudinary');
       }
 
-      await FirebaseFirestore.instance.collection('customers').doc(user.uid).set({
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'photoUrl': imageUrl,
         'updatedAt': Timestamp.now(),
       }, SetOptions(merge: true));
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Profile picture updated")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Profile picture updated")));
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Upload failed: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
     } finally {
       if (mounted) {
         setState(() => isUploading = false);
@@ -112,10 +114,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               children: [
                 const Text(
                   "Edit Profile",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
 
                 const SizedBox(height: 20),
@@ -174,34 +173,35 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                         await user.updateDisplayName(name);
 
                         await FirebaseFirestore.instance
-                            .collection('customers')
+                            .collection('users')
                             .doc(user.uid)
                             .set({
-                          'customerId': user.uid,
-                          'email': user.email,
-                          'fullName': name,
-                          'phone': phone,
-                          'address': address,
-                          'updatedAt': Timestamp.now(),
-                        }, SetOptions(merge: true));
+                              'customerId': user.uid,
+                              'uid': user.uid,
+                              'email': user.email,
+                              'name': name,
+                              'fullName': name,
+                              'phone': phone,
+                              'address': address,
+                              'role': 'customer',
+                              'updatedAt': Timestamp.now(),
+                            }, SetOptions(merge: true));
 
                         if (sheetContext.mounted) {
                           Navigator.pop(sheetContext);
                         }
 
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Profile updated successfully"),
-                            ),
-                          );
-                        }
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Profile updated successfully"),
+                          ),
+                        );
                       } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Update failed: $e")),
-                          );
-                        }
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Update failed: $e")),
+                        );
                       }
                     },
                     child: const Text("Save Changes"),
@@ -232,16 +232,14 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      return const Scaffold(
-        body: Center(child: Text("Not logged in")),
-      );
+      return const Scaffold(body: Center(child: Text("Not logged in")));
     }
 
     return Scaffold(
       appBar: AppBar(title: const Text("Customer Profile")),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('customers')
+            .collection('users')
             .doc(user.uid)
             .snapshots(),
         builder: (context, snapshot) {
@@ -249,7 +247,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               ? snapshot.data!.data() as Map<String, dynamic>
               : <String, dynamic>{};
 
-          final fullName = data['fullName']?.toString() ??
+          final fullName =
+              data['fullName']?.toString() ??
+              data['name']?.toString() ??
               user.displayName ??
               'Customer profile not completed';
 
@@ -267,8 +267,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       children: [
                         CircleAvatar(
                           radius: 52,
-                          backgroundImage:
-                              photoUrl != null ? NetworkImage(photoUrl) : null,
+                          backgroundImage: photoUrl != null
+                              ? NetworkImage(photoUrl)
+                              : null,
                           child: photoUrl == null
                               ? const Icon(Icons.person, size: 52)
                               : null,
@@ -292,8 +293,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                                       Icons.camera_alt,
                                       color: Colors.white,
                                     ),
-                              onPressed:
-                                  isUploading ? null : uploadProfilePicture,
+                              onPressed: isUploading
+                                  ? null
+                                  : uploadProfilePicture,
                             ),
                           ),
                         ),
