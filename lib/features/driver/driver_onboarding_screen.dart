@@ -1,6 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import 'driver_home_screen.dart';
 
 class DriverOnboardingScreen extends StatefulWidget {
@@ -17,7 +22,59 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
 
   String vehicleType = 'Truck';
   bool licenseUploaded = false;
+  bool isUploadingLicense = false;
   bool isSaving = false;
+  String? licenseUrl;
+
+  Future<void> uploadLicense() async {
+    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+
+    setState(() => isUploadingLicense = true);
+
+    try {
+      final file = File(image.path);
+      final uri = Uri.parse(
+        'https://api.cloudinary.com/v1_1/dk21bi5fg/image/upload',
+      );
+
+      final request = http.MultipartRequest('POST', uri)
+        ..fields['upload_preset'] = 'profile_upload'
+        ..files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      final response = await request.send();
+      final body = await response.stream.bytesToString();
+      final data = jsonDecode(body) as Map<String, dynamic>;
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception(data['error']?['message'] ?? 'License upload failed');
+      }
+
+      final uploadedUrl = data['secure_url']?.toString();
+      if (uploadedUrl == null || uploadedUrl.isEmpty) {
+        throw Exception('No license URL returned');
+      }
+
+      if (!mounted) return;
+      setState(() {
+        licenseUrl = uploadedUrl;
+        licenseUploaded = true;
+      });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Driver license uploaded')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => isUploadingLicense = false);
+      }
+    }
+  }
 
   Future<void> submit() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -48,6 +105,7 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
       'vehicleType': vehicleType,
       'plateNumber': plateController.text.trim(),
       'licenseUploaded': licenseUploaded,
+      'licenseUrl': licenseUrl,
       'verificationStatus': 'pending',
       'profileCompleted': true,
       'onboardingSkipped': false,
@@ -77,6 +135,7 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
         'vehicleType': 'Not added',
         'plateNumber': 'Not added',
         'licenseUploaded': false,
+        'licenseUrl': null,
         'verificationStatus': 'incomplete',
         'profileCompleted': false,
         'onboardingSkipped': true,
@@ -167,15 +226,21 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
             ),
             const SizedBox(height: 20),
             OutlinedButton.icon(
-              icon: const Icon(Icons.upload_file),
+              icon: isUploadingLicense
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.upload_file),
               label: Text(
-                licenseUploaded
+                isUploadingLicense
+                    ? 'Uploading license...'
+                    : licenseUploaded
                     ? 'Driver License Uploaded'
                     : 'Upload Driver License',
               ),
-              onPressed: () {
-                setState(() => licenseUploaded = true);
-              },
+              onPressed: isUploadingLicense ? null : uploadLicense,
             ),
             const SizedBox(height: 30),
             ElevatedButton(

@@ -41,11 +41,8 @@ class _DriverRegisterScreenState extends State<DriverRegisterScreen> {
     });
 
     try {
-      final credential =
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      final credential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
 
       final user = credential.user;
 
@@ -65,9 +62,15 @@ class _DriverRegisterScreenState extends State<DriverRegisterScreen> {
 
       await FirebaseFirestore.instance.collection('drivers').doc(user.uid).set({
         'uid': user.uid,
+        'driverId': user.uid,
         'name': name,
+        'fullName': name,
         'email': email,
         'isAvailable': false,
+        'isOnline': false,
+        'profileCompleted': false,
+        'licenseUploaded': false,
+        'verificationStatus': 'incomplete',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -87,15 +90,15 @@ class _DriverRegisterScreenState extends State<DriverRegisterScreen> {
         message = 'Password is too weak. Use at least 6 characters.';
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) {
         setState(() {

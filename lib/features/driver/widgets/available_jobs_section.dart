@@ -13,6 +13,10 @@ class AvailableJobsSection extends StatefulWidget {
 
 class _AvailableJobsSectionState extends State<AvailableJobsSection> {
   List<QueryDocumentSnapshot> _cachedJobs = [];
+  bool _isApprovedDriver(Map<String, dynamic>? data) {
+    return data?['profileCompleted'] == true &&
+        data?['verificationStatus']?.toString().toLowerCase() == 'approved';
+  }
 
   String formatPrice(dynamic price) {
     if (price == null) return "Price not available";
@@ -30,6 +34,21 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
   }
 
   Future<void> acceptJob(String orderId, String driverId) async {
+    final driverProfile = await FirebaseFirestore.instance
+        .collection('drivers')
+        .doc(driverId)
+        .get();
+
+    if (!_isApprovedDriver(driverProfile.data())) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Admin approval is required before accepting jobs"),
+        ),
+      );
+      return;
+    }
+
     final activeJobs = await FirebaseFirestore.instance
         .collection('orders')
         .where('driverId', isEqualTo: driverId)
@@ -209,26 +228,51 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
       );
     }
 
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('status', isEqualTo: 'pending')
+          .collection('drivers')
+          .doc(driver.uid)
           .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            _cachedJobs.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
+      builder: (context, driverSnapshot) {
+        final driverData = driverSnapshot.data?.data() as Map<String, dynamic>?;
+
+        if (driverSnapshot.hasData && !_isApprovedDriver(driverData)) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: const Text(
+              "Jobs will appear here after your driver account is approved.",
+            ),
+          );
         }
 
-        if (snapshot.hasError) {
-          return Text("Something went wrong: ${snapshot.error}");
-        }
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('orders')
+              .where('status', isEqualTo: 'pending')
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                _cachedJobs.isEmpty) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-        if (snapshot.hasData) {
-          _cachedJobs = _prepareJobs(snapshot.data!.docs, driver.uid);
-        }
+            if (snapshot.hasError) {
+              return Text("Something went wrong: ${snapshot.error}");
+            }
 
-        return _buildJobList(context, driver.uid);
+            if (snapshot.hasData) {
+              _cachedJobs = _prepareJobs(snapshot.data!.docs, driver.uid);
+            }
+
+            return _buildJobList(context, driver.uid);
+          },
+        );
       },
     );
   }

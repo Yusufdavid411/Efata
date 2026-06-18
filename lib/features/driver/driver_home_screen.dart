@@ -20,6 +20,8 @@ class DriverHomeScreen extends StatefulWidget {
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
   bool isOnline = false;
   bool isLoadingAvailability = true;
+  String verificationStatus = 'incomplete';
+  bool profileCompleted = false;
 
   @override
   void initState() {
@@ -49,6 +51,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
       setState(() {
         isOnline = savedStatus;
+        verificationStatus =
+            data?['verificationStatus']?.toString() ?? 'incomplete';
+        profileCompleted = data?['profileCompleted'] == true;
         isLoadingAvailability = false;
       });
     } catch (_) {
@@ -60,6 +65,20 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final driver = FirebaseAuth.instance.currentUser;
 
     if (driver == null) return;
+
+    if (value &&
+        (!profileCompleted || verificationStatus.toLowerCase() != 'approved')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            !profileCompleted
+                ? 'Complete your driver profile before going online.'
+                : 'Your account must be approved before receiving jobs.',
+          ),
+        ),
+      );
+      return;
+    }
 
     if (!value) {
       final confirm = await showDialog<bool>(
@@ -91,6 +110,59 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     }, SetOptions(merge: true));
 
     setState(() => isOnline = value);
+  }
+
+  Widget verificationCard() {
+    final status = verificationStatus.toLowerCase();
+    final approved = status == 'approved';
+    final color = approved
+        ? Colors.green
+        : status == 'pending'
+        ? Colors.orange
+        : Colors.red;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            approved
+                ? Icons.verified_user_outlined
+                : Icons.pending_actions_outlined,
+            color: color.shade700,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  approved ? 'Driver approved' : 'Driver approval required',
+                  style: TextStyle(
+                    color: color.shade900,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  approved
+                      ? 'You can go online and receive delivery requests.'
+                      : 'Complete your profile and wait for admin approval before accepting jobs.',
+                  style: const TextStyle(color: Color(0xFF475569)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget currentJobCard() {
@@ -177,6 +249,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               children: [
                 const DriverEarningsSummary(),
                 const SizedBox(height: 20),
+
+                verificationCard(),
 
                 DriverStatusToggle(
                   isOnline: isOnline,
