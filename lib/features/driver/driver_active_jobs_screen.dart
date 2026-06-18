@@ -6,6 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../chat/chat_screen.dart';
+
 class DriverActiveJobsScreen extends StatefulWidget {
   const DriverActiveJobsScreen({super.key});
 
@@ -27,8 +29,12 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
   }
 
   Future<void> completeJob(String id, Map<String, dynamic> data) async {
-    bool paymentReceived =
-        data['paymentStatus']?.toString().toLowerCase() == 'paid';
+    final currentPaymentStatus =
+        data['paymentStatus']?.toString().toLowerCase() ?? 'pending';
+    bool paymentReceived = [
+      'paid',
+      'customersent',
+    ].contains(currentPaymentStatus);
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -81,9 +87,26 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
       'status': 'completed',
       'completedAt': Timestamp.now(),
       'deliveryCompletedConfirmed': true,
-      'paymentStatus': paymentReceived ? 'paid' : 'pending',
+      'paymentStatus': paymentReceived
+          ? 'paid'
+          : data['paymentStatus'] ?? 'pending',
       'paymentConfirmedAt': paymentReceived ? Timestamp.now() : null,
     });
+  }
+
+  String formatPaymentStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return 'Paid';
+      case 'customersent':
+        return 'Customer Sent';
+      case 'cashdue':
+        return 'Cash Due';
+      case 'pending':
+        return 'Pending';
+      default:
+        return status;
+    }
   }
 
   Future<bool> ensureLocationPermission() async {
@@ -290,9 +313,31 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                         Text("Price: ₦$price"),
                       ],
                       const SizedBox(height: 8),
-                      Text("Payment: $paymentMethod ($paymentStatus)"),
+                      Text(
+                        "Payment: $paymentMethod (${formatPaymentStatus(paymentStatus)})",
+                      ),
 
                       const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ChatScreen(
+                                  orderId: job.id,
+                                  participantRole: 'driver',
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.chat_bubble_outline_rounded),
+                          label: const Text("Chat With Customer"),
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
 
                       if (status == 'accepted')
                         Column(

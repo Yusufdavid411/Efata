@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../chat/chat_screen.dart';
 import '../../shared/widgets/app_live_map.dart';
 
 class TrackDeliveryScreen extends StatelessWidget {
@@ -46,6 +47,10 @@ class TrackDeliveryScreen extends StatelessWidget {
     switch (status.toLowerCase()) {
       case 'paid':
         return 'Paid';
+      case 'customersent':
+        return 'Customer Sent';
+      case 'cashdue':
+        return 'Cash Due';
       case 'pending':
         return 'Pending';
       case 'failed':
@@ -53,6 +58,63 @@ class TrackDeliveryScreen extends StatelessWidget {
       default:
         return status;
     }
+  }
+
+  bool _canMarkPaymentSent(String status, String paymentStatus) {
+    final orderActive = [
+      'accepted',
+      'intransit',
+      'completed',
+    ].contains(status.toLowerCase());
+    final paymentOpen = [
+      'pending',
+      'cashdue',
+    ].contains(paymentStatus.toLowerCase());
+
+    return orderActive && paymentOpen;
+  }
+
+  Future<void> _markPaymentSent(
+    BuildContext context,
+    String paymentMethod,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirm Payment'),
+        content: Text(
+          paymentMethod == 'Cash on Delivery'
+              ? 'Confirm that you will pay the driver directly when the delivery is completed.'
+              : 'Confirm that you have sent or started this payment outside the app.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final status = paymentMethod == 'Cash on Delivery'
+        ? 'cashDue'
+        : 'customerSent';
+
+    await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
+      'paymentStatus': status,
+      'paymentCustomerConfirmedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Payment status updated')));
   }
 
   int _progressIndex(String status) {
@@ -135,6 +197,18 @@ class TrackDeliveryScreen extends StatelessWidget {
             payment: '$paymentMethod - ${_formatPaymentStatus(paymentStatus)}',
             hasDriverLocation: driverLat != null && driverLng != null,
             isCompleted: isCompleted,
+            onChat: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ChatScreen(orderId: orderId, participantRole: 'customer'),
+                ),
+              );
+            },
+            onPaymentTap: _canMarkPaymentSent(status, paymentStatus)
+                ? () => _markPaymentSent(context, paymentMethod)
+                : null,
           );
 
           if (pickupLat == null ||
@@ -168,15 +242,7 @@ class TrackDeliveryScreen extends StatelessWidget {
 
           return Column(
             children: [
-              _TrackingSummary(
-                status: summary.status,
-                message: summary.message,
-                progressIndex: summary.progressIndex,
-                amount: summary.amount,
-                payment: summary.payment,
-                hasDriverLocation: driverPoint != null,
-                isCompleted: summary.isCompleted,
-              ),
+              summary,
               Expanded(
                 child: AppLiveMap(
                   pickupPoint: pickupPoint,
@@ -201,6 +267,8 @@ class _TrackingSummary extends StatelessWidget {
     required this.payment,
     required this.hasDriverLocation,
     required this.isCompleted,
+    required this.onChat,
+    required this.onPaymentTap,
   });
 
   final String status;
@@ -210,6 +278,8 @@ class _TrackingSummary extends StatelessWidget {
   final String payment;
   final bool hasDriverLocation;
   final bool isCompleted;
+  final VoidCallback onChat;
+  final VoidCallback? onPaymentTap;
 
   @override
   Widget build(BuildContext context) {
@@ -266,6 +336,28 @@ class _TrackingSummary extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: _DetailPill(label: 'Payment', value: payment),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onChat,
+                  icon: const Icon(Icons.chat_bubble_outline_rounded),
+                  label: const Text('Chat'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: onPaymentTap,
+                  icon: const Icon(Icons.payments_outlined),
+                  label: Text(
+                    onPaymentTap == null ? 'Payment Updated' : 'Payment Sent',
+                  ),
+                ),
               ),
             ],
           ),
