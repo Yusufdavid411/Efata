@@ -4,27 +4,13 @@ import '../../core/controllers/app_settings_controller.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  String themeName(ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.light:
-        return "Light Mode";
-      case ThemeMode.dark:
-        return "Dark Mode";
-      case ThemeMode.system:
-        return "System Default";
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: appSettingsController,
       builder: (context, _) {
         return Scaffold(
-          appBar: AppBar(
-            title: const Text("Settings"),
-            centerTitle: true,
-          ),
+          appBar: AppBar(title: const Text("Settings"), centerTitle: true),
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -36,36 +22,18 @@ class SettingsScreen extends StatelessWidget {
               Card(
                 child: Column(
                   children: [
-                    RadioListTile<ThemeMode>(
+                    _ThemeOption(
                       title: const Text("System Default"),
                       subtitle: const Text("Follow your device appearance"),
-                      value: ThemeMode.system,
-                      groupValue: appSettingsController.themeMode,
-                      onChanged: (value) {
-                        if (value != null) {
-                          appSettingsController.updateThemeMode(value);
-                        }
-                      },
+                      mode: ThemeMode.system,
                     ),
-                    RadioListTile<ThemeMode>(
+                    _ThemeOption(
                       title: const Text("Light Mode"),
-                      value: ThemeMode.light,
-                      groupValue: appSettingsController.themeMode,
-                      onChanged: (value) {
-                        if (value != null) {
-                          appSettingsController.updateThemeMode(value);
-                        }
-                      },
+                      mode: ThemeMode.light,
                     ),
-                    RadioListTile<ThemeMode>(
+                    _ThemeOption(
                       title: const Text("Dark Mode"),
-                      value: ThemeMode.dark,
-                      groupValue: appSettingsController.themeMode,
-                      onChanged: (value) {
-                        if (value != null) {
-                          appSettingsController.updateThemeMode(value);
-                        }
-                      },
+                      mode: ThemeMode.dark,
                     ),
                   ],
                 ),
@@ -76,25 +44,27 @@ class SettingsScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
-              const Card(
+              Card(
                 child: Column(
                   children: [
-                    ListTile(
-                      leading: Icon(Icons.notifications_outlined),
-                      title: Text("Notifications"),
-                      subtitle: Text("Coming soon"),
+                    SwitchListTile(
+                      secondary: const Icon(Icons.notifications_outlined),
+                      title: const Text("Order notifications"),
+                      subtitle: const Text("Show delivery and payment updates"),
+                      value: appSettingsController.orderNotificationsEnabled,
+                      onChanged: appSettingsController.updateOrderNotifications,
                     ),
-                    ListTile(
+                    const ListTile(
                       leading: Icon(Icons.language_outlined),
                       title: Text("Language"),
                       subtitle: Text("English"),
                     ),
-                    ListTile(
+                    const ListTile(
                       leading: Icon(Icons.help_outline),
                       title: Text("Help & Support"),
-                      subtitle: Text("Coming soon"),
+                      subtitle: Text("Contact admin from delivery chat"),
                     ),
-                    ListTile(
+                    const ListTile(
                       leading: Icon(Icons.info_outline),
                       title: Text("App Version"),
                       subtitle: Text("1.0.0"),
@@ -106,6 +76,29 @@ class SettingsScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _ThemeOption extends StatelessWidget {
+  const _ThemeOption({required this.title, required this.mode, this.subtitle});
+
+  final Widget title;
+  final Widget? subtitle;
+  final ThemeMode mode;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = appSettingsController.themeMode == mode;
+
+    return ListTile(
+      title: title,
+      subtitle: subtitle,
+      trailing: Icon(
+        selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+        color: selected ? Theme.of(context).colorScheme.primary : null,
+      ),
+      onTap: () => appSettingsController.updateThemeMode(mode),
     );
   }
 }

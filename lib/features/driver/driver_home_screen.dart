@@ -85,7 +85,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         context: context,
         builder: (_) => AlertDialog(
           title: const Text("Go Offline?"),
-          content: const Text("You won’t receive new jobs while offline."),
+          content: const Text("You won't receive new jobs while offline."),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),

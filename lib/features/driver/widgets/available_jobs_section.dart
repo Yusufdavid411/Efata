@@ -68,11 +68,41 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
       return;
     }
 
-    await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
-      'driverId': driverId,
-      'status': 'accepted',
-      'acceptedAt': Timestamp.now(),
+    var accepted = false;
+
+    await FirebaseFirestore.instance.runTransaction((transaction) async {
+      final orderRef = FirebaseFirestore.instance
+          .collection('orders')
+          .doc(orderId);
+      final order = await transaction.get(orderRef);
+      final data = order.data();
+
+      if (data == null ||
+          data['status'] != 'pending' ||
+          data['driverId'] != null) {
+        return;
+      }
+
+      transaction.update(orderRef, {
+        'driverId': driverId,
+        'status': 'accepted',
+        'acceptedAt': Timestamp.now(),
+        'notificationStatus': 'driverAccepted',
+      });
+      accepted = true;
     });
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          accepted
+              ? "Job accepted. Open Current Job to continue."
+              : "This job has already been accepted.",
+        ),
+      ),
+    );
   }
 
   Future<void> hideJobForDriver(String orderId, String driverId) async {
@@ -255,6 +285,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
           stream: FirebaseFirestore.instance
               .collection('orders')
               .where('status', isEqualTo: 'pending')
+              .where('driverId', isNull: true)
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting &&

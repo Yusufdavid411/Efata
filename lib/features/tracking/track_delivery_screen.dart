@@ -77,6 +77,15 @@ class TrackDeliveryScreen extends StatelessWidget {
     return orderActive && paymentOpen;
   }
 
+  bool _canReportPaymentIssue(String status, String paymentStatus) {
+    final closed = [
+      'rejected',
+      'canceled',
+      'cancelled',
+    ].contains(status.toLowerCase());
+    return !closed && paymentStatus.toLowerCase() != 'paid';
+  }
+
   bool _canCancelOrder(String status) {
     return status.toLowerCase() == 'pending';
   }
@@ -116,12 +125,66 @@ class TrackDeliveryScreen extends StatelessWidget {
     await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
       'paymentStatus': status,
       'paymentCustomerConfirmedAt': FieldValue.serverTimestamp(),
+      'notificationStatus': 'paymentUpdated',
     }, SetOptions(merge: true));
 
     if (!context.mounted) return;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Payment status updated')));
+  }
+
+  Future<void> _reportPaymentIssue(BuildContext context) async {
+    final controller = TextEditingController();
+
+    final issue = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Report Payment Issue'),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            labelText: 'What went wrong?',
+            hintText: 'Example: transfer failed or driver did not receive cash',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isEmpty) return;
+              Navigator.pop(dialogContext, text);
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+
+    controller.dispose();
+
+    if (issue == null || issue.isEmpty) return;
+
+    await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
+      'paymentStatus': 'failed',
+      'disputeStatus': 'open',
+      'disputeReason': issue,
+      'disputeOpenedBy': 'customer',
+      'disputeOpenedAt': FieldValue.serverTimestamp(),
+      'needsAdminReview': true,
+      'notificationStatus': 'paymentIssue',
+    }, SetOptions(merge: true));
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Payment issue sent to admin')),
+    );
   }
 
   Future<void> _cancelPendingOrder(BuildContext context) async {
@@ -151,6 +214,7 @@ class TrackDeliveryScreen extends StatelessWidget {
       'status': 'canceled',
       'canceledAt': FieldValue.serverTimestamp(),
       'canceledBy': 'customer',
+      'notificationStatus': 'canceled',
     }, SetOptions(merge: true));
 
     if (!context.mounted) return;
@@ -256,6 +320,9 @@ class TrackDeliveryScreen extends StatelessWidget {
             onPaymentTap: _canMarkPaymentSent(status, paymentStatus)
                 ? () => _markPaymentSent(context, paymentMethod)
                 : null,
+            onPaymentIssueTap: _canReportPaymentIssue(status, paymentStatus)
+                ? () => _reportPaymentIssue(context)
+                : null,
             onCancelTap: _canCancelOrder(status)
                 ? () => _cancelPendingOrder(context)
                 : null,
@@ -319,6 +386,7 @@ class _TrackingSummary extends StatelessWidget {
     required this.isCompleted,
     required this.onChat,
     required this.onPaymentTap,
+    required this.onPaymentIssueTap,
     required this.onCancelTap,
   });
 
@@ -331,6 +399,7 @@ class _TrackingSummary extends StatelessWidget {
   final bool isCompleted;
   final VoidCallback onChat;
   final VoidCallback? onPaymentTap;
+  final VoidCallback? onPaymentIssueTap;
   final VoidCallback? onCancelTap;
 
   @override
@@ -421,6 +490,17 @@ class _TrackingSummary extends StatelessWidget {
                 onPressed: onCancelTap,
                 icon: const Icon(Icons.cancel_outlined),
                 label: const Text('Cancel Pending Request'),
+              ),
+            ),
+          ],
+          if (onPaymentIssueTap != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: onPaymentIssueTap,
+                icon: const Icon(Icons.report_problem_outlined),
+                label: const Text('Report Payment Issue'),
               ),
             ),
           ],

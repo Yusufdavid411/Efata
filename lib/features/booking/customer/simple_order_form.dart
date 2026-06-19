@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'package:logistics_app/core/controllers/app_settings_controller.dart';
 import 'package:logistics_app/features/map/map_picker_screen.dart';
 import 'package:logistics_app/features/tracking/track_delivery_screen.dart';
 
@@ -254,6 +255,9 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
         'driverLng': null,
         'distanceKm': distanceKm,
         'price': estimatedPrice,
+        'notificationStatus': 'created',
+        'customerNotificationsEnabled':
+            appSettingsController.orderNotificationsEnabled,
       });
 
       if (!mounted) return;

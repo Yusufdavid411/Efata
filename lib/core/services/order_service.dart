@@ -16,6 +16,8 @@ class OrderService {
       'customerId': customerId,
       'driverId': null,
       'status': 'pending',
+      'paymentStatus': 'pending',
+      'notificationStatus': 'created',
       'createdAt': Timestamp.now(),
     });
   }
@@ -38,24 +40,32 @@ class OrderService {
     await _firestore.collection('orders').doc(orderId).update({
       'status': 'accepted',
       'driverId': driverId,
+      'acceptedAt': Timestamp.now(),
+      'notificationStatus': 'driverAccepted',
     });
   }
 
   Future<void> rejectOrder(String orderId) async {
     await _firestore.collection('orders').doc(orderId).update({
       'status': 'rejected',
+      'rejectedAt': Timestamp.now(),
+      'notificationStatus': 'rejected',
     });
   }
 
   Future<void> startTransit(String orderId) async {
     await _firestore.collection('orders').doc(orderId).update({
       'status': 'inTransit',
+      'startedAt': Timestamp.now(),
+      'notificationStatus': 'inTransit',
     });
   }
 
   Future<void> completeOrder(String orderId) async {
     await _firestore.collection('orders').doc(orderId).update({
       'status': 'completed',
+      'completedAt': Timestamp.now(),
+      'notificationStatus': 'completed',
     });
   }
 

@@ -23,6 +23,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     await FirebaseFirestore.instance.collection('orders').doc(id).update({
       'status': 'inTransit',
       'startedAt': Timestamp.now(),
+      'notificationStatus': 'inTransit',
     });
 
     startLiveLocationTracking(id);
@@ -87,10 +88,18 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
       'status': 'completed',
       'completedAt': Timestamp.now(),
       'deliveryCompletedConfirmed': true,
+      'notificationStatus': 'completed',
       'paymentStatus': paymentReceived
           ? 'paid'
           : data['paymentStatus'] ?? 'pending',
       'paymentConfirmedAt': paymentReceived ? Timestamp.now() : null,
+      if (!paymentReceived) ...{
+        'paymentReviewRequired': true,
+        'paymentIssue': 'Delivery completed without confirmed payment',
+        'paymentIssueOpenedBy': 'driver',
+        'paymentIssueOpenedAt': Timestamp.now(),
+        'needsAdminReview': true,
+      },
     });
   }
 

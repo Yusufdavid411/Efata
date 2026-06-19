@@ -3,15 +3,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class AppSettingsController extends ChangeNotifier {
   ThemeMode themeMode = ThemeMode.light;
+  bool orderNotificationsEnabled = true;
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final savedTheme = prefs.getString('themeMode') ?? 'light';
+    orderNotificationsEnabled =
+        prefs.getBool('orderNotificationsEnabled') ?? true;
 
-    if (savedTheme == 'dark') {
-      themeMode = ThemeMode.dark;
-    } else {
-      themeMode = ThemeMode.light;
+    switch (savedTheme) {
+      case 'dark':
+        themeMode = ThemeMode.dark;
+        break;
+      case 'system':
+        themeMode = ThemeMode.system;
+        break;
+      case 'light':
+      default:
+        themeMode = ThemeMode.light;
     }
 
     notifyListeners();
@@ -22,11 +31,16 @@ class AppSettingsController extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
 
-    if (mode == ThemeMode.dark) {
-      await prefs.setString('themeMode', 'dark');
-    } else {
-      await prefs.setString('themeMode', 'light');
-    }
+    await prefs.setString('themeMode', mode.name);
+
+    notifyListeners();
+  }
+
+  Future<void> updateOrderNotifications(bool enabled) async {
+    orderNotificationsEnabled = enabled;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('orderNotificationsEnabled', enabled);
 
     notifyListeners();
   }
