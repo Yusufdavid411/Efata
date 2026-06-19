@@ -158,6 +158,7 @@ class OrderPreviewCard extends StatelessWidget {
     final status = data['status']?.toString() ?? 'unknown';
     final vehicleType = data['vehicleType']?.toString();
     final price = (data['price'] as num?)?.toDouble();
+    final unreadMessages = (data['unreadForCustomer'] as num?)?.toInt() ?? 0;
     final current = isCurrentOrder(status);
 
     return Card(
@@ -198,6 +199,13 @@ class OrderPreviewCard extends StatelessWidget {
                   _Pill(
                     label: 'NGN ${price.toStringAsFixed(0)}',
                     color: const Color(0xFF334155),
+                  ),
+                if (unreadMessages > 0)
+                  _Pill(
+                    label: unreadMessages > 9
+                        ? '9+ new messages'
+                        : '$unreadMessages new messages',
+                    color: const Color(0xFFDC2626),
                   ),
               ],
             ),

@@ -299,6 +299,8 @@ class TrackDeliveryScreen extends StatelessWidget {
               data['paymentMethod']?.toString() ?? 'Cash on Delivery';
           final paymentStatus = data['paymentStatus']?.toString() ?? 'pending';
           final price = data['price'];
+          final unreadMessages =
+              (data['unreadForCustomer'] as num?)?.toInt() ?? 0;
           final isCompleted = status.toLowerCase() == 'completed';
           final summary = _TrackingSummary(
             status: _formatStatus(status),
@@ -306,6 +308,7 @@ class TrackDeliveryScreen extends StatelessWidget {
             progressIndex: _progressIndex(status),
             amount: _formatPrice(price),
             payment: '$paymentMethod - ${_formatPaymentStatus(paymentStatus)}',
+            unreadMessages: unreadMessages,
             hasDriverLocation: driverLat != null && driverLng != null,
             isCompleted: isCompleted,
             onChat: () {
@@ -382,6 +385,7 @@ class _TrackingSummary extends StatelessWidget {
     required this.progressIndex,
     required this.amount,
     required this.payment,
+    required this.unreadMessages,
     required this.hasDriverLocation,
     required this.isCompleted,
     required this.onChat,
@@ -395,6 +399,7 @@ class _TrackingSummary extends StatelessWidget {
   final int progressIndex;
   final String amount;
   final String payment;
+  final int unreadMessages;
   final bool hasDriverLocation;
   final bool isCompleted;
   final VoidCallback onChat;
@@ -466,7 +471,7 @@ class _TrackingSummary extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: onChat,
-                  icon: const Icon(Icons.chat_bubble_outline_rounded),
+                  icon: _ChatBadge(count: unreadMessages),
                   label: const Text('Chat'),
                 ),
               ),
@@ -571,6 +576,47 @@ class _DetailPill extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ChatBadge extends StatelessWidget {
+  const _ChatBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    if (count <= 0) {
+      return const Icon(Icons.chat_bubble_outline_rounded);
+    }
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(Icons.chat_bubble_outline_rounded),
+        Positioned(
+          right: -9,
+          top: -9,
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: const BoxDecoration(
+              color: Color(0xFFDC2626),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              count > 9 ? '9+' : '$count',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

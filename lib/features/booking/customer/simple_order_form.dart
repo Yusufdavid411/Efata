@@ -255,6 +255,8 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
         'driverLng': null,
         'distanceKm': distanceKm,
         'price': estimatedPrice,
+        'unreadForCustomer': 0,
+        'unreadForDriver': 0,
         'notificationStatus': 'created',
         'customerNotificationsEnabled':
             appSettingsController.orderNotificationsEnabled,

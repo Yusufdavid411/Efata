@@ -17,6 +17,8 @@ class OrderService {
       'driverId': null,
       'status': 'pending',
       'paymentStatus': 'pending',
+      'unreadForCustomer': 0,
+      'unreadForDriver': 0,
       'notificationStatus': 'created',
       'createdAt': Timestamp.now(),
     });

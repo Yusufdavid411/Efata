@@ -12,11 +12,13 @@ import 'package:logistics_app/features/driver/driver_jobs_screen.dart';
 import 'package:logistics_app/features/auth/login_screen.dart';
 import 'package:logistics_app/features/settings/settings_screen.dart';
 import 'package:logistics_app/core/controllers/app_settings_controller.dart';
+import 'package:logistics_app/core/services/chat_notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await appSettingsController.loadSettings();
+  await ChatNotificationService.instance.initialize();
   runApp(const MyApp());
 }
 

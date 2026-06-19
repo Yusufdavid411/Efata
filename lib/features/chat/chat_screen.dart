@@ -26,10 +26,39 @@ class _ChatScreenState extends State<ChatScreen> {
       .doc(widget.orderId)
       .collection('messages');
 
+  String get unreadField => widget.participantRole == 'driver'
+      ? 'unreadForDriver'
+      : 'unreadForCustomer';
+
+  String get recipientUnreadField => widget.participantRole == 'driver'
+      ? 'unreadForCustomer'
+      : 'unreadForDriver';
+
+  String get readAtField => widget.participantRole == 'driver'
+      ? 'driverLastReadAt'
+      : 'customerLastReadAt';
+
+  @override
+  void initState() {
+    super.initState();
+    markChatRead();
+  }
+
   @override
   void dispose() {
     controller.dispose();
     super.dispose();
+  }
+
+  Future<void> markChatRead() async {
+    await FirebaseFirestore.instance
+        .collection('orders')
+        .doc(widget.orderId)
+        .set({
+          unreadField: 0,
+          readAtField: FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true))
+        .catchError((_) {});
   }
 
   Future<void> sendMessage() async {
@@ -50,7 +79,18 @@ class _ChatScreenState extends State<ChatScreen> {
         'senderRole': widget.participantRole,
         'createdAt': FieldValue.serverTimestamp(),
       });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Message failed: $e')));
+      if (mounted) {
+        setState(() => isSending = false);
+      }
+      return;
+    }
 
+    try {
       await FirebaseFirestore.instance
           .collection('orders')
           .doc(widget.orderId)
@@ -58,12 +98,17 @@ class _ChatScreenState extends State<ChatScreen> {
             'lastMessage': text,
             'lastMessageAt': FieldValue.serverTimestamp(),
             'lastMessageSenderId': user.uid,
+            'lastMessageSenderRole': widget.participantRole,
+            recipientUnreadField: FieldValue.increment(1),
+            unreadField: 0,
+            readAtField: FieldValue.serverTimestamp(),
+            'notificationStatus': 'chatMessage',
           }, SetOptions(merge: true));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Message failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Message sent, but alert failed: $e')),
+      );
     } finally {
       if (mounted) {
         setState(() => isSending = false);
@@ -105,6 +150,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 }
 
                 final messages = snapshot.data?.docs ?? [];
+
+                if (messages.isNotEmpty) {
+                  markChatRead();
+                }
 
                 if (messages.isEmpty) {
                   return const Center(

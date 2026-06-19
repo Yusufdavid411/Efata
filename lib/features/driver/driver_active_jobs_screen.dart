@@ -278,6 +278,8 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
           final paymentMethod =
               data['paymentMethod']?.toString() ?? 'Cash on Delivery';
           final paymentStatus = data['paymentStatus']?.toString() ?? 'pending';
+          final unreadMessages =
+              (data['unreadForDriver'] as num?)?.toInt() ?? 0;
           final createdAt = data['createdAt'];
 
           if (status == 'inTransit') {
@@ -341,7 +343,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                               ),
                             );
                           },
-                          icon: const Icon(Icons.chat_bubble_outline_rounded),
+                          icon: _ChatBadge(count: unreadMessages),
                           label: const Text("Chat With Customer"),
                         ),
                       ),
@@ -399,6 +401,47 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+class _ChatBadge extends StatelessWidget {
+  const _ChatBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    if (count <= 0) {
+      return const Icon(Icons.chat_bubble_outline_rounded);
+    }
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(Icons.chat_bubble_outline_rounded),
+        Positioned(
+          right: -9,
+          top: -9,
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: const BoxDecoration(
+              color: Color(0xFFDC2626),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              count > 9 ? '9+' : '$count',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
