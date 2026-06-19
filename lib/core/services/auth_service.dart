@@ -26,10 +26,7 @@ class AuthService {
   }
 
   // Login User
-  Future<User?> login({
-    required String email,
-    required String password,
-  }) async {
+  Future<User?> login({required String email, required String password}) async {
     final credential = await _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
@@ -48,7 +45,17 @@ class AuthService {
 
   // Get User Role
   Future<String> getUserRole(String uid) async {
+    final data = await getUserData(uid);
+    return data?['role']?.toString() ?? '';
+  }
+
+  Future<Map<String, dynamic>?> getUserData(String uid) async {
     final doc = await _firestore.collection('users').doc(uid).get();
-    return doc['role'];
+    return doc.data();
+  }
+
+  Future<Map<String, dynamic>?> getDriverData(String uid) async {
+    final doc = await _firestore.collection('drivers').doc(uid).get();
+    return doc.data();
   }
 }

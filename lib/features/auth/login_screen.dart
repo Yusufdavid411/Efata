@@ -73,6 +73,45 @@ class _LoginScreenState extends State<LoginScreen> {
       final userData = userDoc.data() as Map<String, dynamic>;
       final role = userData['role']?.toString();
 
+      if (userData['isSuspended'] == true) {
+        await FirebaseAuth.instance.signOut();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This account is suspended. Contact support.'),
+          ),
+        );
+        return;
+      }
+
+      if (role == 'driver') {
+        final driverDoc = await FirebaseFirestore.instance
+            .collection('drivers')
+            .doc(user.uid)
+            .get();
+        final driverStatus = driverDoc
+            .data()?['verificationStatus']
+            ?.toString()
+            .toLowerCase();
+
+        if (driverStatus == 'suspended' || driverStatus == 'rejected') {
+          await FirebaseAuth.instance.signOut();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                driverStatus == 'rejected'
+                    ? 'This driver account was rejected. Contact support.'
+                    : 'This driver account is suspended. Contact support.',
+              ),
+            ),
+          );
+          return;
+        }
+      }
+
+      if (!mounted) return;
+
       if (role == 'customer') {
         Navigator.pushReplacementNamed(context, '/customerHome');
       } else if (role == 'driver') {

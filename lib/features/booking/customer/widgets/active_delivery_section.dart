@@ -119,6 +119,9 @@ class OrderPreviewCard extends StatelessWidget {
         return 'Completed';
       case 'rejected':
         return 'Rejected';
+      case 'canceled':
+      case 'cancelled':
+        return 'Canceled';
       default:
         return status.isEmpty ? 'Unknown' : status;
     }
@@ -135,6 +138,8 @@ class OrderPreviewCard extends StatelessWidget {
       case 'completed':
         return const Color(0xFF16A34A);
       case 'rejected':
+      case 'canceled':
+      case 'cancelled':
         return const Color(0xFFDC2626);
       default:
         return const Color(0xFF64748B);
@@ -173,7 +178,7 @@ class OrderPreviewCard extends StatelessWidget {
               const SizedBox(height: 8),
             ],
             Text(
-              '$pickup → $dropoff',
+              '$pickup -> $dropoff',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(

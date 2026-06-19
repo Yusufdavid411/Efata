@@ -24,7 +24,7 @@ class DriverEarningsSummary extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Available balance: ₦${amount.toStringAsFixed(0)}"),
+            Text("Available balance: NGN ${amount.toStringAsFixed(0)}"),
             const SizedBox(height: 12),
             const Text(
               "Withdrawal to the driver's bank account will be connected here.",
@@ -97,7 +97,7 @@ class DriverEarningsSummary extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                "Total Earnings: ₦${totalEarnings.toStringAsFixed(0)}",
+                "Total Earnings: NGN ${totalEarnings.toStringAsFixed(0)}",
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,

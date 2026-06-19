@@ -28,6 +28,9 @@ class TrackDeliveryScreen extends StatelessWidget {
         return 'Completed';
       case 'rejected':
         return 'Rejected';
+      case 'canceled':
+      case 'cancelled':
+        return 'Canceled';
       default:
         return status;
     }
@@ -35,12 +38,12 @@ class TrackDeliveryScreen extends StatelessWidget {
 
   String _formatPrice(dynamic price) {
     if (price == null) return 'Not available';
-    if (price is num) return '₦${price.toStringAsFixed(0)}';
+    if (price is num) return 'NGN ${price.toStringAsFixed(0)}';
 
     final parsed = double.tryParse(price.toString());
     if (parsed == null) return price.toString();
 
-    return '₦${parsed.toStringAsFixed(0)}';
+    return 'NGN ${parsed.toStringAsFixed(0)}';
   }
 
   String _formatPaymentStatus(String status) {
@@ -72,6 +75,10 @@ class TrackDeliveryScreen extends StatelessWidget {
     ].contains(paymentStatus.toLowerCase());
 
     return orderActive && paymentOpen;
+  }
+
+  bool _canCancelOrder(String status) {
+    return status.toLowerCase() == 'pending';
   }
 
   Future<void> _markPaymentSent(
@@ -117,6 +124,41 @@ class TrackDeliveryScreen extends StatelessWidget {
     ).showSnackBar(const SnackBar(content: Text('Payment status updated')));
   }
 
+  Future<void> _cancelPendingOrder(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel Delivery?'),
+        content: const Text(
+          'This will cancel the delivery request before any driver accepts it.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep Request'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Cancel Delivery'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
+      'status': 'canceled',
+      'canceledAt': FieldValue.serverTimestamp(),
+      'canceledBy': 'customer',
+    }, SetOptions(merge: true));
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Delivery request canceled')));
+  }
+
   int _progressIndex(String status) {
     switch (status.toLowerCase()) {
       case 'pending':
@@ -128,6 +170,8 @@ class TrackDeliveryScreen extends StatelessWidget {
       case 'completed':
         return 3;
       case 'rejected':
+      case 'canceled':
+      case 'cancelled':
         return -1;
       default:
         return 0;
@@ -146,6 +190,9 @@ class TrackDeliveryScreen extends StatelessWidget {
         return 'Delivery has been completed and confirmed.';
       case 'rejected':
         return 'This request was rejected. Please create another delivery.';
+      case 'canceled':
+      case 'cancelled':
+        return 'This delivery request was canceled before assignment.';
       default:
         return 'Tracking information will update as the delivery progresses.';
     }
@@ -209,6 +256,9 @@ class TrackDeliveryScreen extends StatelessWidget {
             onPaymentTap: _canMarkPaymentSent(status, paymentStatus)
                 ? () => _markPaymentSent(context, paymentMethod)
                 : null,
+            onCancelTap: _canCancelOrder(status)
+                ? () => _cancelPendingOrder(context)
+                : null,
           );
 
           if (pickupLat == null ||
@@ -269,6 +319,7 @@ class _TrackingSummary extends StatelessWidget {
     required this.isCompleted,
     required this.onChat,
     required this.onPaymentTap,
+    required this.onCancelTap,
   });
 
   final String status;
@@ -280,6 +331,7 @@ class _TrackingSummary extends StatelessWidget {
   final bool isCompleted;
   final VoidCallback onChat;
   final VoidCallback? onPaymentTap;
+  final VoidCallback? onCancelTap;
 
   @override
   Widget build(BuildContext context) {
@@ -361,6 +413,17 @@ class _TrackingSummary extends StatelessWidget {
               ),
             ],
           ),
+          if (onCancelTap != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onCancelTap,
+                icon: const Icon(Icons.cancel_outlined),
+                label: const Text('Cancel Pending Request'),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Row(
             children: [

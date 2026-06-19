@@ -20,12 +20,12 @@ class DriverJobsScreen extends StatelessWidget {
     if (price == null) return 'No price';
 
     if (price is num) {
-      return '₦${price.toStringAsFixed(0)}';
+      return 'NGN ${price.toStringAsFixed(0)}';
     }
 
     final parsed = double.tryParse(price.toString());
     if (parsed != null) {
-      return '₦${parsed.toStringAsFixed(0)}';
+      return 'NGN ${parsed.toStringAsFixed(0)}';
     }
 
     return 'No price';
@@ -43,10 +43,7 @@ class DriverJobsScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Job History'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Job History'), centerTitle: true),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('orders')
@@ -83,10 +80,10 @@ class DriverJobsScreen extends StatelessWidget {
 
             final aTime =
                 (aData['completedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
-                    0;
+                0;
             final bTime =
                 (bData['completedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
-                    0;
+                0;
 
             return bTime.compareTo(aTime);
           });
@@ -119,7 +116,7 @@ class DriverJobsScreen extends StatelessWidget {
                     color: Colors.blue.shade50,
                     child: ListTile(
                       title: Text(
-                        '${data['pickup'] ?? 'Pickup'} → ${data['dropoff'] ?? 'Drop-off'}',
+                        '${data['pickup'] ?? 'Pickup'} -> ${data['dropoff'] ?? 'Drop-off'}',
                       ),
                       subtitle: Text('Status: ${data['status']}'),
                       trailing: ElevatedButton(
@@ -160,7 +157,7 @@ class DriverJobsScreen extends StatelessWidget {
                     margin: const EdgeInsets.only(bottom: 12),
                     child: ListTile(
                       title: Text(
-                        '${data['pickup'] ?? 'Pickup'} → ${data['dropoff'] ?? 'Drop-off'}',
+                        '${data['pickup'] ?? 'Pickup'} -> ${data['dropoff'] ?? 'Drop-off'}',
                       ),
                       subtitle: Text(
                         'Completed: ${formatDateTime(data['completedAt'])}',

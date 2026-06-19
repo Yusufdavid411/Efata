@@ -310,7 +310,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
 
                       if (price != null) ...[
                         const SizedBox(height: 8),
-                        Text("Price: ₦$price"),
+                        Text("Price: NGN $price"),
                       ],
                       const SizedBox(height: 8),
                       Text(

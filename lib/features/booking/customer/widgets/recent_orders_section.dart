@@ -28,7 +28,7 @@ class RecentOrdersSection extends StatelessWidget {
         return Column(
           children: orders.map((order) {
             return ListTile(
-              title: Text("${order['pickup']} → ${order['dropoff']}"),
+              title: Text("${order['pickup']} -> ${order['dropoff']}"),
               subtitle: Text(order['status']),
             );
           }).toList(),

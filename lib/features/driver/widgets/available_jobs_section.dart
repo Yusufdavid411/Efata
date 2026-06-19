@@ -22,12 +22,12 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     if (price == null) return "Price not available";
 
     if (price is num) {
-      return "₦${price.toStringAsFixed(0)}";
+      return "NGN ${price.toStringAsFixed(0)}";
     }
 
     final parsed = double.tryParse(price.toString());
     if (parsed != null) {
-      return "₦${parsed.toStringAsFixed(0)}";
+      return "NGN ${parsed.toStringAsFixed(0)}";
     }
 
     return "Price not available";

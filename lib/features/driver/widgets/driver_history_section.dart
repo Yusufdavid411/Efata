@@ -40,16 +40,14 @@ class DriverHistorySection extends StatelessWidget {
             if (current.isNotEmpty) ...[
               const Text(
                 "Current Job",
-                style: TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
               ...current.map((job) {
                 final data = job.data() as Map<String, dynamic>;
                 return Card(
                   child: ListTile(
-                    title: Text(
-                        "${data['pickup']} → ${data['dropoff']}"),
+                    title: Text("${data['pickup']} -> ${data['dropoff']}"),
                     subtitle: Text("Status: ${data['status']}"),
                   ),
                 );
@@ -59,21 +57,18 @@ class DriverHistorySection extends StatelessWidget {
 
             const Text(
               "Recent Jobs",
-              style:
-                  TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
 
             const SizedBox(height: 10),
 
-            if (completed.isEmpty)
-              const Text("No completed jobs yet"),
+            if (completed.isEmpty) const Text("No completed jobs yet"),
 
             ...completed.map((job) {
               final data = job.data() as Map<String, dynamic>;
               return Card(
                 child: ListTile(
-                  title: Text(
-                      "${data['pickup']} → ${data['dropoff']}"),
+                  title: Text("${data['pickup']} -> ${data['dropoff']}"),
                   subtitle: Text(
                     "Completed: ${formatTime(data['completedAt'])}",
                   ),

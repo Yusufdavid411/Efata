@@ -28,7 +28,40 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     if (user != null) {
-      final role = await authService.getUserRole(user.uid);
+      final userData = await authService.getUserData(user.uid);
+      final role = userData?['role']?.toString() ?? '';
+      final isSuspended = userData?['isSuspended'] == true;
+
+      if (isSuspended) {
+        await authService.logout();
+
+        if (!mounted) return;
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+        return;
+      }
+
+      if (role == 'driver') {
+        final driverData = await authService.getDriverData(user.uid);
+        final driverStatus = driverData?['verificationStatus']
+            ?.toString()
+            .toLowerCase();
+
+        if (driverStatus == 'suspended' || driverStatus == 'rejected') {
+          await authService.logout();
+
+          if (!mounted) return;
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+          return;
+        }
+      }
 
       if (!mounted) return;
 
