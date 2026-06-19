@@ -24,6 +24,7 @@ class OrderHistoryScreen extends StatelessWidget {
             .collection('orders')
             .where('customerId', isEqualTo: currentUser?.uid)
             .orderBy('createdAt', descending: true)
+            .limit(50)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting &&

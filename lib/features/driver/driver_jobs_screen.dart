@@ -48,6 +48,7 @@ class DriverJobsScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection('orders')
             .where('driverId', isEqualTo: driver.uid)
+            .limit(50)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting &&

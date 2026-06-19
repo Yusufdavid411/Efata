@@ -174,6 +174,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       stream: FirebaseFirestore.instance
           .collection('orders')
           .where('driverId', isEqualTo: driver.uid)
+          .limit(25)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox();

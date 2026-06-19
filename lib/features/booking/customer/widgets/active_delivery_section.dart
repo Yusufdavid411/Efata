@@ -20,6 +20,7 @@ class ActiveDeliverySection extends StatelessWidget {
           .collection('orders')
           .where('customerId', isEqualTo: user?.uid)
           .orderBy('createdAt', descending: true)
+          .limit(20)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&

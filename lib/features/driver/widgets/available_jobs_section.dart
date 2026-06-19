@@ -286,6 +286,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
               .collection('orders')
               .where('status', isEqualTo: 'pending')
               .where('driverId', isNull: true)
+              .limit(25)
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting &&

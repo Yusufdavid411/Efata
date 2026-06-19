@@ -248,6 +248,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
         stream: FirebaseFirestore.instance
             .collection('orders')
             .where('driverId', isEqualTo: driver.uid)
+            .limit(25)
             .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
