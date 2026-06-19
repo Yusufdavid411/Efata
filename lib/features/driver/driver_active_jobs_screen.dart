@@ -280,6 +280,13 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
           final paymentStatus = data['paymentStatus']?.toString() ?? 'pending';
           final unreadMessages =
               (data['unreadForDriver'] as num?)?.toInt() ?? 0;
+          final lastMessageSenderRole =
+              data['lastMessageSenderRole']?.toString() ?? '';
+          final chatLabel = _chatButtonLabel(
+            unreadMessages,
+            lastMessageSenderRole,
+            'driver',
+          );
           final createdAt = data['createdAt'];
 
           if (status == 'inTransit') {
@@ -344,7 +351,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                             );
                           },
                           icon: _ChatBadge(count: unreadMessages),
-                          label: const Text("Chat With Customer"),
+                          label: Text(chatLabel),
                         ),
                       ),
 
@@ -403,6 +410,18 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
       ),
     );
   }
+}
+
+String _chatButtonLabel(
+  int unreadMessages,
+  String lastMessageSenderRole,
+  String viewerRole,
+) {
+  if (unreadMessages == 1) return '1 new message';
+  if (unreadMessages > 1) return '$unreadMessages new messages';
+  if (lastMessageSenderRole == viewerRole) return 'Message sent';
+  if (lastMessageSenderRole.isNotEmpty) return 'Chat updated';
+  return 'Chat With Customer';
 }
 
 class _ChatBadge extends StatelessWidget {

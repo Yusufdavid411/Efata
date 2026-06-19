@@ -33,11 +33,7 @@ class ChatNotificationService {
 
     await _notifications.initialize(settings: initializationSettings);
 
-    await _notifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.requestNotificationsPermission();
+    await requestPhonePermission();
 
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
       _clearOrderListeners();
@@ -88,6 +84,7 @@ class ChatNotificationService {
       final senderId = data['lastMessageSenderId']?.toString();
       final lastMessageAt = data['lastMessageAt'];
       final messageTime = _messageTime(lastMessageAt);
+      final unreadCount = _unreadCountForUser(data, userId);
 
       if (lastMessage.isEmpty || senderId == null || messageTime == null) {
         continue;
@@ -99,8 +96,9 @@ class ChatNotificationService {
       final isInitialLoad = previousTime == null;
       final isOwnMessage = senderId == userId;
 
-      if (isInitialLoad || isOwnMessage) continue;
-      if (messageTime <= previousTime) continue;
+      if (isOwnMessage) continue;
+      if (isInitialLoad && unreadCount <= 0) continue;
+      if (!isInitialLoad && messageTime <= previousTime) continue;
       if (!appSettingsController.orderNotificationsEnabled) continue;
 
       final senderRole =
@@ -121,6 +119,13 @@ class ChatNotificationService {
     }
     if (value is int) return value;
     return null;
+  }
+
+  int _unreadCountForUser(Map<String, dynamic> data, String userId) {
+    final isCustomer = data['customerId']?.toString() == userId;
+    final field = isCustomer ? 'unreadForCustomer' : 'unreadForDriver';
+
+    return (data[field] as num?)?.toInt() ?? 0;
   }
 
   String _routeLabel(Map<String, dynamic> data) {
@@ -151,6 +156,22 @@ class ChatNotificationService {
       body: body,
       notificationDetails: const NotificationDetails(android: androidDetails),
       payload: orderId,
+    );
+  }
+
+  Future<bool?> requestPhonePermission() async {
+    return await _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
+  }
+
+  Future<void> showTestNotification() {
+    return showChatNotification(
+      orderId: 'test-chat-notification',
+      title: 'EFATA chat notification',
+      body: 'Notifications are working on this phone.',
     );
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/controllers/app_settings_controller.dart';
+import '../../core/services/chat_notification_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -52,7 +53,26 @@ class SettingsScreen extends StatelessWidget {
                       title: const Text("Order notifications"),
                       subtitle: const Text("Show delivery and payment updates"),
                       value: appSettingsController.orderNotificationsEnabled,
-                      onChanged: appSettingsController.updateOrderNotifications,
+                      onChanged: (enabled) async {
+                        if (enabled) {
+                          await ChatNotificationService.instance
+                              .requestPhonePermission();
+                        }
+                        await appSettingsController.updateOrderNotifications(
+                          enabled,
+                        );
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.mark_chat_unread_outlined),
+                      title: const Text("Test chat notification"),
+                      subtitle: const Text("Confirm alerts work on this phone"),
+                      onTap: () async {
+                        await ChatNotificationService.instance
+                            .requestPhonePermission();
+                        await ChatNotificationService.instance
+                            .showTestNotification();
+                      },
                     ),
                     const ListTile(
                       leading: Icon(Icons.language_outlined),

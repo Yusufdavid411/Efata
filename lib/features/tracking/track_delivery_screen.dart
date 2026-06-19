@@ -301,6 +301,8 @@ class TrackDeliveryScreen extends StatelessWidget {
           final price = data['price'];
           final unreadMessages =
               (data['unreadForCustomer'] as num?)?.toInt() ?? 0;
+          final lastMessageSenderRole =
+              data['lastMessageSenderRole']?.toString() ?? '';
           final isCompleted = status.toLowerCase() == 'completed';
           final summary = _TrackingSummary(
             status: _formatStatus(status),
@@ -309,6 +311,11 @@ class TrackDeliveryScreen extends StatelessWidget {
             amount: _formatPrice(price),
             payment: '$paymentMethod - ${_formatPaymentStatus(paymentStatus)}',
             unreadMessages: unreadMessages,
+            chatLabel: _chatButtonLabel(
+              unreadMessages,
+              lastMessageSenderRole,
+              'customer',
+            ),
             hasDriverLocation: driverLat != null && driverLng != null,
             isCompleted: isCompleted,
             onChat: () {
@@ -386,6 +393,7 @@ class _TrackingSummary extends StatelessWidget {
     required this.amount,
     required this.payment,
     required this.unreadMessages,
+    required this.chatLabel,
     required this.hasDriverLocation,
     required this.isCompleted,
     required this.onChat,
@@ -400,6 +408,7 @@ class _TrackingSummary extends StatelessWidget {
   final String amount;
   final String payment;
   final int unreadMessages;
+  final String chatLabel;
   final bool hasDriverLocation;
   final bool isCompleted;
   final VoidCallback onChat;
@@ -472,7 +481,7 @@ class _TrackingSummary extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: onChat,
                   icon: _ChatBadge(count: unreadMessages),
-                  label: const Text('Chat'),
+                  label: Text(chatLabel),
                 ),
               ),
               const SizedBox(width: 8),
@@ -619,6 +628,18 @@ class _ChatBadge extends StatelessWidget {
       ],
     );
   }
+}
+
+String _chatButtonLabel(
+  int unreadMessages,
+  String lastMessageSenderRole,
+  String viewerRole,
+) {
+  if (unreadMessages == 1) return '1 new message';
+  if (unreadMessages > 1) return '$unreadMessages new messages';
+  if (lastMessageSenderRole == viewerRole) return 'Message sent';
+  if (lastMessageSenderRole.isNotEmpty) return 'Chat updated';
+  return 'Chat';
 }
 
 class _ProgressStep extends StatelessWidget {
