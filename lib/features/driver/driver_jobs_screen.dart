@@ -31,6 +31,44 @@ class DriverJobsScreen extends StatelessWidget {
     return 'No price';
   }
 
+  String formatStatus(dynamic status) {
+    switch (status?.toString().toLowerCase()) {
+      case 'accepted':
+        return 'Accepted';
+      case 'intransit':
+        return 'In Transit';
+      case 'completed':
+        return 'Completed';
+      case 'pending':
+        return 'Pending';
+      case 'rejected':
+        return 'Rejected';
+      case 'canceled':
+      case 'cancelled':
+        return 'Canceled';
+      default:
+        return status?.toString() ?? 'Unknown';
+    }
+  }
+
+  int sortTime(QueryDocumentSnapshot job) {
+    final data = job.data() as Map<String, dynamic>;
+    final timestamps = [
+      data['completedAt'],
+      data['startedAt'],
+      data['acceptedAt'],
+      data['createdAt'],
+    ];
+
+    for (final value in timestamps) {
+      if (value is Timestamp) {
+        return value.millisecondsSinceEpoch;
+      }
+    }
+
+    return 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final driver = FirebaseAuth.instance.currentUser;
@@ -48,7 +86,6 @@ class DriverJobsScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection('orders')
             .where('driverId', isEqualTo: driver.uid)
-            .limit(50)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting &&
@@ -66,31 +103,30 @@ class DriverJobsScreen extends StatelessWidget {
 
           final currentJobs = docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
-            final status = data['status']?.toString();
-            return status == 'accepted' || status == 'inTransit';
+            final status = data['status']?.toString().toLowerCase();
+            return status == 'accepted' || status == 'intransit';
           }).toList();
 
           final completedJobs = docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
-            return data['status'] == 'completed';
+            return data['status']?.toString().toLowerCase() == 'completed';
           }).toList();
 
-          completedJobs.sort((a, b) {
-            final aData = a.data() as Map<String, dynamic>;
-            final bData = b.data() as Map<String, dynamic>;
+          final otherJobs = docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final status = data['status']?.toString().toLowerCase();
+            return status != 'accepted' &&
+                status != 'intransit' &&
+                status != 'completed';
+          }).toList();
 
-            final aTime =
-                (aData['completedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
-                0;
-            final bTime =
-                (bData['completedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
-                0;
+          completedJobs.sort((a, b) => sortTime(b).compareTo(sortTime(a)));
+          otherJobs.sort((a, b) => sortTime(b).compareTo(sortTime(a)));
 
-            return bTime.compareTo(aTime);
-          });
-
-          if (currentJobs.isEmpty && completedJobs.isEmpty) {
-            return const Center(child: Text('No jobs yet'));
+          if (currentJobs.isEmpty &&
+              completedJobs.isEmpty &&
+              otherJobs.isEmpty) {
+            return const Center(child: Text('No assigned jobs yet'));
           }
 
           return ListView(
@@ -119,7 +155,7 @@ class DriverJobsScreen extends StatelessWidget {
                       title: Text(
                         '${data['pickup'] ?? 'Pickup'} -> ${data['dropoff'] ?? 'Drop-off'}',
                       ),
-                      subtitle: Text('Status: ${data['status']}'),
+                      subtitle: Text('Status: ${formatStatus(data['status'])}'),
                       trailing: ElevatedButton(
                         onPressed: () {
                           Navigator.push(
@@ -173,6 +209,28 @@ class DriverJobsScreen extends StatelessWidget {
                     ),
                   );
                 }),
+              if (otherJobs.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const Text(
+                  'Other Assigned Jobs',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                ...otherJobs.map((job) {
+                  final data = job.data() as Map<String, dynamic>;
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: ListTile(
+                      title: Text(
+                        '${data['pickup'] ?? 'Pickup'} -> ${data['dropoff'] ?? 'Drop-off'}',
+                      ),
+                      subtitle: Text('Status: ${formatStatus(data['status'])}'),
+                      trailing: Text(formatPrice(data['price'])),
+                    ),
+                  );
+                }),
+              ],
             ],
           );
         },

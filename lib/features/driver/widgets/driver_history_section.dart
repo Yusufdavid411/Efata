@@ -11,6 +11,26 @@ class DriverHistorySection extends StatelessWidget {
     return "${d.day}/${d.month}/${d.year}  ${d.hour}:${d.minute}";
   }
 
+  String formatStatus(dynamic status) {
+    switch (status?.toString().toLowerCase()) {
+      case 'accepted':
+        return 'Accepted';
+      case 'intransit':
+        return 'In Transit';
+      case 'completed':
+        return 'Completed';
+      case 'pending':
+        return 'Pending';
+      case 'rejected':
+        return 'Rejected';
+      case 'canceled':
+      case 'cancelled':
+        return 'Canceled';
+      default:
+        return status?.toString() ?? 'Unknown';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final driver = FirebaseAuth.instance.currentUser;
@@ -19,20 +39,38 @@ class DriverHistorySection extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('orders')
           .where('driverId', isEqualTo: driver?.uid)
-          .limit(50)
           .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Text("Job history could not load: ${snapshot.error}");
+        }
+
         if (!snapshot.hasData) return const SizedBox();
 
         final docs = snapshot.data!.docs;
 
         final current = docs.where((d) {
-          final s = d['status'];
-          return s == 'accepted' || s == 'inTransit';
+          final data = d.data() as Map<String, dynamic>;
+          final status = data['status']?.toString().toLowerCase();
+          return status == 'accepted' || status == 'intransit';
         }).toList();
 
         final completed = docs.where((d) {
-          return d['status'] == 'completed';
+          final data = d.data() as Map<String, dynamic>;
+          return data['status']?.toString().toLowerCase() == 'completed';
+        }).toList();
+
+        final other = docs.where((d) {
+          final data = d.data() as Map<String, dynamic>;
+          final status = data['status']?.toString().toLowerCase();
+          return status != 'accepted' &&
+              status != 'intransit' &&
+              status != 'completed';
         }).toList();
 
         return Column(
@@ -49,7 +87,7 @@ class DriverHistorySection extends StatelessWidget {
                 return Card(
                   child: ListTile(
                     title: Text("${data['pickup']} -> ${data['dropoff']}"),
-                    subtitle: Text("Status: ${data['status']}"),
+                    subtitle: Text("Status: ${formatStatus(data['status'])}"),
                   ),
                 );
               }),
@@ -76,6 +114,23 @@ class DriverHistorySection extends StatelessWidget {
                 ),
               );
             }),
+            if (other.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              const Text(
+                "Other Assigned Jobs",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              ...other.map((job) {
+                final data = job.data() as Map<String, dynamic>;
+                return Card(
+                  child: ListTile(
+                    title: Text("${data['pickup']} -> ${data['dropoff']}"),
+                    subtitle: Text("Status: ${formatStatus(data['status'])}"),
+                  ),
+                );
+              }),
+            ],
           ],
         );
       },
