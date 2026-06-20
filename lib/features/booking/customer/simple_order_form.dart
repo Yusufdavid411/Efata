@@ -31,6 +31,8 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
 
   List<PlaceSuggestion> pickupSuggestions = [];
   List<PlaceSuggestion> dropoffSuggestions = [];
+  List<PlaceSuggestion> recentPickupSuggestions = [];
+  List<PlaceSuggestion> recentDropoffSuggestions = [];
 
   String vehicleType = 'Truck';
   String paymentMethod = 'Cash on Delivery';
@@ -47,15 +49,118 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   double distanceKm = 0;
   double estimatedPrice = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    loadRecentPlaces();
+  }
+
+  Future<void> loadRecentPlaces() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('customerId', isEqualTo: currentUser.uid)
+          .limit(40)
+          .get();
+
+      final docs = snapshot.docs.toList()
+        ..sort((a, b) {
+          final aTime = a.data()['createdAt'];
+          final bTime = b.data()['createdAt'];
+          final aMillis = aTime is Timestamp ? aTime.millisecondsSinceEpoch : 0;
+          final bMillis = bTime is Timestamp ? bTime.millisecondsSinceEpoch : 0;
+          return bMillis.compareTo(aMillis);
+        });
+
+      final pickupSeen = <String>{};
+      final dropoffSeen = <String>{};
+      final pickups = <PlaceSuggestion>[];
+      final dropoffs = <PlaceSuggestion>[];
+
+      for (final doc in docs) {
+        final data = doc.data();
+        _addRecentPlace(
+          target: pickups,
+          seen: pickupSeen,
+          address: data['pickup'],
+          latitude: data['pickupLat'],
+          longitude: data['pickupLng'],
+        );
+        _addRecentPlace(
+          target: dropoffs,
+          seen: dropoffSeen,
+          address: data['dropoff'],
+          latitude: data['dropoffLat'],
+          longitude: data['dropoffLng'],
+        );
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        recentPickupSuggestions = pickups.take(5).toList();
+        recentDropoffSuggestions = dropoffs.take(5).toList();
+      });
+    } catch (_) {
+      // Recent places are a convenience feature; the booking form still works.
+    }
+  }
+
+  void _addRecentPlace({
+    required List<PlaceSuggestion> target,
+    required Set<String> seen,
+    required dynamic address,
+    required dynamic latitude,
+    required dynamic longitude,
+  }) {
+    final cleanAddress = address?.toString().trim() ?? '';
+    final lat = latitude is num ? latitude.toDouble() : null;
+    final lng = longitude is num ? longitude.toDouble() : null;
+    final key = cleanAddress.toLowerCase();
+
+    if (cleanAddress.isEmpty ||
+        lat == null ||
+        lng == null ||
+        seen.contains(key)) {
+      return;
+    }
+
+    seen.add(key);
+    target.add(
+      PlaceSuggestion(
+        address: cleanAddress,
+        latitude: lat,
+        longitude: lng,
+        isRecent: true,
+      ),
+    );
+  }
+
+  List<PlaceSuggestion> recentMatches(String query, {required bool isPickup}) {
+    final source = isPickup
+        ? recentPickupSuggestions
+        : recentDropoffSuggestions;
+    final cleanedQuery = query.trim().toLowerCase();
+
+    if (cleanedQuery.isEmpty) return source;
+
+    return source
+        .where((place) => place.address.toLowerCase().contains(cleanedQuery))
+        .toList();
+  }
+
   Future<void> searchPlaces(String query, {required bool isPickup}) async {
     final cleanedQuery = query.trim();
 
     if (cleanedQuery.length < 3) {
       setState(() {
         if (isPickup) {
-          pickupSuggestions = [];
+          pickupSuggestions = recentMatches(cleanedQuery, isPickup: true);
         } else {
-          dropoffSuggestions = [];
+          dropoffSuggestions = recentMatches(cleanedQuery, isPickup: false);
         }
       });
       return;
@@ -108,10 +213,12 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   void onLocationTyped(String value, {required bool isPickup}) {
     final debounce = isPickup ? pickupDebounce : dropoffDebounce;
     debounce?.cancel();
+    final recent = recentMatches(value, isPickup: isPickup);
 
     if (isPickup) {
       pickupLat = null;
       pickupLng = null;
+      pickupSuggestions = recent;
       pickupDebounce = Timer(
         const Duration(milliseconds: 450),
         () => searchPlaces(value, isPickup: true),
@@ -119,6 +226,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     } else {
       dropoffLat = null;
       dropoffLng = null;
+      dropoffSuggestions = recent;
       dropoffDebounce = Timer(
         const Duration(milliseconds: 450),
         () => searchPlaces(value, isPickup: false),
@@ -291,6 +399,16 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
 
   @override
   Widget build(BuildContext context) {
+    final pickupOptions =
+        pickupSuggestions.isNotEmpty || pickupController.text.trim().isNotEmpty
+        ? pickupSuggestions
+        : recentPickupSuggestions;
+    final dropoffOptions =
+        dropoffSuggestions.isNotEmpty ||
+            dropoffController.text.trim().isNotEmpty
+        ? dropoffSuggestions
+        : recentDropoffSuggestions;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Create delivery')),
       body: SafeArea(
@@ -311,7 +429,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
                     icon: Icons.my_location_rounded,
                     isSelected: pickupLat != null,
                     isLoading: isSearchingPickup,
-                    suggestions: pickupSuggestions,
+                    suggestions: pickupOptions,
                     onChanged: (value) =>
                         onLocationTyped(value, isPickup: true),
                     onMapTap: () => openMapPicker(true),
@@ -326,7 +444,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
                     icon: Icons.flag_rounded,
                     isSelected: dropoffLat != null,
                     isLoading: isSearchingDropoff,
-                    suggestions: dropoffSuggestions,
+                    suggestions: dropoffOptions,
                     onChanged: (value) =>
                         onLocationTyped(value, isPickup: false),
                     onMapTap: () => openMapPicker(false),
@@ -434,12 +552,14 @@ class PlaceSuggestion {
     this.latitude,
     this.longitude,
     this.placeId,
+    this.isRecent = false,
   });
 
   final String address;
   final double? latitude;
   final double? longitude;
   final String? placeId;
+  final bool isRecent;
 }
 
 class GooglePlacesService {
@@ -712,7 +832,9 @@ class _LocationInput extends StatelessWidget {
                     (suggestion) => ListTile(
                       dense: true,
                       leading: Icon(
-                        Icons.place_outlined,
+                        suggestion.isRecent
+                            ? Icons.history_rounded
+                            : Icons.place_outlined,
                         color: colors.primary,
                       ),
                       title: Text(
@@ -721,6 +843,9 @@ class _LocationInput extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
+                      subtitle: suggestion.isRecent
+                          ? const Text('Used before')
+                          : null,
                       onTap: () => onSuggestionTap(suggestion),
                     ),
                   )

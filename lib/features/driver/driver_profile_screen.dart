@@ -292,6 +292,35 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           final vehicle = data['vehicleType']?.toString() ?? 'Not added';
           final plate = data['plateNumber']?.toString() ?? 'Not added';
           final photoUrl = data['photoUrl']?.toString();
+          final verificationStatus =
+              data['verificationStatus']?.toString().toLowerCase() ??
+              'incomplete';
+          final profileCompleted = data['profileCompleted'] == true;
+          final isVerified = verificationStatus == 'approved';
+          final statusLabel = isVerified
+              ? 'Verified Driver'
+              : !profileCompleted
+              ? 'Profile Incomplete'
+              : verificationStatus == 'pending'
+              ? 'Awaiting Approval'
+              : 'Not Verified';
+          final statusMessage = isVerified
+              ? 'Admin has approved this driver account.'
+              : !profileCompleted
+              ? 'Complete your driver profile to start verification.'
+              : verificationStatus == 'pending'
+              ? 'Admin is reviewing your submitted driver details.'
+              : 'Driver approval is required before receiving jobs.';
+          final statusColor = isVerified
+              ? const Color(0xFF16A34A)
+              : verificationStatus == 'pending'
+              ? const Color(0xFFD97706)
+              : const Color(0xFFDC2626);
+          final statusIcon = isVerified
+              ? Icons.verified_rounded
+              : verificationStatus == 'pending'
+              ? Icons.pending_actions_rounded
+              : Icons.error_outline_rounded;
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -348,6 +377,34 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: statusColor.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(statusIcon, color: statusColor, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            statusLabel,
+                            style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -381,6 +438,17 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       leading: const Icon(Icons.email_outlined),
                       title: const Text("Email"),
                       subtitle: Text(user.email ?? 'No email'),
+                    ),
+                    ListTile(
+                      leading: Icon(statusIcon, color: statusColor),
+                      title: const Text("Verification"),
+                      subtitle: Text(statusMessage),
+                      trailing: isVerified
+                          ? const Icon(
+                              Icons.verified_rounded,
+                              color: Color(0xFF16A34A),
+                            )
+                          : null,
                     ),
                     tile(
                       title: "Vehicle",

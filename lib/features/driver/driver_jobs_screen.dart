@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'widgets/driver_current_job_card.dart';
 import 'widgets/driver_history_section.dart';
 
 class DriverJobsScreen extends StatelessWidget {
@@ -12,7 +13,13 @@ class DriverJobsScreen extends StatelessWidget {
       body: const SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.all(16),
-          child: DriverHistorySection(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DriverCurrentJobCard(showEmptyState: true),
+              DriverHistorySection(),
+            ],
+          ),
         ),
       ),
     );

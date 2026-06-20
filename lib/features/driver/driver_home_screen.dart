@@ -6,9 +6,9 @@ import '../../shared/widgets/app_drawer.dart';
 import '../../shared/widgets/ai_floating_button.dart';
 import 'widgets/driver_status_toggle.dart';
 import 'widgets/available_jobs_section.dart';
+import 'widgets/driver_current_job_card.dart';
 import 'widgets/driver_history_section.dart';
 import 'widgets/driver_earnings_summary.dart';
-import 'driver_active_jobs_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -115,11 +115,24 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   Widget verificationCard() {
     final status = verificationStatus.toLowerCase();
     final approved = status == 'approved';
+
+    if (approved) return const SizedBox.shrink();
+
     final color = approved
         ? Colors.green
         : status == 'pending'
         ? Colors.orange
         : Colors.red;
+    final title = !profileCompleted
+        ? 'Complete driver profile'
+        : status == 'pending'
+        ? 'Approval in review'
+        : 'Driver approval required';
+    final message = !profileCompleted
+        ? 'Add your vehicle and contact details so admin can verify your account.'
+        : status == 'pending'
+        ? 'Admin is reviewing your driver profile. You can go online after approval.'
+        : 'Your account must be approved before you can receive delivery requests.';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -144,96 +157,19 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  approved ? 'Driver approved' : 'Driver approval required',
+                  title,
                   style: TextStyle(
                     color: color.shade900,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  approved
-                      ? 'You can go online and receive delivery requests.'
-                      : 'Complete your profile and wait for admin approval before accepting jobs.',
-                  style: const TextStyle(color: Color(0xFF475569)),
-                ),
+                Text(message, style: const TextStyle(color: Color(0xFF475569))),
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget currentJobCard() {
-    final driver = FirebaseAuth.instance.currentUser;
-
-    if (driver == null) return const SizedBox();
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('driverId', isEqualTo: driver.uid)
-          .limit(25)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox();
-
-        final docs = snapshot.data!.docs;
-
-        final activeJobs = docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final status = data['status'];
-          return status == 'accepted' || status == 'inTransit';
-        }).toList();
-
-        if (activeJobs.isEmpty) return const SizedBox();
-
-        final job = activeJobs.first;
-        final data = job.data() as Map<String, dynamic>;
-
-        final pickup = data['pickup']?.toString() ?? 'No pickup location';
-        final dropoff = data['dropoff']?.toString() ?? 'No drop-off location';
-        final status = data['status']?.toString() ?? 'accepted';
-        final vehicleType = data['vehicleType']?.toString();
-
-        return Card(
-          color: Colors.blue.shade50,
-          margin: const EdgeInsets.only(bottom: 20),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Current Job",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                Text("$pickup -> $dropoff"),
-                const SizedBox(height: 6),
-                Text("Status: $status"),
-                if (vehicleType != null && vehicleType.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text("Vehicle: $vehicleType"),
-                ],
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DriverActiveJobsScreen(),
-                      ),
-                    );
-                  },
-                  child: const Text("View Job"),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -261,7 +197,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
                 const SizedBox(height: 20),
 
-                currentJobCard(),
+                const DriverCurrentJobCard(),
 
                 const Text(
                   "Available Jobs",
@@ -274,14 +210,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
                 const SizedBox(height: 30),
 
-                const Text(
-                  "Job History",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 10),
-
-                const DriverHistorySection(),
+                const DriverHistorySection(maxItems: 5),
               ],
             ),
           ),
