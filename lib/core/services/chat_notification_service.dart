@@ -101,14 +101,10 @@ class ChatNotificationService {
       if (!isInitialLoad && messageTime <= previousTime) continue;
       if (!appSettingsController.orderNotificationsEnabled) continue;
 
-      final senderRole =
-          data['lastMessageSenderRole']?.toString() ?? 'delivery chat';
-      final route = _routeLabel(data);
-
       showChatNotification(
         orderId: order.id,
-        title: 'New message from $senderRole',
-        body: route.isEmpty ? lastMessage : '$route: $lastMessage',
+        title: _senderTitle(data['lastMessageSenderRole']),
+        body: lastMessage,
       );
     }
   }
@@ -128,12 +124,15 @@ class ChatNotificationService {
     return (data[field] as num?)?.toInt() ?? 0;
   }
 
-  String _routeLabel(Map<String, dynamic> data) {
-    final pickup = data['pickup']?.toString() ?? '';
-    final dropoff = data['dropoff']?.toString() ?? '';
-
-    if (pickup.isEmpty || dropoff.isEmpty) return '';
-    return '$pickup -> $dropoff';
+  String _senderTitle(dynamic senderRole) {
+    switch (senderRole?.toString().toLowerCase()) {
+      case 'customer':
+        return 'Customer';
+      case 'driver':
+        return 'Driver';
+      default:
+        return 'Delivery chat';
+    }
   }
 
   Future<void> showChatNotification({
