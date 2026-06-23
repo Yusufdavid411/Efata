@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -22,6 +24,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   bool isLoadingAvailability = true;
   String verificationStatus = 'incomplete';
   bool profileCompleted = false;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  driverProfileSubscription;
 
   @override
   void initState() {
@@ -29,7 +33,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     loadDriverAvailability();
   }
 
-  Future<void> loadDriverAvailability() async {
+  void loadDriverAvailability() {
     final driver = FirebaseAuth.instance.currentUser;
 
     if (driver == null) {
@@ -37,28 +41,30 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       return;
     }
 
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('drivers')
-          .doc(driver.uid)
-          .get();
+    driverProfileSubscription = FirebaseFirestore.instance
+        .collection('drivers')
+        .doc(driver.uid)
+        .snapshots()
+        .listen(
+          (doc) {
+            final data = doc.data();
+            final savedStatus =
+                data?['isOnline'] == true || data?['isAvailable'] == true;
 
-      final data = doc.data();
-      final savedStatus =
-          data?['isOnline'] == true || data?['isAvailable'] == true;
+            if (!mounted) return;
 
-      if (!mounted) return;
-
-      setState(() {
-        isOnline = savedStatus;
-        verificationStatus =
-            data?['verificationStatus']?.toString() ?? 'incomplete';
-        profileCompleted = data?['profileCompleted'] == true;
-        isLoadingAvailability = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => isLoadingAvailability = false);
-    }
+            setState(() {
+              isOnline = savedStatus;
+              verificationStatus =
+                  data?['verificationStatus']?.toString() ?? 'incomplete';
+              profileCompleted = data?['profileCompleted'] == true;
+              isLoadingAvailability = false;
+            });
+          },
+          onError: (_) {
+            if (mounted) setState(() => isLoadingAvailability = false);
+          },
+        );
   }
 
   Future<void> handleStatusChange(bool value) async {
@@ -66,8 +72,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     if (driver == null) return;
 
-    if (value &&
-        (!profileCompleted || verificationStatus.toLowerCase() != 'approved')) {
+    if (value && verificationStatus.toLowerCase() != 'approved') {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -110,6 +115,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     }, SetOptions(merge: true));
 
     setState(() => isOnline = value);
+  }
+
+  @override
+  void dispose() {
+    driverProfileSubscription?.cancel();
+    super.dispose();
   }
 
   Widget verificationCard() {
