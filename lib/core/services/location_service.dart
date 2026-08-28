@@ -1,11 +1,19 @@
 import 'package:geolocator/geolocator.dart';
 
+enum LocationAccessStatus {
+  granted,
+  serviceDisabled,
+  denied,
+  deniedForever,
+  unavailable,
+}
+
 class LocationService {
-  static Future<bool> requestLocationPermission() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+  static Future<LocationAccessStatus> requestLocationAccess() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
     if (!serviceEnabled) {
-      return false;
+      return LocationAccessStatus.serviceDisabled;
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
@@ -14,12 +22,36 @@ class LocationService {
       permission = await Geolocator.requestPermission();
     }
 
-    if (permission == LocationPermission.deniedForever) {
-      return false;
+    if (permission == LocationPermission.denied) {
+      return LocationAccessStatus.denied;
     }
 
-    return permission == LocationPermission.always ||
-        permission == LocationPermission.whileInUse;
+    if (permission == LocationPermission.deniedForever) {
+      return LocationAccessStatus.deniedForever;
+    }
+
+    if (permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse) {
+      return LocationAccessStatus.granted;
+    }
+
+    return LocationAccessStatus.unavailable;
+  }
+
+  static Future<bool> requestLocationPermission() async {
+    return await requestLocationAccess() == LocationAccessStatus.granted;
+  }
+
+  static Future<Position?> getCurrentPosition() async {
+    final access = await requestLocationAccess();
+    if (access != LocationAccessStatus.granted) return null;
+
+    return Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 12),
+      ),
+    );
   }
 
   static Stream<Position> getLiveLocationStream() {
@@ -28,8 +60,6 @@ class LocationService {
       distanceFilter: 10,
     );
 
-    return Geolocator.getPositionStream(
-      locationSettings: locationSettings,
-    );
+    return Geolocator.getPositionStream(locationSettings: locationSettings);
   }
 }

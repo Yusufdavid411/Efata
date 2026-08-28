@@ -1,16 +1,12 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:logistics_app/core/controllers/app_settings_controller.dart';
 import 'package:logistics_app/features/map/map_picker_screen.dart';
 import 'package:logistics_app/features/tracking/track_delivery_screen.dart';
-
-const String googlePlacesApiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 
 class SimpleOrderForm extends StatefulWidget {
   const SimpleOrderForm({super.key});
@@ -23,8 +19,6 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   final TextEditingController pickupController = TextEditingController();
   final TextEditingController dropoffController = TextEditingController();
   final TextEditingController itemController = TextEditingController();
-
-  final Distance distance = const Distance();
 
   Timer? pickupDebounce;
   Timer? dropoffDebounce;
@@ -152,62 +146,16 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
         .toList();
   }
 
-  Future<void> searchPlaces(String query, {required bool isPickup}) async {
+  void searchPlaces(String query, {required bool isPickup}) {
     final cleanedQuery = query.trim();
-
-    if (cleanedQuery.length < 3) {
-      setState(() {
-        if (isPickup) {
-          pickupSuggestions = recentMatches(cleanedQuery, isPickup: true);
-        } else {
-          dropoffSuggestions = recentMatches(cleanedQuery, isPickup: false);
-        }
-      });
-      return;
-    }
 
     setState(() {
       if (isPickup) {
-        isSearchingPickup = true;
+        pickupSuggestions = recentMatches(cleanedQuery, isPickup: true);
       } else {
-        isSearchingDropoff = true;
+        dropoffSuggestions = recentMatches(cleanedQuery, isPickup: false);
       }
     });
-
-    try {
-      final suggestions = googlePlacesApiKey.isNotEmpty
-          ? await GooglePlacesService.search(cleanedQuery)
-          : await OpenStreetMapPlacesService.search(cleanedQuery);
-
-      if (!mounted) return;
-
-      setState(() {
-        if (isPickup) {
-          pickupSuggestions = suggestions;
-        } else {
-          dropoffSuggestions = suggestions;
-        }
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        if (isPickup) {
-          pickupSuggestions = [];
-        } else {
-          dropoffSuggestions = [];
-        }
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          if (isPickup) {
-            isSearchingPickup = false;
-          } else {
-            isSearchingDropoff = false;
-          }
-        });
-      }
-    }
   }
 
   void onLocationTyped(String value, {required bool isPickup}) {
@@ -238,28 +186,17 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     });
   }
 
-  Future<void> selectSuggestion(
-    PlaceSuggestion suggestion, {
-    required bool isPickup,
-  }) async {
-    PlaceSuggestion selected = suggestion;
-
-    if (googlePlacesApiKey.isNotEmpty && suggestion.placeId != null) {
-      selected = await GooglePlacesService.details(suggestion);
-    }
-
-    if (!mounted) return;
-
+  void selectSuggestion(PlaceSuggestion suggestion, {required bool isPickup}) {
     setState(() {
       if (isPickup) {
-        pickupController.text = selected.address;
-        pickupLat = selected.latitude;
-        pickupLng = selected.longitude;
+        pickupController.text = suggestion.address;
+        pickupLat = suggestion.latitude;
+        pickupLng = suggestion.longitude;
         pickupSuggestions = [];
       } else {
-        dropoffController.text = selected.address;
-        dropoffLat = selected.latitude;
-        dropoffLng = selected.longitude;
+        dropoffController.text = suggestion.address;
+        dropoffLat = suggestion.latitude;
+        dropoffLng = suggestion.longitude;
         dropoffSuggestions = [];
       }
 
@@ -300,11 +237,14 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
         pickupLng != null &&
         dropoffLat != null &&
         dropoffLng != null) {
-      final km = distance.as(
-        LengthUnit.Kilometer,
-        LatLng(pickupLat!, pickupLng!),
-        LatLng(dropoffLat!, dropoffLng!),
-      );
+      final km =
+          Geolocator.distanceBetween(
+            pickupLat!,
+            pickupLng!,
+            dropoffLat!,
+            dropoffLng!,
+          ) /
+          1000;
 
       distanceKm = km;
       estimatedPrice = 500 + (km * 100);
@@ -551,109 +491,13 @@ class PlaceSuggestion {
     required this.address,
     this.latitude,
     this.longitude,
-    this.placeId,
     this.isRecent = false,
   });
 
   final String address;
   final double? latitude;
   final double? longitude;
-  final String? placeId;
   final bool isRecent;
-}
-
-class GooglePlacesService {
-  static Future<List<PlaceSuggestion>> search(String query) async {
-    final uri = Uri.https(
-      'maps.googleapis.com',
-      '/maps/api/place/autocomplete/json',
-      {'input': query, 'components': 'country:ng', 'key': googlePlacesApiKey},
-    );
-    final response = await http.get(uri);
-
-    if (response.statusCode != 200) {
-      throw Exception('Google Places request failed');
-    }
-
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final predictions = body['predictions'] as List<dynamic>? ?? [];
-
-    return predictions
-        .map(
-          (item) => PlaceSuggestion(
-            address: item['description']?.toString() ?? '',
-            placeId: item['place_id']?.toString(),
-          ),
-        )
-        .where((item) => item.address.isNotEmpty)
-        .toList();
-  }
-
-  static Future<PlaceSuggestion> details(PlaceSuggestion suggestion) async {
-    final uri =
-        Uri.https('maps.googleapis.com', '/maps/api/place/details/json', {
-          'place_id': suggestion.placeId!,
-          'fields': 'formatted_address,geometry',
-          'key': googlePlacesApiKey,
-        });
-    final response = await http.get(uri);
-
-    if (response.statusCode != 200) {
-      return suggestion;
-    }
-
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final result = body['result'] as Map<String, dynamic>? ?? {};
-    final location =
-        (result['geometry'] as Map<String, dynamic>?)?['location']
-            as Map<String, dynamic>?;
-
-    return PlaceSuggestion(
-      address: result['formatted_address']?.toString() ?? suggestion.address,
-      latitude: (location?['lat'] as num?)?.toDouble(),
-      longitude: (location?['lng'] as num?)?.toDouble(),
-      placeId: suggestion.placeId,
-    );
-  }
-}
-
-class OpenStreetMapPlacesService {
-  static Future<List<PlaceSuggestion>> search(String query) async {
-    final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-      'q': query,
-      'format': 'json',
-      'limit': '6',
-      'countrycodes': 'ng',
-      'addressdetails': '1',
-    });
-    final response = await http.get(
-      uri,
-      headers: const {'User-Agent': 'EFATA logistics app'},
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Place search failed');
-    }
-
-    final items = jsonDecode(response.body) as List<dynamic>;
-
-    return items
-        .map((item) {
-          final map = item as Map<String, dynamic>;
-          return PlaceSuggestion(
-            address: map['display_name']?.toString() ?? '',
-            latitude: double.tryParse(map['lat']?.toString() ?? ''),
-            longitude: double.tryParse(map['lon']?.toString() ?? ''),
-          );
-        })
-        .where(
-          (item) =>
-              item.address.isNotEmpty &&
-              item.latitude != null &&
-              item.longitude != null,
-        )
-        .toList();
-  }
 }
 
 class _BookingHeader extends StatelessWidget {

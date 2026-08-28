@@ -11,6 +11,12 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
+        <!-- Google Maps SDK for Android key. Configure via android/local.properties,
+             Gradle property, or GOOGLE_MAPS_ANDROID_API_KEY environment variable. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${GOOGLE_MAPS_ANDROID_API_KEY}" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -25,11 +31,6 @@
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
-
-            <!-- Google Maps API key -->
-            <meta-data
-                android:name="com.google.android.geo.API_KEY"
-                android:value="AIzaSyAaAEbUS67E7IPIdJlkUgTvwMXde_tY4jw" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

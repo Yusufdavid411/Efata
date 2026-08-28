@@ -1,10 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:http/http.dart' as http;
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+import '../../core/services/location_service.dart';
 
 class MapPickerScreen extends StatefulWidget {
   const MapPickerScreen({super.key});
@@ -14,91 +13,118 @@ class MapPickerScreen extends StatefulWidget {
 }
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
-  final MapController mapController = MapController();
-  final TextEditingController searchController = TextEditingController();
+  final Completer<GoogleMapController> mapController = Completer();
+  final TextEditingController labelController = TextEditingController();
 
-  Timer? debounce;
   LatLng selectedLocation = const LatLng(6.5244, 3.3792);
   String selectedAddress = 'Selected location in Lagos';
-  List<MapSearchResult> searchResults = [];
-  bool isSearching = false;
+  String? locationMessage;
+  bool locating = false;
+  bool locationGranted = false;
 
-  Future<void> searchPlaces(String value) async {
-    final query = value.trim();
+  @override
+  void initState() {
+    super.initState();
+    moveToCurrentLocation(showErrors: false);
+  }
 
-    if (query.length < 3) {
-      setState(() => searchResults = []);
+  Future<void> moveToCurrentLocation({bool showErrors = true}) async {
+    setState(() {
+      locating = true;
+      locationMessage = null;
+    });
+
+    final access = await LocationService.requestLocationAccess();
+
+    if (access != LocationAccessStatus.granted) {
+      if (!mounted) return;
+
+      final message = _permissionMessage(access);
+      setState(() {
+        locating = false;
+        locationMessage = showErrors ? message : null;
+      });
+
+      if (showErrors) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
       return;
     }
 
-    setState(() => isSearching = true);
+    if (mounted) setState(() => locationGranted = true);
 
     try {
-      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q': query,
-        'format': 'json',
-        'limit': '5',
-        'countrycodes': 'ng',
-      });
-      final response = await http.get(
-        uri,
-        headers: const {'User-Agent': 'EFATA logistics app'},
-      );
+      final position = await LocationService.getCurrentPosition();
+      if (position == null) throw Exception('Location unavailable');
 
-      if (response.statusCode != 200) {
-        throw Exception('Search failed');
-      }
-
-      final items = jsonDecode(response.body) as List<dynamic>;
-      final results = items
-          .map((item) {
-            final map = item as Map<String, dynamic>;
-            final lat = double.tryParse(map['lat']?.toString() ?? '');
-            final lng = double.tryParse(map['lon']?.toString() ?? '');
-
-            if (lat == null || lng == null) return null;
-
-            return MapSearchResult(
-              address: map['display_name']?.toString() ?? '',
-              point: LatLng(lat, lng),
-            );
-          })
-          .whereType<MapSearchResult>()
-          .toList();
+      final point = LatLng(position.latitude, position.longitude);
+      selectLocation(point, address: 'Current location', animate: true);
 
       if (!mounted) return;
-      setState(() => searchResults = results);
-    } finally {
-      if (mounted) {
-        setState(() => isSearching = false);
+      setState(() {
+        locating = false;
+        locationMessage = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      const message = 'Current location is unavailable right now.';
+      setState(() {
+        locating = false;
+        locationMessage = showErrors ? message : null;
+      });
+
+      if (showErrors) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text(message)));
       }
     }
   }
 
-  void onSearchChanged(String value) {
-    debounce?.cancel();
-    debounce = Timer(
-      const Duration(milliseconds: 450),
-      () => searchPlaces(value),
-    );
+  String _permissionMessage(LocationAccessStatus status) {
+    switch (status) {
+      case LocationAccessStatus.serviceDisabled:
+        return 'Turn on location services to use your current position.';
+      case LocationAccessStatus.denied:
+        return 'Location permission was denied.';
+      case LocationAccessStatus.deniedForever:
+        return 'Location permission is permanently denied. Enable it in app settings.';
+      case LocationAccessStatus.unavailable:
+        return 'Location is unavailable on this device.';
+      case LocationAccessStatus.granted:
+        return 'Location access granted.';
+    }
   }
 
-  void selectLocation(LatLng point, {String? address}) {
+  Future<void> selectLocation(
+    LatLng point, {
+    String? address,
+    bool animate = false,
+  }) async {
+    final nextAddress =
+        address ??
+        'Selected location (${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)})';
+
     setState(() {
       selectedLocation = point;
-      selectedAddress =
-          address ??
-          'Selected location (${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)})';
-      searchResults = [];
-      searchController.text = selectedAddress;
+      selectedAddress = nextAddress;
+      labelController.text = nextAddress;
     });
-    mapController.move(point, 15);
+
+    if (animate && mapController.isCompleted) {
+      final controller = await mapController.future;
+      await controller.animateCamera(
+        CameraUpdate.newCameraPosition(CameraPosition(target: point, zoom: 16)),
+      );
+    }
   }
 
   @override
   void dispose() {
-    debounce?.cancel();
-    searchController.dispose();
+    labelController.dispose();
     super.dispose();
   }
 
@@ -112,101 +138,71 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       ),
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: mapController,
-            options: MapOptions(
-              initialCenter: selectedLocation,
-              initialZoom: 13,
-              onTap: (tapPosition, point) => selectLocation(point),
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: selectedLocation,
+              zoom: 13,
             ),
-            children: [
-              TileLayer(
-                urlTemplate:
-                    'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.logistics_app',
+            markers: {
+              Marker(
+                markerId: const MarkerId('selected-location'),
+                position: selectedLocation,
+                infoWindow: const InfoWindow(title: 'Selected location'),
               ),
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: selectedLocation,
-                    width: 48,
-                    height: 48,
-                    child: const Icon(
-                      Icons.location_pin,
-                      color: Color(0xFFDC2626),
-                      size: 44,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            },
+            myLocationEnabled: locationGranted,
+            myLocationButtonEnabled: false,
+            mapToolbarEnabled: false,
+            zoomControlsEnabled: false,
+            onTap: (point) => selectLocation(point, animate: false),
+            onMapCreated: (controller) {
+              if (!mapController.isCompleted) {
+                mapController.complete(controller);
+              }
+            },
           ),
           Positioned(
             left: 16,
             right: 16,
             top: MediaQuery.of(context).padding.top + 70,
-            child: Column(
-              children: [
-                Material(
-                  elevation: 8,
-                  shadowColor: Colors.black.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(16),
-                  child: TextField(
-                    controller: searchController,
-                    onChanged: onSearchChanged,
-                    decoration: InputDecoration(
-                      hintText: 'Search area, street, or landmark',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      suffixIcon: isSearching
-                          ? const Padding(
-                              padding: EdgeInsets.all(14),
-                              child: SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
-                if (searchResults.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Material(
-                    elevation: 8,
-                    shadowColor: Colors.black.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 260),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        padding: EdgeInsets.zero,
-                        itemCount: searchResults.length,
-                        separatorBuilder: (_, _) =>
-                            const Divider(height: 1, indent: 56),
-                        itemBuilder: (context, index) {
-                          final result = searchResults[index];
-
-                          return ListTile(
-                            leading: const Icon(Icons.place_outlined),
-                            title: Text(
-                              result.address,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            onTap: () => selectLocation(
-                              result.point,
-                              address: result.address,
-                            ),
-                          );
+            child: Card(
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: labelController,
+                        decoration: const InputDecoration(
+                          labelText: 'Location label',
+                          hintText: 'Example: Warehouse gate or Site entrance',
+                          prefixIcon: Icon(Icons.edit_location_alt_outlined),
+                        ),
+                        onChanged: (value) {
+                          selectedAddress = value.trim().isEmpty
+                              ? 'Selected location (${selectedLocation.latitude.toStringAsFixed(5)}, ${selectedLocation.longitude.toStringAsFixed(5)})'
+                              : value.trim();
                         },
                       ),
                     ),
-                  ),
-                ],
-              ],
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: 'Use current location',
+                      onPressed: locating
+                          ? null
+                          : () => moveToCurrentLocation(showErrors: true),
+                      icon: locating
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.my_location_rounded),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
           Positioned(
@@ -215,6 +211,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             bottom: 20,
             child: SafeArea(
               child: Card(
+                color: Colors.white,
                 child: Padding(
                   padding: const EdgeInsets.all(14),
                   child: Column(
@@ -238,6 +235,13 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
+                      if (locationMessage != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          locationMessage!,
+                          style: const TextStyle(color: Color(0xFFDC2626)),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
                         onPressed: () {
@@ -260,11 +264,4 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       ),
     );
   }
-}
-
-class MapSearchResult {
-  const MapSearchResult({required this.address, required this.point});
-
-  final String address;
-  final LatLng point;
 }
