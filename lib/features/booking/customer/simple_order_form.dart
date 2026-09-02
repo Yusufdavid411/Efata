@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:logistics_app/core/controllers/app_settings_controller.dart';
+import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/features/map/map_picker_screen.dart';
 import 'package:logistics_app/features/tracking/track_delivery_screen.dart';
 
@@ -34,6 +35,8 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   String scheduleLabel = 'Pickup now';
   DateTime? scheduledPickupAt;
 
+  bool isTypingLocation = false;
+  bool isLocatingCurrent = false;
   bool isSubmitting = false;
 
   double? pickupLat;
@@ -98,8 +101,6 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
       setState(() {
         recentPickupSuggestions = pickups.take(6).toList();
         recentDropoffSuggestions = dropoffs.take(6).toList();
-        pickupSuggestions = recentPickupSuggestions;
-        dropoffSuggestions = _suggestionsFor('', isPickup: false);
       });
     } catch (_) {
       // Saved places are a convenience feature; booking still works with map pick.
@@ -178,14 +179,19 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
 
     setState(() {
       activeSearch = isPickup ? 'pickup' : 'dropoff';
+      isTypingLocation = value.trim().isNotEmpty;
       if (isPickup) {
         pickupLat = null;
         pickupLng = null;
-        pickupSuggestions = _suggestionsFor(value, isPickup: true);
+        pickupSuggestions = isTypingLocation
+            ? _suggestionsFor(value, isPickup: true)
+            : [];
       } else {
         dropoffLat = null;
         dropoffLng = null;
-        dropoffSuggestions = _suggestionsFor(value, isPickup: false);
+        dropoffSuggestions = isTypingLocation
+            ? _suggestionsFor(value, isPickup: false)
+            : [];
       }
       calculateDistanceAndPrice();
     });
@@ -197,14 +203,15 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
         pickupController.text = suggestion.address;
         pickupLat = suggestion.latitude;
         pickupLng = suggestion.longitude;
-        pickupSuggestions = _suggestionsFor('', isPickup: true);
+        pickupSuggestions = [];
       } else {
         dropoffController.text = suggestion.address;
         dropoffLat = suggestion.latitude;
         dropoffLng = suggestion.longitude;
-        dropoffSuggestions = _suggestionsFor('', isPickup: false);
+        dropoffSuggestions = [];
       }
 
+      isTypingLocation = false;
       calculateDistanceAndPrice();
       FocusScope.of(context).unfocus();
     });
@@ -224,14 +231,87 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
           pickupController.text = result['address']?.toString() ?? '';
           pickupLat = (result['latitude'] as num).toDouble();
           pickupLng = (result['longitude'] as num).toDouble();
+          pickupSuggestions = [];
         } else {
           dropoffController.text = result['address']?.toString() ?? '';
           dropoffLat = (result['latitude'] as num).toDouble();
           dropoffLng = (result['longitude'] as num).toDouble();
+          dropoffSuggestions = [];
         }
 
+        isTypingLocation = false;
         calculateDistanceAndPrice();
       });
+    }
+  }
+
+  Future<void> useCurrentLocation({required bool isPickup}) async {
+    setState(() {
+      activeSearch = isPickup ? 'pickup' : 'dropoff';
+      isLocatingCurrent = true;
+    });
+
+    final access = await LocationService.requestLocationAccess();
+
+    if (access != LocationAccessStatus.granted) {
+      if (!mounted) return;
+      setState(() => isLocatingCurrent = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_locationAccessMessage(access))),
+      );
+      return;
+    }
+
+    try {
+      final position = await LocationService.getCurrentPosition();
+      if (position == null) {
+        throw Exception('Current location is unavailable right now.');
+      }
+
+      final label =
+          'Current location (${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)})';
+
+      if (!mounted) return;
+
+      setState(() {
+        if (isPickup) {
+          pickupController.text = label;
+          pickupLat = position.latitude;
+          pickupLng = position.longitude;
+          pickupSuggestions = [];
+        } else {
+          dropoffController.text = label;
+          dropoffLat = position.latitude;
+          dropoffLng = position.longitude;
+          dropoffSuggestions = [];
+        }
+
+        isTypingLocation = false;
+        isLocatingCurrent = false;
+        calculateDistanceAndPrice();
+        FocusScope.of(context).unfocus();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => isLocatingCurrent = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
+  String _locationAccessMessage(LocationAccessStatus status) {
+    switch (status) {
+      case LocationAccessStatus.serviceDisabled:
+        return 'Turn on location services to use your current position.';
+      case LocationAccessStatus.denied:
+        return 'Location permission was denied.';
+      case LocationAccessStatus.deniedForever:
+        return 'Location permission is permanently denied. Enable it in app settings.';
+      case LocationAccessStatus.unavailable:
+        return 'Location is unavailable on this device.';
+      case LocationAccessStatus.granted:
+        return 'Location access granted.';
     }
   }
 
@@ -370,6 +450,10 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
         ? pickupSuggestions
         : dropoffSuggestions;
     final activeIsPickup = activeSearch == 'pickup';
+    final activeSelected = activeIsPickup
+        ? pickupLat != null
+        : dropoffLat != null;
+    final showLocationTools = isTypingLocation || !activeSelected;
 
     return Scaffold(
       appBar: AppBar(
@@ -389,19 +473,15 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
               onPickupFocus: () {
                 setState(() {
                   activeSearch = 'pickup';
-                  pickupSuggestions = _suggestionsFor(
-                    pickupController.text,
-                    isPickup: true,
-                  );
+                  pickupSuggestions = [];
+                  isTypingLocation = false;
                 });
               },
               onDropoffFocus: () {
                 setState(() {
                   activeSearch = 'dropoff';
-                  dropoffSuggestions = _suggestionsFor(
-                    dropoffController.text,
-                    isPickup: false,
-                  );
+                  dropoffSuggestions = [];
+                  isTypingLocation = false;
                 });
               },
               onPickupChanged: (value) =>
@@ -413,7 +493,8 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
                   dropoffController.clear();
                   dropoffLat = null;
                   dropoffLng = null;
-                  dropoffSuggestions = _suggestionsFor('', isPickup: false);
+                  dropoffSuggestions = [];
+                  isTypingLocation = false;
                   calculateDistanceAndPrice();
                 });
               },
@@ -422,14 +503,29 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
                 children: [
-                  if (suggestions.isEmpty && query.isNotEmpty)
+                  if (showLocationTools)
+                    _SearchActionTile(
+                      icon: Icons.my_location_rounded,
+                      title: isLocatingCurrent
+                          ? 'Finding your location...'
+                          : 'Use my current location',
+                      subtitle: activeIsPickup
+                          ? 'Set pickup to exactly where you are standing.'
+                          : 'Set drop-off to exactly where you are standing.',
+                      onTap: isLocatingCurrent
+                          ? null
+                          : () => useCurrentLocation(isPickup: activeIsPickup),
+                    ),
+                  if (isTypingLocation &&
+                      suggestions.isEmpty &&
+                      query.isNotEmpty)
                     _SearchActionTile(
                       icon: Icons.search_rounded,
                       title: 'Set "$query" on map',
                       subtitle: 'Drop the pin exactly where the driver should go.',
                       onTap: () => openMapPicker(activeIsPickup),
                     )
-                  else
+                  else if (isTypingLocation)
                     ...suggestions.map(
                       (suggestion) => _PlaceSuggestionTile(
                         suggestion: suggestion,
@@ -439,7 +535,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
                         ),
                       ),
                     ),
-                  if (query.isNotEmpty) ...[
+                  if (isTypingLocation && query.isNotEmpty) ...[
                     _SearchActionTile(
                       icon: Icons.search_rounded,
                       title: 'Get more results for $query',
@@ -447,14 +543,15 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
                       onTap: () => openMapPicker(activeIsPickup),
                     ),
                   ],
-                  _SearchActionTile(
-                    icon: Icons.add_location_alt_outlined,
-                    title: 'Set location on map',
-                    subtitle: activeIsPickup
-                        ? 'Choose the pickup point manually.'
-                        : 'Choose the drop-off point manually.',
-                    onTap: () => openMapPicker(activeIsPickup),
-                  ),
+                  if (showLocationTools)
+                    _SearchActionTile(
+                      icon: Icons.add_location_alt_outlined,
+                      title: 'Set location on map',
+                      subtitle: activeIsPickup
+                          ? 'Choose the pickup point manually.'
+                          : 'Choose the drop-off point manually.',
+                      onTap: () => openMapPicker(activeIsPickup),
+                    ),
                   const SizedBox(height: 12),
                   _ShipmentDetailsSection(
                     itemController: itemController,
@@ -823,7 +920,7 @@ class _SearchActionTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
