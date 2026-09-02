@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:logistics_app/shared/widgets/app_live_map.dart';
 
 import '../chat/chat_screen.dart';
 
@@ -190,41 +191,6 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     return double.tryParse(value.toString());
   }
 
-  Future<void> openTurnByTurnNavigation(Map<String, dynamic> data) async {
-    final pickupLat = _toDouble(data['pickupLat']);
-    final pickupLng = _toDouble(data['pickupLng']);
-    final dropoffLat = _toDouble(data['dropoffLat']);
-    final dropoffLng = _toDouble(data['dropoffLng']);
-    final status = data['status']?.toString() ?? 'accepted';
-
-    if (pickupLat == null ||
-        pickupLng == null ||
-        dropoffLat == null ||
-        dropoffLng == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Route location data is missing")),
-      );
-      return;
-    }
-
-    final destination = status == 'accepted'
-        ? '$pickupLat,$pickupLng'
-        : '$dropoffLat,$dropoffLng';
-
-    final uri = Uri.parse('google.navigation:q=$destination&mode=d');
-
-    final fallbackUri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=$destination&travelmode=driving',
-    );
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      return;
-    }
-
-    await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
-  }
-
   @override
   void dispose() {
     locationSubscription?.cancel();
@@ -259,8 +225,8 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
 
           final active = docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
-            final status = data['status'];
-            return status == 'accepted' || status == 'inTransit';
+            final status = _normalizeStatus(data['status']);
+            return status == 'accepted' || status == 'intransit';
           }).toList();
 
           if (active.isEmpty) {
@@ -273,7 +239,8 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
           final pickup = data['pickup']?.toString() ?? 'No pickup';
           final dropoff = data['dropoff']?.toString() ?? 'No drop-off';
           final item = data['item']?.toString() ?? 'No item';
-          final status = data['status']?.toString() ?? 'accepted';
+          final status = _normalizeStatus(data['status']);
+          final statusLabel = _statusLabel(status);
           final vehicleType = data['vehicleType']?.toString();
           final price = data['price'];
           final paymentMethod =
@@ -289,51 +256,102 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
             'driver',
           );
           final createdAt = data['createdAt'];
+          final scheduleLabel =
+              data['pickupScheduleLabel']?.toString() ?? 'Pickup now';
+          final pickupLat = _toDouble(data['pickupLat']);
+          final pickupLng = _toDouble(data['pickupLng']);
+          final dropoffLat = _toDouble(data['dropoffLat']);
+          final dropoffLng = _toDouble(data['dropoffLng']);
+          final driverLat = _toDouble(data['driverLat']);
+          final driverLng = _toDouble(data['driverLng']);
+          final hasRoute = pickupLat != null &&
+              pickupLng != null &&
+              dropoffLat != null &&
+              dropoffLng != null;
 
-          if (status == 'inTransit') {
+          if (status == 'intransit') {
             startLiveLocationTracking(job.id);
           }
 
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              if (hasRoute)
+                SizedBox(
+                  height: 330,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: AppLiveMap(
+                      pickupPoint: LatLng(pickupLat, pickupLng),
+                      dropoffPoint: LatLng(dropoffLat, dropoffLng),
+                      driverPoint: driverLat != null && driverLng != null
+                          ? LatLng(driverLat, driverLng)
+                          : null,
+                    ),
+                  ),
+                )
+              else
+                const _RouteMissingCard(),
+              const SizedBox(height: 14),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        "Delivery Details",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              "Delivery Details",
+                              style: TextStyle(
+                                color: Color(0xFF0F172A),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          _StatusPill(label: statusLabel),
+                        ],
                       ),
 
                       const SizedBox(height: 16),
 
-                      Text("Pickup: $pickup"),
-                      const SizedBox(height: 8),
-                      Text("Drop-off: $dropoff"),
-                      const SizedBox(height: 8),
-                      Text("Item: $item"),
+                      _RoutePoint(label: "Pickup", value: pickup),
+                      const SizedBox(height: 12),
+                      _RoutePoint(label: "Drop-off", value: dropoff),
+                      const SizedBox(height: 14),
+                      _InfoRow(icon: Icons.inventory_2_outlined, value: item),
                       if (vehicleType != null && vehicleType.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        Text("Vehicle: $vehicleType"),
+                        _InfoRow(
+                          icon: Icons.local_shipping_outlined,
+                          value: vehicleType,
+                        ),
                       ],
                       const SizedBox(height: 8),
-                      Text("Status: $status"),
+                      _InfoRow(
+                        icon: Icons.schedule_rounded,
+                        value: scheduleLabel,
+                      ),
                       const SizedBox(height: 8),
-                      Text("Created: ${formatTime(createdAt)}"),
+                      _InfoRow(
+                        icon: Icons.event_note_outlined,
+                        value: "Created: ${formatTime(createdAt)}",
+                      ),
 
                       if (price != null) ...[
                         const SizedBox(height: 8),
-                        Text("Price: NGN $price"),
+                        _InfoRow(
+                          icon: Icons.payments_outlined,
+                          value: "NGN $price",
+                        ),
                       ],
                       const SizedBox(height: 8),
-                      Text(
-                        "Payment: $paymentMethod (${formatPaymentStatus(paymentStatus)})",
+                      _InfoRow(
+                        icon: Icons.account_balance_wallet_outlined,
+                        value:
+                            "$paymentMethod (${formatPaymentStatus(paymentStatus)})",
                       ),
 
                       const SizedBox(height: 24),
@@ -359,47 +377,23 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                       const SizedBox(height: 10),
 
                       if (status == 'accepted')
-                        Column(
-                          children: [
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: () => openTurnByTurnNavigation(data),
-                                icon: const Icon(Icons.navigation_outlined),
-                                label: const Text("Navigate to Pickup"),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () => startTransit(job.id),
-                                child: const Text("Start Transit"),
-                              ),
-                            ),
-                          ],
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => startTransit(job.id),
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            label: const Text("Start Transit"),
+                          ),
                         ),
 
-                      if (status == 'inTransit')
-                        Column(
-                          children: [
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: () => openTurnByTurnNavigation(data),
-                                icon: const Icon(Icons.navigation_outlined),
-                                label: const Text("Navigate to Drop-off"),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () => completeJob(job.id, data),
-                                child: const Text("Mark Completed"),
-                              ),
-                            ),
-                          ],
+                      if (status == 'intransit')
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => completeJob(job.id, data),
+                            icon: const Icon(Icons.check_circle_outline),
+                            label: const Text("Mark Completed"),
+                          ),
                         ),
                     ],
                   ),
@@ -413,6 +407,22 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
   }
 }
 
+String _normalizeStatus(dynamic value) {
+  return value?.toString().toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '') ??
+      'accepted';
+}
+
+String _statusLabel(String status) {
+  switch (status) {
+    case 'accepted':
+      return 'Accepted';
+    case 'intransit':
+      return 'In Transit';
+    default:
+      return status;
+  }
+}
+
 String _chatButtonLabel(
   int unreadMessages,
   String lastMessageSenderRole,
@@ -423,6 +433,149 @@ String _chatButtonLabel(
   if (lastMessageSenderRole == viewerRole) return 'Message sent';
   if (lastMessageSenderRole.isNotEmpty) return 'Chat updated';
   return 'Chat With Customer';
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFDCFCE7),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFF166534),
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _RoutePoint extends StatelessWidget {
+  const _RoutePoint({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFFDF6),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            label == 'Pickup'
+                ? Icons.radio_button_checked_rounded
+                : Icons.location_on_rounded,
+            color: const Color(0xFF0F766E),
+            size: 19,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontWeight: FontWeight.w800,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({required this.icon, required this.value});
+
+  final IconData icon;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: const Color(0xFF64748B), size: 19),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              color: Color(0xFF334155),
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RouteMissingCard extends StatelessWidget {
+  const _RouteMissingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: const Color(0xFFFFFBEB),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Color(0xFFFDE68A)),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.map_outlined, color: Color(0xFFD97706)),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Map route is unavailable because this job is missing pickup or drop-off coordinates.',
+                style: TextStyle(
+                  color: Color(0xFF92400E),
+                  fontWeight: FontWeight.w800,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ChatBadge extends StatelessWidget {

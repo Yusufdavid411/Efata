@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:logistics_app/core/services/auth_service.dart';
 
 import 'role_selection_screen.dart';
 
@@ -16,7 +17,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController passwordController = TextEditingController();
 
   bool isLoading = false;
+  bool isGoogleLoading = false;
   bool obscurePassword = true;
+
+  final AuthService authService = AuthService();
 
   @override
   void dispose() {
@@ -156,6 +160,170 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> loginWithGoogle() async {
+    setState(() {
+      isGoogleLoading = true;
+    });
+
+    try {
+      await FirebaseAuth.instance.signOut();
+      final credential = await authService.signInWithGoogle();
+      final user = credential.user;
+
+      if (user == null) {
+        throw Exception('Google sign-in failed. Please try again.');
+      }
+
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      String? role = userDoc.data()?['role']?.toString();
+
+      if (userDoc.exists && userDoc.data()?['isSuspended'] == true) {
+        await FirebaseAuth.instance.signOut();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This account is suspended. Contact support.'),
+          ),
+        );
+        return;
+      }
+
+      if (role == null || role.isEmpty) {
+        if (!mounted) return;
+        role = await _chooseGoogleRole();
+        if (role == null) {
+          await FirebaseAuth.instance.signOut();
+          return;
+        }
+
+        await authService.createGoogleProfileIfNeeded(user: user, role: role);
+      }
+
+      if (role == 'driver') {
+        final driverDoc = await FirebaseFirestore.instance
+            .collection('drivers')
+            .doc(user.uid)
+            .get();
+        final driverStatus = driverDoc
+            .data()?['verificationStatus']
+            ?.toString()
+            .toLowerCase();
+
+        if (driverStatus == 'suspended' || driverStatus == 'rejected') {
+          await FirebaseAuth.instance.signOut();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                driverStatus == 'rejected'
+                    ? 'This driver account was rejected. Contact support.'
+                    : 'This driver account is suspended. Contact support.',
+              ),
+            ),
+          );
+          return;
+        }
+      }
+
+      if (!mounted) return;
+
+      if (role == 'customer') {
+        Navigator.pushReplacementNamed(context, '/customerHome');
+      } else if (role == 'driver') {
+        final driverDoc = await FirebaseFirestore.instance
+            .collection('drivers')
+            .doc(user.uid)
+            .get();
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(
+          context,
+          driverDoc.exists ? '/driverHome' : '/driverOnboarding',
+        );
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Invalid user role')));
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+
+      final message = switch (e.code) {
+        'account-exists-with-different-credential' =>
+          'This email already uses another login method.',
+        'google-sign-in-unavailable' => 'Google sign-in is unavailable here.',
+        'missing-google-token' => 'Google sign-in could not be verified.',
+        _ => e.message ?? 'Google sign-in failed. Please try again.',
+      };
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isGoogleLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<String?> _chooseGoogleRole() {
+    return showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Continue as',
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Choose how you want to use EFATA with this Google account.',
+                  style: TextStyle(color: Color(0xFF64748B), height: 1.35),
+                ),
+                const SizedBox(height: 18),
+                _RoleChoiceTile(
+                  icon: Icons.inventory_2_outlined,
+                  title: 'Customer',
+                  subtitle: 'Book and track deliveries.',
+                  onTap: () => Navigator.pop(context, 'customer'),
+                ),
+                const SizedBox(height: 10),
+                _RoleChoiceTile(
+                  icon: Icons.local_shipping_outlined,
+                  title: 'Driver',
+                  subtitle: 'Accept delivery jobs after verification.',
+                  onTap: () => Navigator.pop(context, 'driver'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -200,6 +368,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 30),
+              _GoogleSignInButton(
+                isLoading: isGoogleLoading,
+                onPressed: isLoading || isGoogleLoading ? null : loginWithGoogle,
+              ),
+              const SizedBox(height: 18),
+              const _DividerLabel(label: 'or continue with email'),
+              const SizedBox(height: 18),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(18),
@@ -242,7 +417,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: isLoading ? null : loginUser,
+                          onPressed: isLoading || isGoogleLoading
+                              ? null
+                              : loginUser,
                           child: Text(isLoading ? 'Signing in...' : 'Sign In'),
                         ),
                       ),
@@ -268,6 +445,149 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 18),
               const _TrustStrip(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GoogleSignInButton extends StatelessWidget {
+  const _GoogleSignInButton({
+    required this.isLoading,
+    required this.onPressed,
+  });
+
+  final bool isLoading;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF0F172A),
+          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              )
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _GoogleMark(),
+                  SizedBox(width: 12),
+                  Text(
+                    'Continue with Google',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _GoogleMark extends StatelessWidget {
+  const _GoogleMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text(
+      'G',
+      style: TextStyle(
+        color: Color(0xFF4285F4),
+        fontSize: 24,
+        fontWeight: FontWeight.w900,
+      ),
+    );
+  }
+}
+
+class _DividerLabel extends StatelessWidget {
+  const _DividerLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(child: Divider(color: Color(0xFFCBD5E1))),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider(color: Color(0xFFCBD5E1))),
+      ],
+    );
+  }
+}
+
+class _RoleChoiceTile extends StatelessWidget {
+  const _RoleChoiceTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFF8FAFC),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(icon, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded),
             ],
           ),
         ),
