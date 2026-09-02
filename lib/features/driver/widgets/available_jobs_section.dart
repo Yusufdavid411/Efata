@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../driver_active_jobs_screen.dart';
+
 class AvailableJobsSection extends StatefulWidget {
   final bool isOnline;
 
@@ -98,11 +100,20 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
       SnackBar(
         content: Text(
           accepted
-              ? "Job accepted. Open Current Job to continue."
+              ? "Job accepted. Opening live map."
               : "This job has already been accepted.",
         ),
       ),
     );
+
+    if (accepted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DriverActiveJobsScreen(initialOrderId: orderId),
+        ),
+      );
+    }
   }
 
   Future<void> hideJobForDriver(String orderId, String driverId) async {

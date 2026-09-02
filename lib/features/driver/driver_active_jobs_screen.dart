@@ -5,12 +5,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/shared/widgets/app_live_map.dart';
 
 import '../chat/chat_screen.dart';
 
 class DriverActiveJobsScreen extends StatefulWidget {
-  const DriverActiveJobsScreen({super.key});
+  const DriverActiveJobsScreen({super.key, this.initialOrderId});
+
+  final String? initialOrderId;
 
   @override
   State<DriverActiveJobsScreen> createState() => _DriverActiveJobsScreenState();
@@ -21,10 +24,20 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
   String? trackingOrderId;
 
   Future<void> startTransit(String id) async {
+    final allowed = await ensureLocationPermission();
+    if (!allowed) return;
+
+    final position = await LocationService.getCurrentPosition();
+
     await FirebaseFirestore.instance.collection('orders').doc(id).update({
       'status': 'inTransit',
       'startedAt': Timestamp.now(),
       'notificationStatus': 'inTransit',
+      if (position != null) ...{
+        'driverLat': position.latitude,
+        'driverLng': position.longitude,
+        'lastLocationUpdate': Timestamp.now(),
+      },
     });
 
     startLiveLocationTracking(id);
@@ -233,7 +246,29 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
             return const Center(child: Text("No active job"));
           }
 
-          final job = active.first;
+          active.sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+            final aTime =
+                (aData['startedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
+                (aData['acceptedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
+                (aData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ??
+                0;
+            final bTime =
+                (bData['startedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
+                (bData['acceptedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
+                (bData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ??
+                0;
+            return bTime.compareTo(aTime);
+          });
+
+          final preferredJob = widget.initialOrderId == null
+              ? null
+              : active.cast<QueryDocumentSnapshot?>().firstWhere(
+                  (doc) => doc?.id == widget.initialOrderId,
+                  orElse: () => null,
+                );
+          final job = preferredJob ?? active.first;
           final data = job.data() as Map<String, dynamic>;
 
           final pickup = data['pickup']?.toString() ?? 'No pickup';
@@ -264,140 +299,90 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
           final dropoffLng = _toDouble(data['dropoffLng']);
           final driverLat = _toDouble(data['driverLat']);
           final driverLng = _toDouble(data['driverLng']);
-          final hasRoute = pickupLat != null &&
+          final hasRoute =
+              pickupLat != null &&
               pickupLng != null &&
               dropoffLat != null &&
               dropoffLng != null;
 
           if (status == 'intransit') {
-            startLiveLocationTracking(job.id);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              startLiveLocationTracking(job.id);
+            });
           }
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
+          final pickupPoint = hasRoute ? LatLng(pickupLat, pickupLng) : null;
+          final dropoffPoint = hasRoute ? LatLng(dropoffLat, dropoffLng) : null;
+          final driverPoint = driverLat != null && driverLng != null
+              ? LatLng(driverLat, driverLng)
+              : null;
+          final activeTargetPoint = status == 'accepted'
+              ? pickupPoint
+              : dropoffPoint;
+          final activeTargetLabel = status == 'accepted'
+              ? 'Go to pickup'
+              : 'Go to drop-off';
+
+          return Stack(
             children: [
-              if (hasRoute)
-                SizedBox(
-                  height: 330,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: AppLiveMap(
-                      pickupPoint: LatLng(pickupLat, pickupLng),
-                      dropoffPoint: LatLng(dropoffLat, dropoffLng),
-                      driverPoint: driverLat != null && driverLng != null
-                          ? LatLng(driverLat, driverLng)
-                          : null,
-                    ),
-                  ),
-                )
-              else
-                const _RouteMissingCard(),
-              const SizedBox(height: 14),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              "Delivery Details",
-                              style: TextStyle(
-                                color: Color(0xFF0F172A),
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
+              Positioned.fill(
+                child: hasRoute
+                    ? AppLiveMap(
+                        pickupPoint: pickupPoint!,
+                        dropoffPoint: dropoffPoint!,
+                        driverPoint: driverPoint,
+                        followDriver: status == 'intransit',
+                        activeTargetPoint: activeTargetPoint,
+                        activeTargetLabel: activeTargetLabel,
+                      )
+                    : const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: _RouteMissingCard(),
+                      ),
+              ),
+              DraggableScrollableSheet(
+                initialChildSize: 0.48,
+                minChildSize: 0.24,
+                maxChildSize: 0.82,
+                builder: (context, scrollController) {
+                  return _DriverJobSheet(
+                    scrollController: scrollController,
+                    statusLabel: statusLabel,
+                    pickup: pickup,
+                    dropoff: dropoff,
+                    item: item,
+                    vehicleType: vehicleType,
+                    scheduleLabel: scheduleLabel,
+                    createdAtLabel: "Created: ${formatTime(createdAt)}",
+                    priceLabel: price == null ? null : _formatPrice(price),
+                    paymentLabel:
+                        "$paymentMethod (${formatPaymentStatus(paymentStatus)})",
+                    chatLabel: chatLabel,
+                    unreadMessages: unreadMessages,
+                    onChat: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatScreen(
+                            orderId: job.id,
+                            participantRole: 'driver',
                           ),
-                          _StatusPill(label: statusLabel),
-                        ],
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      _RoutePoint(label: "Pickup", value: pickup),
-                      const SizedBox(height: 12),
-                      _RoutePoint(label: "Drop-off", value: dropoff),
-                      const SizedBox(height: 14),
-                      _InfoRow(icon: Icons.inventory_2_outlined, value: item),
-                      if (vehicleType != null && vehicleType.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        _InfoRow(
-                          icon: Icons.local_shipping_outlined,
-                          value: vehicleType,
                         ),
-                      ],
-                      const SizedBox(height: 8),
-                      _InfoRow(
-                        icon: Icons.schedule_rounded,
-                        value: scheduleLabel,
-                      ),
-                      const SizedBox(height: 8),
-                      _InfoRow(
-                        icon: Icons.event_note_outlined,
-                        value: "Created: ${formatTime(createdAt)}",
-                      ),
-
-                      if (price != null) ...[
-                        const SizedBox(height: 8),
-                        _InfoRow(
-                          icon: Icons.payments_outlined,
-                          value: "NGN $price",
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      _InfoRow(
-                        icon: Icons.account_balance_wallet_outlined,
-                        value:
-                            "$paymentMethod (${formatPaymentStatus(paymentStatus)})",
-                      ),
-
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ChatScreen(
-                                  orderId: job.id,
-                                  participantRole: 'driver',
-                                ),
-                              ),
-                            );
-                          },
-                          icon: _ChatBadge(count: unreadMessages),
-                          label: Text(chatLabel),
-                        ),
-                      ),
-
-                      const SizedBox(height: 10),
-
-                      if (status == 'accepted')
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
+                      );
+                    },
+                    primaryAction: status == 'accepted'
+                        ? _DriverJobAction(
+                            label: 'Start Transit',
+                            icon: Icons.play_arrow_rounded,
                             onPressed: () => startTransit(job.id),
-                            icon: const Icon(Icons.play_arrow_rounded),
-                            label: const Text("Start Transit"),
-                          ),
-                        ),
-
-                      if (status == 'intransit')
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
+                          )
+                        : _DriverJobAction(
+                            label: 'Mark Completed',
+                            icon: Icons.check_circle_outline,
                             onPressed: () => completeJob(job.id, data),
-                            icon: const Icon(Icons.check_circle_outline),
-                            label: const Text("Mark Completed"),
                           ),
-                        ),
-                    ],
-                  ),
-                ),
+                  );
+                },
               ),
             ],
           );
@@ -423,6 +408,15 @@ String _statusLabel(String status) {
   }
 }
 
+String _formatPrice(dynamic price) {
+  if (price is num) return 'NGN ${price.toStringAsFixed(0)}';
+
+  final parsed = double.tryParse(price?.toString() ?? '');
+  if (parsed != null) return 'NGN ${parsed.toStringAsFixed(0)}';
+
+  return 'NGN ${price.toString()}';
+}
+
 String _chatButtonLabel(
   int unreadMessages,
   String lastMessageSenderRole,
@@ -433,6 +427,136 @@ String _chatButtonLabel(
   if (lastMessageSenderRole == viewerRole) return 'Message sent';
   if (lastMessageSenderRole.isNotEmpty) return 'Chat updated';
   return 'Chat With Customer';
+}
+
+class _DriverJobAction {
+  const _DriverJobAction({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+}
+
+class _DriverJobSheet extends StatelessWidget {
+  const _DriverJobSheet({
+    required this.scrollController,
+    required this.statusLabel,
+    required this.pickup,
+    required this.dropoff,
+    required this.item,
+    required this.vehicleType,
+    required this.scheduleLabel,
+    required this.createdAtLabel,
+    required this.priceLabel,
+    required this.paymentLabel,
+    required this.chatLabel,
+    required this.unreadMessages,
+    required this.onChat,
+    required this.primaryAction,
+  });
+
+  final ScrollController scrollController;
+  final String statusLabel;
+  final String pickup;
+  final String dropoff;
+  final String item;
+  final String? vehicleType;
+  final String scheduleLabel;
+  final String createdAtLabel;
+  final String? priceLabel;
+  final String paymentLabel;
+  final String chatLabel;
+  final int unreadMessages;
+  final VoidCallback onChat;
+  final _DriverJobAction primaryAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x260F172A),
+            blurRadius: 18,
+            offset: Offset(0, -6),
+          ),
+        ],
+      ),
+      child: ListView(
+        controller: scrollController,
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+        children: [
+          Center(
+            child: Container(
+              width: 46,
+              height: 5,
+              decoration: BoxDecoration(
+                color: const Color(0xFFCBD5E1),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  "Live Delivery",
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              _StatusPill(label: statusLabel),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _RoutePoint(label: "Pickup", value: pickup),
+          const SizedBox(height: 12),
+          _RoutePoint(label: "Drop-off", value: dropoff),
+          const SizedBox(height: 16),
+          _InfoRow(icon: Icons.inventory_2_outlined, value: item),
+          if (vehicleType != null && vehicleType!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _InfoRow(icon: Icons.local_shipping_outlined, value: vehicleType!),
+          ],
+          const SizedBox(height: 8),
+          _InfoRow(icon: Icons.schedule_rounded, value: scheduleLabel),
+          const SizedBox(height: 8),
+          _InfoRow(icon: Icons.event_note_outlined, value: createdAtLabel),
+          if (priceLabel != null) ...[
+            const SizedBox(height: 8),
+            _InfoRow(icon: Icons.payments_outlined, value: priceLabel!),
+          ],
+          const SizedBox(height: 8),
+          _InfoRow(
+            icon: Icons.account_balance_wallet_outlined,
+            value: paymentLabel,
+          ),
+          const SizedBox(height: 22),
+          OutlinedButton.icon(
+            onPressed: onChat,
+            icon: _ChatBadge(count: unreadMessages),
+            label: Text(chatLabel),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            onPressed: primaryAction.onPressed,
+            icon: Icon(primaryAction.icon),
+            label: Text(primaryAction.label),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _StatusPill extends StatelessWidget {

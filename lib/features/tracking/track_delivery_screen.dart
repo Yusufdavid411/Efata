@@ -367,15 +367,68 @@ class TrackDeliveryScreen extends StatelessWidget {
               ? LatLng(driverLat, driverLng)
               : null;
 
-          return Column(
+          final normalizedStatus = status.toLowerCase().replaceAll(
+            RegExp(r'[\s_-]+'),
+            '',
+          );
+          final activeTargetPoint = normalizedStatus == 'intransit'
+              ? dropoffPoint
+              : pickupPoint;
+          final activeTargetLabel = normalizedStatus == 'intransit'
+              ? 'Driver heading to drop-off'
+              : 'Driver heading to pickup';
+
+          return Stack(
             children: [
-              summary,
-              Expanded(
+              Positioned.fill(
                 child: AppLiveMap(
                   pickupPoint: pickupPoint,
                   dropoffPoint: dropoffPoint,
                   driverPoint: driverPoint,
+                  followDriver: normalizedStatus == 'intransit',
+                  activeTargetPoint: activeTargetPoint,
+                  activeTargetLabel: activeTargetLabel,
                 ),
+              ),
+              DraggableScrollableSheet(
+                initialChildSize: 0.44,
+                minChildSize: 0.22,
+                maxChildSize: 0.78,
+                builder: (context, scrollController) {
+                  return DecoratedBox(
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(26),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x260F172A),
+                          blurRadius: 18,
+                          offset: Offset(0, -6),
+                        ),
+                      ],
+                    ),
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 10),
+                          Container(
+                            width: 46,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFCBD5E1),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          summary,
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           );

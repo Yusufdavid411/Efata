@@ -256,6 +256,8 @@ class _LoginScreenState extends State<LoginScreen> {
           'This email already uses another login method.',
         'google-sign-in-unavailable' => 'Google sign-in is unavailable here.',
         'missing-google-token' => 'Google sign-in could not be verified.',
+        'missing-google-web-client-id' =>
+          'Google login needs the Web client ID to be added to this build.',
         _ => e.message ?? 'Google sign-in failed. Please try again.',
       };
 
@@ -264,9 +266,9 @@ class _LoginScreenState extends State<LoginScreen> {
       ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) {
         setState(() {
@@ -370,7 +372,9 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 30),
               _GoogleSignInButton(
                 isLoading: isGoogleLoading,
-                onPressed: isLoading || isGoogleLoading ? null : loginWithGoogle,
+                onPressed: isLoading || isGoogleLoading
+                    ? null
+                    : loginWithGoogle,
               ),
               const SizedBox(height: 18),
               const _DividerLabel(label: 'or continue with email'),
@@ -454,10 +458,7 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class _GoogleSignInButton extends StatelessWidget {
-  const _GoogleSignInButton({
-    required this.isLoading,
-    required this.onPressed,
-  });
+  const _GoogleSignInButton({required this.isLoading, required this.onPressed});
 
   final bool isLoading;
   final VoidCallback? onPressed;

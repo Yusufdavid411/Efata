@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../controllers/app_settings_controller.dart';
+import 'app_notification_banner_service.dart';
 
 class ChatNotificationService {
   ChatNotificationService._();
@@ -140,6 +142,15 @@ class ChatNotificationService {
     required String title,
     required String body,
   }) async {
+    final cleanTitle = title.trim().isEmpty ? 'Delivery chat' : title.trim();
+    final cleanBody = body.trim().isEmpty ? 'You have a new message.' : body;
+
+    AppNotificationBannerService.show(
+      title: cleanTitle,
+      body: cleanBody,
+      icon: Icons.chat_bubble_outline_rounded,
+    );
+
     const androidDetails = AndroidNotificationDetails(
       'delivery_chat_messages',
       'Delivery chat messages',
@@ -147,12 +158,17 @@ class ChatNotificationService {
       importance: Importance.high,
       priority: Priority.high,
       category: AndroidNotificationCategory.message,
+      visibility: NotificationVisibility.public,
+      ticker: 'New EFATA chat message',
+      color: Color(0xFF0F766E),
+      enableVibration: true,
+      playSound: true,
     );
 
     await _notifications.show(
       id: orderId.hashCode & 0x7fffffff,
-      title: title,
-      body: body,
+      title: cleanTitle,
+      body: cleanBody,
       notificationDetails: const NotificationDetails(android: androidDetails),
       payload: orderId,
     );

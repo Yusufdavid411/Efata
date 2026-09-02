@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+const String googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
+
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -11,7 +13,9 @@ class AuthService {
 
   Future<void> _ensureGoogleInitialized() async {
     if (_googleInitialized) return;
-    await _googleSignIn.initialize();
+    await _googleSignIn.initialize(
+      serverClientId: googleWebClientId.isEmpty ? null : googleWebClientId,
+    );
     _googleInitialized = true;
   }
 
@@ -46,6 +50,14 @@ class AuthService {
   }
 
   Future<UserCredential> signInWithGoogle() async {
+    if (googleWebClientId.isEmpty) {
+      throw FirebaseAuthException(
+        code: 'missing-google-web-client-id',
+        message:
+            'Google login needs the Firebase Web client ID before it can work on Android.',
+      );
+    }
+
     await _ensureGoogleInitialized();
 
     if (!_googleSignIn.supportsAuthenticate()) {
@@ -83,7 +95,8 @@ class AuthService {
     if (!userDoc.exists) {
       await userRef.set({
         'uid': user.uid,
-        'name': user.displayName ?? user.email?.split('@').first ?? 'EFATA user',
+        'name':
+            user.displayName ?? user.email?.split('@').first ?? 'EFATA user',
         'email': user.email,
         'photoUrl': user.photoURL,
         'role': role,

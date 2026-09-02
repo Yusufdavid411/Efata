@@ -12,6 +12,7 @@ import 'package:logistics_app/features/driver/driver_jobs_screen.dart';
 import 'package:logistics_app/features/auth/login_screen.dart';
 import 'package:logistics_app/features/settings/settings_screen.dart';
 import 'package:logistics_app/core/controllers/app_settings_controller.dart';
+import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/chat_notification_service.dart';
 
 void main() async {
@@ -111,6 +112,7 @@ class MyApp extends StatelessWidget {
       animation: appSettingsController,
       builder: (context, _) {
         return MaterialApp(
+          navigatorKey: AppNotificationBannerService.navigatorKey,
           debugShowCheckedModeBanner: false,
           theme: lightTheme(),
           darkTheme: darkTheme(),

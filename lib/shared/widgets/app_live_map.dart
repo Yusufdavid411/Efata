@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -12,11 +14,19 @@ class AppLiveMap extends StatefulWidget {
     required this.pickupPoint,
     required this.dropoffPoint,
     required this.driverPoint,
+    this.followDriver = false,
+    this.activeTargetPoint,
+    this.activeTargetLabel,
+    this.showRouteStatus = true,
   });
 
   final LatLng pickupPoint;
   final LatLng dropoffPoint;
   final LatLng? driverPoint;
+  final bool followDriver;
+  final LatLng? activeTargetPoint;
+  final String? activeTargetLabel;
+  final bool showRouteStatus;
 
   @override
   State<AppLiveMap> createState() => _AppLiveMapState();
@@ -29,6 +39,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
   LatLng? userPoint;
   String? routeError;
   String? routeKey;
+  LatLng? lastFollowedDriverPoint;
   bool loadingRoute = false;
   bool locationChecked = false;
 
@@ -49,7 +60,12 @@ class _AppLiveMapState extends State<AppLiveMap> {
       _fitRouteAfterFrame();
     }
 
-    if (oldWidget.driverPoint != widget.driverPoint) {
+    if (oldWidget.driverPoint != widget.driverPoint ||
+        oldWidget.followDriver != widget.followDriver) {
+      if (widget.followDriver) {
+        _followDriverAfterFrame();
+        return;
+      }
       _fitRouteAfterFrame();
     }
   }
@@ -134,6 +150,25 @@ class _AppLiveMapState extends State<AppLiveMap> {
     await controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 64));
   }
 
+  void _followDriverAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _followDriver());
+  }
+
+  Future<void> _followDriver() async {
+    if (!_mapController.isCompleted) return;
+
+    final target = widget.driverPoint ?? userPoint ?? widget.pickupPoint;
+    if (lastFollowedDriverPoint == target) return;
+
+    lastFollowedDriverPoint = target;
+    final controller = await _mapController.future;
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: target, zoom: 16, tilt: 45),
+      ),
+    );
+  }
+
   LatLngBounds _boundsFor(List<LatLng> points) {
     var minLat = points.first.latitude;
     var maxLat = points.first.latitude;
@@ -147,6 +182,16 @@ class _AppLiveMapState extends State<AppLiveMap> {
       maxLng = point.longitude > maxLng ? point.longitude : maxLng;
     }
 
+    if (minLat == maxLat) {
+      minLat -= 0.002;
+      maxLat += 0.002;
+    }
+
+    if (minLng == maxLng) {
+      minLng -= 0.002;
+      maxLng += 0.002;
+    }
+
     return LatLngBounds(
       southwest: LatLng(minLat, minLng),
       northeast: LatLng(maxLat, maxLng),
@@ -158,6 +203,8 @@ class _AppLiveMapState extends State<AppLiveMap> {
     final routePoints = route?.points.isNotEmpty == true
         ? route!.points
         : [widget.pickupPoint, widget.dropoffPoint];
+    final driverRouteStart = widget.driverPoint ?? userPoint;
+    final activeTargetPoint = widget.activeTargetPoint;
     final markers = {
       Marker(
         markerId: const MarkerId('pickup'),
@@ -203,35 +250,116 @@ class _AppLiveMapState extends State<AppLiveMap> {
             Polyline(
               polylineId: const PolylineId('delivery-route'),
               points: routePoints,
-              width: 5,
+              width: 6,
               color: route == null
                   ? const Color(0xFF94A3B8)
                   : const Color(0xFF0F766E),
             ),
+            if (driverRouteStart != null && activeTargetPoint != null)
+              Polyline(
+                polylineId: const PolylineId('driver-active-leg'),
+                points: [driverRouteStart, activeTargetPoint],
+                width: 5,
+                color: const Color(0xFF2563EB),
+                patterns: [PatternItem.dash(18), PatternItem.gap(10)],
+              ),
           },
           myLocationButtonEnabled: true,
           myLocationEnabled: userPoint != null,
           zoomControlsEnabled: false,
           mapToolbarEnabled: false,
+          compassEnabled: true,
+          rotateGesturesEnabled: true,
+          scrollGesturesEnabled: true,
+          tiltGesturesEnabled: true,
+          zoomGesturesEnabled: true,
+          gestureRecognizers: {
+            Factory<OneSequenceGestureRecognizer>(
+              () => EagerGestureRecognizer(),
+            ),
+          },
           onMapCreated: (controller) {
             if (!_mapController.isCompleted) {
               _mapController.complete(controller);
             }
-            _fitRouteAfterFrame();
+            if (widget.followDriver) {
+              _followDriverAfterFrame();
+            } else {
+              _fitRouteAfterFrame();
+            }
           },
         ),
         Positioned(
           left: 12,
-          right: 12,
-          bottom: 12,
-          child: _RouteStatusCard(
-            route: route,
-            routeError: routeError,
-            loadingRoute: loadingRoute,
-            locationChecked: locationChecked,
+          top: 12,
+          child: _MapControlButton(
+            icon: Icons.center_focus_strong_rounded,
+            tooltip: 'Fit route',
+            onTap: _fitRoute,
           ),
         ),
+        Positioned(
+          left: 12,
+          top: 62,
+          child: _MapControlButton(
+            icon: Icons.my_location_rounded,
+            tooltip: 'Follow driver',
+            isActive: widget.followDriver,
+            onTap: _followDriver,
+          ),
+        ),
+        if (widget.showRouteStatus)
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 12,
+            child: _RouteStatusCard(
+              route: route,
+              routeError: routeError,
+              loadingRoute: loadingRoute,
+              locationChecked: locationChecked,
+              activeTargetLabel: widget.activeTargetLabel,
+              isFollowing: widget.followDriver,
+            ),
+          ),
       ],
+    );
+  }
+}
+
+class _MapControlButton extends StatelessWidget {
+  const _MapControlButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.isActive = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool isActive;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isActive ? const Color(0xFF0F766E) : const Color(0xFF0F172A);
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white,
+        elevation: 2,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            width: 46,
+            height: 46,
+            child: Icon(icon, color: color),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -242,18 +370,26 @@ class _RouteStatusCard extends StatelessWidget {
     required this.routeError,
     required this.loadingRoute,
     required this.locationChecked,
+    required this.activeTargetLabel,
+    required this.isFollowing,
   });
 
   final GoogleRouteResult? route;
   final String? routeError;
   final bool loadingRoute;
   final bool locationChecked;
+  final String? activeTargetLabel;
+  final bool isFollowing;
 
   @override
   Widget build(BuildContext context) {
-    final message = route != null
+    final routeMessage = route != null
         ? '${route!.distanceKm.toStringAsFixed(1)} km • about ${route!.durationMinutes} min'
         : routeError ?? 'Delivery route';
+    final message = activeTargetLabel == null
+        ? routeMessage
+        : '$activeTargetLabel, $routeMessage';
+    final displayMessage = message.replaceAll(RegExp(r'[^\x00-\x7F]+'), ',');
 
     return Card(
       color: Colors.white,
@@ -269,17 +405,19 @@ class _RouteStatusCard extends StatelessWidget {
               )
             else
               Icon(
-                route == null
+                isFollowing
+                    ? Icons.navigation_rounded
+                    : route == null
                     ? Icons.route_outlined
                     : Icons.check_circle_outline_rounded,
-                color: route == null
-                    ? const Color(0xFF64748B)
-                    : const Color(0xFF0F766E),
+                color: isFollowing || route != null
+                    ? const Color(0xFF0F766E)
+                    : const Color(0xFF64748B),
               ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                message,
+                displayMessage,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
