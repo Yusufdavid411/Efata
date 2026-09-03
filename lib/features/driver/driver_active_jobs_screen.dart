@@ -9,6 +9,7 @@ import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/shared/widgets/app_live_map.dart';
 
 import '../chat/chat_screen.dart';
+import 'driver_voice_navigation_screen.dart';
 
 class DriverActiveJobsScreen extends StatefulWidget {
   const DriverActiveJobsScreen({super.key, this.initialOrderId});
@@ -23,9 +24,9 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
   StreamSubscription<Position>? locationSubscription;
   String? trackingOrderId;
 
-  Future<void> startTransit(String id) async {
+  Future<bool> startTransit(String id) async {
     final allowed = await ensureLocationPermission();
-    if (!allowed) return;
+    if (!allowed) return false;
 
     final position = await LocationService.getCurrentPosition();
 
@@ -41,6 +42,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     });
 
     startLiveLocationTracking(id);
+    return true;
   }
 
   Future<void> completeJob(String id, Map<String, dynamic> data) async {
@@ -322,6 +324,40 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
           final activeTargetLabel = status == 'accepted'
               ? 'Go to pickup'
               : 'Go to drop-off';
+          final canUseVoiceNavigation =
+              pickupLat != null &&
+              pickupLng != null &&
+              dropoffLat != null &&
+              dropoffLng != null;
+
+          void openVoiceNavigation({required bool includePickupStop}) {
+            if (!canUseVoiceNavigation) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Voice navigation needs pickup and drop-off coordinates.',
+                  ),
+                ),
+              );
+              return;
+            }
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DriverVoiceNavigationScreen(
+                  orderId: job.id,
+                  pickupLabel: pickup,
+                  dropoffLabel: dropoff,
+                  pickupLat: pickupLat,
+                  pickupLng: pickupLng,
+                  dropoffLat: dropoffLat,
+                  dropoffLng: dropoffLng,
+                  includePickupStop: includePickupStop,
+                ),
+              ),
+            );
+          }
 
           return Stack(
             children: [
@@ -372,15 +408,27 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                     },
                     primaryAction: status == 'accepted'
                         ? _DriverJobAction(
-                            label: 'Start Transit',
-                            icon: Icons.play_arrow_rounded,
-                            onPressed: () => startTransit(job.id),
+                            label: 'Start Voice Navigation',
+                            icon: Icons.volume_up_rounded,
+                            onPressed: () async {
+                              final started = await startTransit(job.id);
+                              if (!started || !context.mounted) return;
+                              openVoiceNavigation(includePickupStop: true);
+                            },
                           )
                         : _DriverJobAction(
                             label: 'Mark Completed',
                             icon: Icons.check_circle_outline,
                             onPressed: () => completeJob(job.id, data),
                           ),
+                    secondaryAction: status == 'intransit'
+                        ? _DriverJobAction(
+                            label: 'Voice Navigation',
+                            icon: Icons.navigation_rounded,
+                            onPressed: () =>
+                                openVoiceNavigation(includePickupStop: false),
+                          )
+                        : null,
                   );
                 },
               ),
@@ -457,6 +505,7 @@ class _DriverJobSheet extends StatelessWidget {
     required this.unreadMessages,
     required this.onChat,
     required this.primaryAction,
+    this.secondaryAction,
   });
 
   final ScrollController scrollController;
@@ -473,6 +522,7 @@ class _DriverJobSheet extends StatelessWidget {
   final int unreadMessages;
   final VoidCallback onChat;
   final _DriverJobAction primaryAction;
+  final _DriverJobAction? secondaryAction;
 
   @override
   Widget build(BuildContext context) {
@@ -548,6 +598,14 @@ class _DriverJobSheet extends StatelessWidget {
             label: Text(chatLabel),
           ),
           const SizedBox(height: 10),
+          if (secondaryAction != null) ...[
+            OutlinedButton.icon(
+              onPressed: secondaryAction!.onPressed,
+              icon: Icon(secondaryAction!.icon),
+              label: Text(secondaryAction!.label),
+            ),
+            const SizedBox(height: 10),
+          ],
           ElevatedButton.icon(
             onPressed: primaryAction.onPressed,
             icon: Icon(primaryAction.icon),

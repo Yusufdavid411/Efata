@@ -8,6 +8,9 @@ This app now uses a minimal Google Maps setup for the current logistics workflow
   - Required to display interactive Google Maps in the Flutter Android app.
 - Routes API
   - Used only when both pickup and drop-off coordinates are available and the app needs a delivery route polyline, route distance, and estimated travel duration.
+- Navigation SDK
+  - Used on the driver current-job flow for in-app voice turn-by-turn guidance after the driver starts navigation.
+  - The SDK handles road routing, rerouting, voice prompts, and navigation UI inside EFATA.
 
 ## Google APIs Deliberately Avoided
 
@@ -21,7 +24,6 @@ The app does not use these APIs at this stage:
 - Elevation API
 - Maps Static API
 - Maps Embed API
-- Navigation SDK
 - Geolocation API
 - Address Validation API
 - Geocoding API
@@ -60,8 +62,12 @@ The Android manifest includes:
 - `INTERNET`
 - `ACCESS_FINE_LOCATION`
 - `ACCESS_COARSE_LOCATION`
+- `FOREGROUND_SERVICE`
+- `FOREGROUND_SERVICE_LOCATION`
 - `POST_NOTIFICATIONS`
 - Google Maps SDK metadata supplied by Gradle manifest placeholder
+
+The Android app now uses `minSdk = 24` because the Google Navigation Flutter SDK requires Android API level 24 or newer.
 
 The current Android package/application ID is:
 
@@ -80,7 +86,7 @@ Android Maps SDK key:
 - Application restriction: Android apps
 - Package name: `com.example.logistics_app`
 - SHA-1 certificate fingerprint: use the debug SHA-1 for testing and release SHA-1 for production
-- API restriction: Maps SDK for Android only
+- API restriction: Maps SDK for Android and Navigation SDK
 
 Routes API key:
 
@@ -102,6 +108,8 @@ Do not enable other Maps Platform APIs unless a future feature genuinely require
 - Route requests are not triggered on every widget rebuild.
 - If the pickup/drop-off coordinates do not change, no new route request is made.
 - If Routes API fails or the key is missing, the app falls back to a direct line.
+- Voice navigation only starts when the driver taps Start Voice Navigation or Voice Navigation on the current-job screen.
+- Navigation SDK location writes back to Firestore are throttled to about once every 5 seconds so the customer map can update without excessive writes.
 
 ## Testing
 
@@ -118,7 +126,15 @@ Do not enable other Maps Platform APIs unless a future feature genuinely require
    - Driver/current location appears when available.
    - Route line appears when Routes API key is provided.
    - Direct fallback line appears if Routes API is not configured.
-8. Start transit as a driver and confirm live driver location updates continue to appear.
+8. Accept a job as a driver and confirm the current job opens with the large live map.
+9. Tap Start Voice Navigation.
+10. Accept the Google navigation terms on the first run.
+11. Confirm:
+   - Google turn-by-turn navigation opens inside EFATA.
+   - Spoken guidance is enabled.
+   - The map follows the driver location.
+   - The route reroutes if the driver leaves the original road path.
+   - Customer tracking continues to receive driver location updates.
 
 ## Future APIs
 
@@ -127,4 +143,4 @@ Enable these only if a future feature needs them:
 - Places API or Places Autocomplete: typed address search and autocomplete.
 - Geocoding API: converting map coordinates into human-readable addresses.
 - Distance Matrix API: comparing travel distance/time across many drivers or many destinations.
-- Navigation SDK: in-app turn-by-turn navigation.
+- Places API or Places Autocomplete should be considered later if the app needs Google-powered typed address suggestions instead of the current Firestore history and map-pick flow.

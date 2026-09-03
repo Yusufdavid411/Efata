@@ -27,6 +27,10 @@ val googleRoutesApiKey =
         ?: System.getenv("GOOGLE_ROUTES_API_KEY")
         ?: ""
 
+configurations.configureEach {
+    exclude(group = "com.google.android.gms", module = "play-services-maps")
+}
+
 android {
     namespace = "com.example.logistics_app"
     compileSdk = flutter.compileSdkVersion
@@ -47,7 +51,7 @@ android {
         applicationId = "com.example.logistics_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -69,5 +73,5 @@ flutter {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
 }
