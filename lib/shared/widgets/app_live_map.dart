@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/services/google_route_service.dart';
@@ -36,11 +37,19 @@ class _AppLiveMapState extends State<AppLiveMap> {
   final Completer<GoogleMapController> _mapController = Completer();
 
   GoogleRouteResult? route;
+  GoogleRouteResult? activeRoute;
   LatLng? userPoint;
   String? routeError;
+  String? activeRouteError;
   String? routeKey;
+  String? activeRouteKey;
   LatLng? lastFollowedDriverPoint;
+  LatLng? lastActiveRouteOrigin;
+  LatLng? lastActiveRouteTarget;
+  DateTime? lastActiveRouteAt;
+  Timer? rerouteDebounce;
   bool loadingRoute = false;
+  bool loadingActiveRoute = false;
   bool locationChecked = false;
 
   @override
@@ -48,6 +57,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
     super.initState();
     _loadCurrentLocation();
     _loadRouteIfNeeded();
+    _loadActiveRouteIfNeeded(force: true);
   }
 
   @override
@@ -55,19 +65,28 @@ class _AppLiveMapState extends State<AppLiveMap> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.pickupPoint != widget.pickupPoint ||
-        oldWidget.dropoffPoint != widget.dropoffPoint) {
+        oldWidget.dropoffPoint != widget.dropoffPoint ||
+        oldWidget.activeTargetPoint != widget.activeTargetPoint) {
       _loadRouteIfNeeded();
+      _loadActiveRouteIfNeeded(force: true);
       _fitRouteAfterFrame();
     }
 
     if (oldWidget.driverPoint != widget.driverPoint ||
         oldWidget.followDriver != widget.followDriver) {
+      _scheduleActiveReroute();
       if (widget.followDriver) {
         _followDriverAfterFrame();
         return;
       }
       _fitRouteAfterFrame();
     }
+  }
+
+  @override
+  void dispose() {
+    rerouteDebounce?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadCurrentLocation() async {
@@ -80,6 +99,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
         userPoint = LatLng(position.latitude, position.longitude);
       }
     });
+    _loadActiveRouteIfNeeded(force: true);
   }
 
   Future<void> _loadRouteIfNeeded() async {
@@ -103,7 +123,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
       setState(() {
         route = result;
         routeError = result == null
-            ? 'Route details unavailable. Showing direct delivery line.'
+            ? 'Road route unavailable. Showing direct line.'
             : null;
       });
     } catch (_) {
@@ -111,7 +131,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
 
       setState(() {
         route = null;
-        routeError = 'Route details unavailable. Showing direct delivery line.';
+        routeError = 'Road route unavailable. Showing direct line.';
       });
     } finally {
       if (mounted && routeKey == nextKey) {
@@ -120,13 +140,103 @@ class _AppLiveMapState extends State<AppLiveMap> {
     }
   }
 
-  String _routeKey(LatLng pickup, LatLng dropoff) {
+  void _scheduleActiveReroute() {
+    final origin = widget.driverPoint ?? userPoint;
+    final target = widget.activeTargetPoint;
+
+    if (origin == null || target == null) return;
+
+    final targetChanged =
+        lastActiveRouteTarget == null ||
+        _distanceBetween(lastActiveRouteTarget!, target) > 30;
+    final movedFarEnough =
+        lastActiveRouteOrigin == null ||
+        _distanceBetween(lastActiveRouteOrigin!, origin) >= 90;
+    final waitedLongEnough =
+        lastActiveRouteAt == null ||
+        DateTime.now().difference(lastActiveRouteAt!) >
+            const Duration(seconds: 25);
+
+    if (!targetChanged && (!movedFarEnough || !waitedLongEnough)) return;
+
+    rerouteDebounce?.cancel();
+    rerouteDebounce = Timer(const Duration(milliseconds: 900), () {
+      _loadActiveRouteIfNeeded(force: targetChanged);
+    });
+  }
+
+  Future<void> _loadActiveRouteIfNeeded({bool force = false}) async {
+    final origin = widget.driverPoint ?? userPoint;
+    final target = widget.activeTargetPoint;
+
+    if (origin == null || target == null) {
+      if (!mounted) return;
+      setState(() {
+        activeRoute = null;
+        activeRouteError = null;
+        activeRouteKey = null;
+      });
+      return;
+    }
+
+    final nextKey = _routeKey(origin, target, precision: 4);
+    if (!force && nextKey == activeRouteKey) return;
+
+    activeRouteKey = nextKey;
+    lastActiveRouteOrigin = origin;
+    lastActiveRouteTarget = target;
+    lastActiveRouteAt = DateTime.now();
+
+    setState(() {
+      loadingActiveRoute = true;
+      activeRouteError = null;
+    });
+
+    try {
+      final result = await GoogleRouteService.routeBetween(
+        pickup: origin,
+        dropoff: target,
+        cachePrecision: 4,
+      );
+
+      if (!mounted || activeRouteKey != nextKey) return;
+
+      setState(() {
+        activeRoute = result;
+        activeRouteError = result == null
+            ? 'Road route unavailable. Showing direct line.'
+            : null;
+      });
+    } catch (_) {
+      if (!mounted || activeRouteKey != nextKey) return;
+
+      setState(() {
+        activeRoute = null;
+        activeRouteError = 'Road route unavailable. Showing direct line.';
+      });
+    } finally {
+      if (mounted && activeRouteKey == nextKey) {
+        setState(() => loadingActiveRoute = false);
+      }
+    }
+  }
+
+  String _routeKey(LatLng pickup, LatLng dropoff, {int precision = 6}) {
     return [
-      pickup.latitude.toStringAsFixed(6),
-      pickup.longitude.toStringAsFixed(6),
-      dropoff.latitude.toStringAsFixed(6),
-      dropoff.longitude.toStringAsFixed(6),
+      pickup.latitude.toStringAsFixed(precision),
+      pickup.longitude.toStringAsFixed(precision),
+      dropoff.latitude.toStringAsFixed(precision),
+      dropoff.longitude.toStringAsFixed(precision),
     ].join(',');
+  }
+
+  double _distanceBetween(LatLng a, LatLng b) {
+    return Geolocator.distanceBetween(
+      a.latitude,
+      a.longitude,
+      b.latitude,
+      b.longitude,
+    );
   }
 
   void _fitRouteAfterFrame() {
@@ -144,7 +254,10 @@ class _AppLiveMapState extends State<AppLiveMap> {
       if (userPoint != null) userPoint!,
     ];
 
-    if (points.isEmpty) return;
+    final activePoints = activeRoute?.points ?? route?.points;
+    if (activePoints != null && activePoints.isNotEmpty) {
+      points.addAll(activePoints);
+    }
 
     final bounds = _boundsFor(points);
     await controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 64));
@@ -203,6 +316,9 @@ class _AppLiveMapState extends State<AppLiveMap> {
     final routePoints = route?.points.isNotEmpty == true
         ? route!.points
         : [widget.pickupPoint, widget.dropoffPoint];
+    final activeRoutePoints = activeRoute?.points.isNotEmpty == true
+        ? activeRoute!.points
+        : null;
     final driverRouteStart = widget.driverPoint ?? userPoint;
     final activeTargetPoint = widget.activeTargetPoint;
     final markers = {
@@ -250,12 +366,21 @@ class _AppLiveMapState extends State<AppLiveMap> {
             Polyline(
               polylineId: const PolylineId('delivery-route'),
               points: routePoints,
-              width: 6,
+              width: activeRoutePoints == null ? 6 : 4,
               color: route == null
                   ? const Color(0xFF94A3B8)
                   : const Color(0xFF0F766E),
             ),
-            if (driverRouteStart != null && activeTargetPoint != null)
+            if (activeRoutePoints != null)
+              Polyline(
+                polylineId: const PolylineId('driver-active-road-route'),
+                points: activeRoutePoints,
+                width: 7,
+                color: const Color(0xFF2563EB),
+              ),
+            if (activeRoutePoints == null &&
+                driverRouteStart != null &&
+                activeTargetPoint != null)
               Polyline(
                 polylineId: const PolylineId('driver-active-leg'),
                 points: [driverRouteStart, activeTargetPoint],
@@ -315,8 +440,9 @@ class _AppLiveMapState extends State<AppLiveMap> {
             bottom: 12,
             child: _RouteStatusCard(
               route: route,
-              routeError: routeError,
-              loadingRoute: loadingRoute,
+              activeRoute: activeRoute,
+              routeError: activeRouteError ?? routeError,
+              loadingRoute: loadingRoute || loadingActiveRoute,
               locationChecked: locationChecked,
               activeTargetLabel: widget.activeTargetLabel,
               isFollowing: widget.followDriver,
@@ -367,6 +493,7 @@ class _MapControlButton extends StatelessWidget {
 class _RouteStatusCard extends StatelessWidget {
   const _RouteStatusCard({
     required this.route,
+    required this.activeRoute,
     required this.routeError,
     required this.loadingRoute,
     required this.locationChecked,
@@ -375,6 +502,7 @@ class _RouteStatusCard extends StatelessWidget {
   });
 
   final GoogleRouteResult? route;
+  final GoogleRouteResult? activeRoute;
   final String? routeError;
   final bool loadingRoute;
   final bool locationChecked;
@@ -383,13 +511,13 @@ class _RouteStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final routeMessage = route != null
-        ? '${route!.distanceKm.toStringAsFixed(1)} km • about ${route!.durationMinutes} min'
+    final displayRoute = activeRoute ?? route;
+    final routeMessage = displayRoute != null
+        ? '${displayRoute.distanceKm.toStringAsFixed(1)} km, about ${displayRoute.durationMinutes} min'
         : routeError ?? 'Delivery route';
     final message = activeTargetLabel == null
         ? routeMessage
         : '$activeTargetLabel, $routeMessage';
-    final displayMessage = message.replaceAll(RegExp(r'[^\x00-\x7F]+'), ',');
 
     return Card(
       color: Colors.white,
@@ -407,17 +535,17 @@ class _RouteStatusCard extends StatelessWidget {
               Icon(
                 isFollowing
                     ? Icons.navigation_rounded
-                    : route == null
+                    : displayRoute == null
                     ? Icons.route_outlined
                     : Icons.check_circle_outline_rounded,
-                color: isFollowing || route != null
+                color: isFollowing || displayRoute != null
                     ? const Color(0xFF0F766E)
                     : const Color(0xFF64748B),
               ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                displayMessage,
+                message,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(

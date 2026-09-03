@@ -36,9 +36,10 @@ For local Android builds, add this to `android/local.properties`:
 
 ```properties
 GOOGLE_MAPS_ANDROID_API_KEY=your_android_maps_sdk_key
+GOOGLE_ROUTES_API_KEY=your_routes_api_key
 ```
 
-For route drawing, pass the Routes API key at build/run time:
+For route drawing, either use `GOOGLE_ROUTES_API_KEY` in `android/local.properties` or pass it at build/run time:
 
 ```powershell
 C:\src\flutter\bin\flutter.bat run --dart-define=GOOGLE_ROUTES_API_KEY=your_routes_api_key
@@ -95,6 +96,8 @@ Do not enable other Maps Platform APIs unless a future feature genuinely require
 - The app does not call Places or Geocoding while typing.
 - Saved pickup/drop-off suggestions come from existing Firestore orders.
 - Routes API calls are cached by pickup/drop-off coordinate pair.
+- Driver rerouting calls are cached by rounded driver/target coordinate pair.
+- Driver rerouting is debounced and only recalculates after the target changes, or after the driver moves about 90 meters and at least 25 seconds have passed.
 - Route requests are not triggered by map camera movement.
 - Route requests are not triggered on every widget rebuild.
 - If the pickup/drop-off coordinates do not change, no new route request is made.
@@ -102,8 +105,8 @@ Do not enable other Maps Platform APIs unless a future feature genuinely require
 
 ## Testing
 
-1. Add `GOOGLE_MAPS_ANDROID_API_KEY` to `android/local.properties`.
-2. Build or run with `GOOGLE_ROUTES_API_KEY` if route polylines/distance/duration should be tested.
+1. Add `GOOGLE_MAPS_ANDROID_API_KEY` and `GOOGLE_ROUTES_API_KEY` to `android/local.properties`.
+2. Confirm the Routes key is restricted to Routes API only.
 3. Open customer booking.
 4. Tap the map icon for pickup and drop-off.
 5. Allow location permission and test the current-location button.

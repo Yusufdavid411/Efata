@@ -16,6 +16,9 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${GOOGLE_MAPS_ANDROID_API_KEY}" />
+        <meta-data
+            android:name="com.efata.google.ROUTES_API_KEY"
+            android:value="${GOOGLE_ROUTES_API_KEY}" />
 
         <activity
             android:name=".MainActivity"

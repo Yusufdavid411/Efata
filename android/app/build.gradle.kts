@@ -21,6 +21,12 @@ val googleMapsAndroidApiKey =
         ?: System.getenv("GOOGLE_MAPS_ANDROID_API_KEY")
         ?: ""
 
+val googleRoutesApiKey =
+    localProperties.getProperty("GOOGLE_ROUTES_API_KEY")
+        ?: (project.findProperty("GOOGLE_ROUTES_API_KEY") as String?)
+        ?: System.getenv("GOOGLE_ROUTES_API_KEY")
+        ?: ""
+
 android {
     namespace = "com.example.logistics_app"
     compileSdk = flutter.compileSdkVersion
@@ -46,6 +52,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["GOOGLE_MAPS_ANDROID_API_KEY"] = googleMapsAndroidApiKey
+        manifestPlaceholders["GOOGLE_ROUTES_API_KEY"] = googleRoutesApiKey
     }
 
     buildTypes {

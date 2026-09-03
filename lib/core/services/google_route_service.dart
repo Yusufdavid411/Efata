@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
@@ -25,41 +26,72 @@ class GoogleRouteResult {
 class GoogleRouteService {
   GoogleRouteService._();
 
+  static const MethodChannel _configChannel = MethodChannel(
+    'com.efata.app/config',
+  );
+  static const int _maxCachedRoutes = 80;
+
   static final Map<String, Future<GoogleRouteResult?>> _requestCache = {};
+  static String? _runtimeApiKey;
 
   static Future<GoogleRouteResult?> routeBetween({
     required LatLng pickup,
     required LatLng dropoff,
-  }) {
-    if (googleRoutesApiKey.isEmpty) return Future.value(null);
+    int cachePrecision = 6,
+  }) async {
+    final apiKey = await _apiKey();
+    if (apiKey.isEmpty) return null;
 
-    final key = _routeKey(pickup, dropoff);
+    final key = _routeKey(pickup, dropoff, precision: cachePrecision);
+    if (_requestCache.length > _maxCachedRoutes &&
+        !_requestCache.containsKey(key)) {
+      _requestCache.remove(_requestCache.keys.first);
+    }
 
     return _requestCache.putIfAbsent(
       key,
-      () => _fetchRoute(pickup: pickup, dropoff: dropoff),
+      () => _fetchRoute(apiKey: apiKey, pickup: pickup, dropoff: dropoff),
     );
   }
 
-  static String _routeKey(LatLng pickup, LatLng dropoff) {
+  static Future<String> _apiKey() async {
+    if (googleRoutesApiKey.isNotEmpty) return googleRoutesApiKey;
+    if (_runtimeApiKey != null) return _runtimeApiKey!;
+
+    try {
+      _runtimeApiKey =
+          await _configChannel.invokeMethod<String>('googleRoutesApiKey') ?? '';
+    } catch (_) {
+      _runtimeApiKey = '';
+    }
+
+    return _runtimeApiKey!;
+  }
+
+  static String _routeKey(
+    LatLng pickup,
+    LatLng dropoff, {
+    required int precision,
+  }) {
     return [
-      pickup.latitude.toStringAsFixed(6),
-      pickup.longitude.toStringAsFixed(6),
-      dropoff.latitude.toStringAsFixed(6),
-      dropoff.longitude.toStringAsFixed(6),
+      pickup.latitude.toStringAsFixed(precision),
+      pickup.longitude.toStringAsFixed(precision),
+      dropoff.latitude.toStringAsFixed(precision),
+      dropoff.longitude.toStringAsFixed(precision),
     ].join(',');
   }
 
   static Future<GoogleRouteResult?> _fetchRoute({
+    required String apiKey,
     required LatLng pickup,
     required LatLng dropoff,
   }) async {
     final response = await http
         .post(
           Uri.https('routes.googleapis.com', '/directions/v2:computeRoutes'),
-          headers: const {
+          headers: {
             'Content-Type': 'application/json',
-            'X-Goog-Api-Key': googleRoutesApiKey,
+            'X-Goog-Api-Key': apiKey,
             'X-Goog-FieldMask':
                 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline',
           },
