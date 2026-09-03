@@ -275,11 +275,11 @@ class _AppLiveMapState extends State<AppLiveMap> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _followDriver());
   }
 
-  Future<void> _followDriver() async {
+  Future<void> _followDriver({bool force = false}) async {
     if (!_mapController.isCompleted) return;
 
     final target = widget.driverPoint ?? userPoint ?? widget.pickupPoint;
-    if (lastFollowedDriverPoint == target) return;
+    if (!force && lastFollowedDriverPoint == target) return;
 
     lastFollowedDriverPoint = target;
     final controller = await _mapController.future;
@@ -517,7 +517,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
         ),
         Positioned(
           left: 12,
-          top: 62,
+          top: 78,
           child: _MapControlButton(
             icon: Icons.my_location_rounded,
             tooltip: 'My location',
@@ -539,13 +539,13 @@ class _AppLiveMapState extends State<AppLiveMap> {
         ),
         Positioned(
           right: 12,
-          top: 62,
+          top: 78,
           child: _MapControlButton(
             icon: Icons.navigation_rounded,
             tooltip: 'Follow driver',
             label: 'Follow',
             isActive: widget.followDriver,
-            onTap: _followDriver,
+            onTap: () => _followDriver(force: true),
           ),
         ),
         if (widget.showRouteStatus)

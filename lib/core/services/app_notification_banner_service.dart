@@ -29,16 +29,18 @@ class AppNotificationBannerService {
       builder: (context) {
         final style = _ToastStyle.forType(type);
         return Positioned.fill(
-          child: IgnorePointer(
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (_) => hide(),
             child: SafeArea(
               minimum: const EdgeInsets.all(18),
               child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0.92, end: 1),
+                tween: Tween(begin: -28, end: 0),
                 duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutBack,
-                builder: (context, scale, child) {
-                  return Transform.scale(
-                    scale: scale,
+                curve: Curves.easeOutCubic,
+                builder: (context, offsetY, child) {
+                  return Transform.translate(
+                    offset: Offset(0, offsetY),
                     child: AnimatedOpacity(
                       opacity: 1,
                       duration: const Duration(milliseconds: 160),
@@ -47,7 +49,7 @@ class AppNotificationBannerService {
                   );
                 },
                 child: Align(
-                  alignment: Alignment.center,
+                  alignment: Alignment.topCenter,
                   child: Material(
                     color: Colors.transparent,
                     child: ConstrainedBox(
@@ -141,7 +143,6 @@ class AppNotificationBannerService {
       body: message,
       icon: Icons.error_rounded,
       type: AppToastType.error,
-      duration: const Duration(seconds: 4),
     );
   }
 

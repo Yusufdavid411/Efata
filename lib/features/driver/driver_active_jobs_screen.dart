@@ -608,7 +608,7 @@ class _DriverJobSheetState extends State<_DriverJobSheet> {
                   ? Icons.keyboard_arrow_up_rounded
                   : Icons.keyboard_arrow_down_rounded,
             ),
-            label: Text(showDetails ? 'Hide Details' : 'Details'),
+            label: Text(showDetails ? 'Hide More Details' : 'More Details'),
           ),
           AnimatedCrossFade(
             firstChild: const SizedBox.shrink(),
