@@ -7,6 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
+import '../../../core/services/app_notification_banner_service.dart';
+
 class CustomerProfileScreen extends StatefulWidget {
   const CustomerProfileScreen({super.key});
 
@@ -59,15 +61,17 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Profile picture updated")));
+      AppNotificationBannerService.success(
+        'Profile picture updated.',
+        title: 'Profile updated',
+      );
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
+      AppNotificationBannerService.error(
+        'Upload failed: $e',
+        title: 'Upload failed',
+      );
     } finally {
       if (mounted) {
         setState(() => isUploading = false);
@@ -161,10 +165,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       final address = addressController.text.trim();
 
                       if (name.isEmpty || phone.isEmpty || address.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Please complete all fields"),
-                          ),
+                        AppNotificationBannerService.error(
+                          'Please complete all profile fields.',
+                          title: 'Missing details',
                         );
                         return;
                       }
@@ -192,15 +195,15 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                         }
 
                         if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Profile updated successfully"),
-                          ),
+                        AppNotificationBannerService.success(
+                          'Profile updated successfully.',
+                          title: 'Profile updated',
                         );
                       } catch (e) {
                         if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Update failed: $e")),
+                        AppNotificationBannerService.error(
+                          'Update failed: $e',
+                          title: 'Update failed',
                         );
                       }
                     },

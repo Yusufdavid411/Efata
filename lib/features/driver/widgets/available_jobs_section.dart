@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/services/app_notification_banner_service.dart';
 import '../driver_active_jobs_screen.dart';
 
 class AvailableJobsSection extends StatefulWidget {
@@ -43,10 +44,9 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
 
     if (!_isApprovedDriver(driverProfile.data())) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Admin approval is required before accepting jobs"),
-        ),
+      AppNotificationBannerService.error(
+        'Admin approval is required before accepting jobs.',
+        title: 'Approval required',
       );
       return;
     }
@@ -64,8 +64,9 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     if (!mounted) return;
 
     if (hasActive) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Complete your current job first")),
+      AppNotificationBannerService.error(
+        'Complete your current job first.',
+        title: 'Current job active',
       );
       return;
     }
@@ -96,22 +97,21 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          accepted
-              ? "Job accepted. Opening live map."
-              : "This job has already been accepted.",
-        ),
-      ),
-    );
-
     if (accepted) {
+      AppNotificationBannerService.success(
+        'Job accepted. Opening live map.',
+        title: 'Job accepted',
+      );
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => DriverActiveJobsScreen(initialOrderId: orderId),
         ),
+      );
+    } else {
+      AppNotificationBannerService.error(
+        'This job has already been accepted.',
+        title: 'Job unavailable',
       );
     }
   }

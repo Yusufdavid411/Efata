@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/services/app_notification_banner_service.dart';
 import '../../core/services/location_service.dart';
 
 class MapPickerScreen extends StatefulWidget {
@@ -46,9 +47,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       });
 
       if (showErrors) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        AppNotificationBannerService.error(message, title: 'Location needed');
       }
       return;
     }
@@ -77,9 +76,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       });
 
       if (showErrors) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text(message)));
+        AppNotificationBannerService.error(message, title: 'Location issue');
       }
     }
   }

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:logistics_app/core/services/auth_service.dart';
+import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 
 import 'role_selection_screen.dart';
 
@@ -34,8 +35,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter email and password')),
+      AppNotificationBannerService.error(
+        'Please enter email and password.',
+        title: 'Missing login details',
       );
       return;
     }
@@ -66,10 +68,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (!userDoc.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('User role not found. Please register again.'),
-          ),
+        AppNotificationBannerService.error(
+          'User role not found. Please register again.',
+          title: 'Account setup issue',
         );
         return;
       }
@@ -80,10 +81,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (userData['isSuspended'] == true) {
         await FirebaseAuth.instance.signOut();
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('This account is suspended. Contact support.'),
-          ),
+        AppNotificationBannerService.error(
+          'This account is suspended. Contact support.',
+          title: 'Account suspended',
         );
         return;
       }
@@ -101,14 +101,11 @@ class _LoginScreenState extends State<LoginScreen> {
         if (driverStatus == 'suspended' || driverStatus == 'rejected') {
           await FirebaseAuth.instance.signOut();
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                driverStatus == 'rejected'
-                    ? 'This driver account was rejected. Contact support.'
-                    : 'This driver account is suspended. Contact support.',
-              ),
-            ),
+          AppNotificationBannerService.error(
+            driverStatus == 'rejected'
+                ? 'This driver account was rejected. Contact support.'
+                : 'This driver account is suspended. Contact support.',
+            title: 'Driver account blocked',
           );
           return;
         }
@@ -121,9 +118,10 @@ class _LoginScreenState extends State<LoginScreen> {
       } else if (role == 'driver') {
         Navigator.pushReplacementNamed(context, '/driverHome');
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Invalid user role')));
+        AppNotificationBannerService.error(
+          'Invalid user role.',
+          title: 'Account setup issue',
+        );
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
@@ -142,15 +140,11 @@ class _LoginScreenState extends State<LoginScreen> {
         message = 'This account has been disabled.';
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      AppNotificationBannerService.error(message, title: 'Login failed');
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      AppNotificationBannerService.error(e.toString(), title: 'Login failed');
     } finally {
       if (mounted) {
         setState(() {
@@ -184,10 +178,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (userDoc.exists && userDoc.data()?['isSuspended'] == true) {
         await FirebaseAuth.instance.signOut();
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('This account is suspended. Contact support.'),
-          ),
+        AppNotificationBannerService.error(
+          'This account is suspended. Contact support.',
+          title: 'Account suspended',
         );
         return;
       }
@@ -216,14 +209,11 @@ class _LoginScreenState extends State<LoginScreen> {
         if (driverStatus == 'suspended' || driverStatus == 'rejected') {
           await FirebaseAuth.instance.signOut();
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                driverStatus == 'rejected'
-                    ? 'This driver account was rejected. Contact support.'
-                    : 'This driver account is suspended. Contact support.',
-              ),
-            ),
+          AppNotificationBannerService.error(
+            driverStatus == 'rejected'
+                ? 'This driver account was rejected. Contact support.'
+                : 'This driver account is suspended. Contact support.',
+            title: 'Driver account blocked',
           );
           return;
         }
@@ -244,9 +234,10 @@ class _LoginScreenState extends State<LoginScreen> {
           driverDoc.exists ? '/driverHome' : '/driverOnboarding',
         );
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Invalid user role')));
+        AppNotificationBannerService.error(
+          'Invalid user role.',
+          title: 'Account setup issue',
+        );
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
@@ -261,14 +252,13 @@ class _LoginScreenState extends State<LoginScreen> {
         _ => e.message ?? 'Google sign-in failed. Please try again.',
       };
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      AppNotificationBannerService.error(message, title: 'Google login failed');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      AppNotificationBannerService.error(
+        e.toString(),
+        title: 'Google login failed',
+      );
     } finally {
       if (mounted) {
         setState(() {

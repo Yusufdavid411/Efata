@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 
 class AIFloatingButton extends StatefulWidget {
   const AIFloatingButton({super.key});
@@ -22,10 +23,10 @@ class _AIFloatingButtonState extends State<AIFloatingButton> {
           });
         },
         onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("AI assistant coming soon"),
-            ),
+          AppNotificationBannerService.info(
+            'AI assistant coming soon.',
+            title: 'Coming soon',
+            icon: Icons.auto_awesome_rounded,
           );
         },
         child: Container(

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 
 import '../../shared/widgets/app_drawer.dart';
 import '../../shared/widgets/ai_floating_button.dart';
@@ -73,14 +74,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     if (driver == null) return;
 
     if (value && verificationStatus.toLowerCase() != 'approved') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            !profileCompleted
-                ? 'Complete your driver profile before going online.'
-                : 'Your account must be approved before receiving jobs.',
-          ),
-        ),
+      AppNotificationBannerService.error(
+        !profileCompleted
+            ? 'Complete your driver profile before going online.'
+            : 'Your account must be approved before receiving jobs.',
+        title: 'Driver not verified',
       );
       return;
     }
@@ -107,14 +105,29 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       if (confirm != true) return;
     }
 
-    await FirebaseFirestore.instance.collection('drivers').doc(driver.uid).set({
-      'isOnline': value,
-      'isAvailable': value,
-      'availabilityUpdatedAt': Timestamp.now(),
-      'updatedAt': Timestamp.now(),
-    }, SetOptions(merge: true));
+    try {
+      await FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(driver.uid)
+          .set({
+            'isOnline': value,
+            'isAvailable': value,
+            'availabilityUpdatedAt': Timestamp.now(),
+            'updatedAt': Timestamp.now(),
+          }, SetOptions(merge: true));
 
-    setState(() => isOnline = value);
+      setState(() => isOnline = value);
+      AppNotificationBannerService.success(
+        value
+            ? 'You are now receiving delivery requests.'
+            : 'You will not receive new jobs while offline.',
+        title: value ? 'You are online' : 'You are offline',
+      );
+    } catch (_) {
+      AppNotificationBannerService.error(
+        'Network issue. Please try updating your status again.',
+      );
+    }
   }
 
   @override
@@ -124,6 +137,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   Widget verificationCard() {
+    if (isLoadingAvailability) return const SizedBox.shrink();
+
     final status = verificationStatus.toLowerCase();
     final approved = status == 'approved';
 
@@ -198,36 +213,82 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 const DriverEarningsSummary(),
                 const SizedBox(height: 20),
 
-                verificationCard(),
+                if (isLoadingAvailability)
+                  const _DriverDashboardLoading()
+                else ...[
+                  verificationCard(),
 
-                DriverStatusToggle(
-                  isOnline: isOnline,
-                  isLoading: isLoadingAvailability,
-                  onChanged: handleStatusChange,
-                ),
+                  DriverStatusToggle(
+                    isOnline: isOnline,
+                    isLoading: isLoadingAvailability,
+                    onChanged: handleStatusChange,
+                  ),
 
-                const SizedBox(height: 20),
+                  const SizedBox(height: 20),
 
-                const DriverCurrentJobCard(),
+                  const DriverCurrentJobCard(),
 
-                const Text(
-                  "Available Jobs",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
+                  const Text(
+                    "Available Jobs",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
 
-                const SizedBox(height: 10),
+                  const SizedBox(height: 10),
 
-                AvailableJobsSection(isOnline: isOnline),
+                  AvailableJobsSection(isOnline: isOnline),
 
-                const SizedBox(height: 30),
+                  const SizedBox(height: 30),
 
-                const DriverHistorySection(maxItems: 5),
+                  const DriverHistorySection(maxItems: 5),
+                ],
               ],
             ),
           ),
 
           const AIFloatingButton(),
         ],
+      ),
+    );
+  }
+}
+
+class _DriverDashboardLoading extends StatelessWidget {
+  const _DriverDashboardLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 26,
+              height: 26,
+              child: CircularProgressIndicator(strokeWidth: 2.6),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text(
+                    'Preparing dashboard',
+                    style: TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Checking your driver status behind the scenes.',
+                    style: TextStyle(color: Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

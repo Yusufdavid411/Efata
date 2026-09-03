@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/services/app_notification_banner_service.dart';
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
     super.key,
@@ -81,9 +83,10 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Message failed: $e')));
+      AppNotificationBannerService.error(
+        'Message failed: $e',
+        title: 'Message not sent',
+      );
       if (mounted) {
         setState(() => isSending = false);
       }
@@ -106,8 +109,9 @@ class _ChatScreenState extends State<ChatScreen> {
           }, SetOptions(merge: true));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Message sent, but alert failed: $e')),
+      AppNotificationBannerService.error(
+        'Message sent, but alert failed: $e',
+        title: 'Alert not sent',
       );
     } finally {
       if (mounted) {

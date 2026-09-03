@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 
 class CustomerRegisterScreen extends StatefulWidget {
   const CustomerRegisterScreen({super.key});
@@ -30,8 +31,9 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
     final password = passwordController.text.trim();
 
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please complete all fields')),
+      AppNotificationBannerService.error(
+        'Please complete all fields.',
+        title: 'Missing details',
       );
       return;
     }
@@ -41,11 +43,8 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
     });
 
     try {
-      final credential =
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      final credential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
 
       final user = credential.user;
 
@@ -65,6 +64,10 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
 
       if (!mounted) return;
 
+      AppNotificationBannerService.success(
+        'Your customer account has been created.',
+        title: 'Account ready',
+      );
       Navigator.pushReplacementNamed(context, '/customerHome');
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
@@ -79,15 +82,11 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
         message = 'Password is too weak. Use at least 6 characters.';
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      AppNotificationBannerService.error(message, title: 'Registration failed');
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      AppNotificationBannerService.error(e.toString());
     } finally {
       if (mounted) {
         setState(() {

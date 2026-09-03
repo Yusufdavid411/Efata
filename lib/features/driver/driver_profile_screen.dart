@@ -7,6 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
+import '../../core/services/app_notification_banner_service.dart';
+
 class DriverProfileScreen extends StatefulWidget {
   const DriverProfileScreen({super.key});
 
@@ -61,14 +63,16 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       }, SetOptions(merge: true));
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Profile picture updated")));
+      AppNotificationBannerService.success(
+        'Profile picture updated.',
+        title: 'Profile updated',
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
+      AppNotificationBannerService.error(
+        'Upload failed: $e',
+        title: 'Upload failed',
+      );
     } finally {
       if (mounted) {
         setState(() => isUploading = false);
@@ -113,8 +117,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               final value = controller.text.trim();
 
               if (value.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Field cannot be empty")),
+                AppNotificationBannerService.error(
+                  'Field cannot be empty.',
+                  title: 'Missing detail',
                 );
                 return;
               }
@@ -151,14 +156,16 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
 
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("$title updated successfully")),
+                AppNotificationBannerService.success(
+                  '$title updated successfully.',
+                  title: 'Profile updated',
                 );
               } catch (e) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text("Update failed: $e")));
+                AppNotificationBannerService.error(
+                  'Update failed: $e',
+                  title: 'Update failed',
+                );
               }
             },
             child: const Text("Save"),
@@ -230,14 +237,16 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
 
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Vehicle updated successfully")),
+                AppNotificationBannerService.success(
+                  'Vehicle updated successfully.',
+                  title: 'Profile updated',
                 );
               } catch (e) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text("Update failed: $e")));
+                AppNotificationBannerService.error(
+                  'Update failed: $e',
+                  title: 'Update failed',
+                );
               }
             },
             child: const Text("Save"),

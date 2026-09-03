@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 
 class DriverRegisterScreen extends StatefulWidget {
   const DriverRegisterScreen({super.key});
@@ -30,8 +31,9 @@ class _DriverRegisterScreenState extends State<DriverRegisterScreen> {
     final password = passwordController.text.trim();
 
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please complete all fields')),
+      AppNotificationBannerService.error(
+        'Please complete all fields.',
+        title: 'Missing details',
       );
       return;
     }
@@ -76,6 +78,10 @@ class _DriverRegisterScreenState extends State<DriverRegisterScreen> {
 
       if (!mounted) return;
 
+      AppNotificationBannerService.success(
+        'Your driver account has been created.',
+        title: 'Account ready',
+      );
       Navigator.pushReplacementNamed(context, '/driverOnboarding');
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
@@ -90,15 +96,11 @@ class _DriverRegisterScreenState extends State<DriverRegisterScreen> {
         message = 'Password is too weak. Use at least 6 characters.';
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      AppNotificationBannerService.error(message, title: 'Registration failed');
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      AppNotificationBannerService.error(e.toString());
     } finally {
       if (mounted) {
         setState(() {

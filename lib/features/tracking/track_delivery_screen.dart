@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/services/app_notification_banner_service.dart';
 import '../chat/chat_screen.dart';
 import '../../shared/widgets/app_live_map.dart';
 
@@ -129,9 +130,10 @@ class TrackDeliveryScreen extends StatelessWidget {
     }, SetOptions(merge: true));
 
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Payment status updated')));
+    AppNotificationBannerService.success(
+      'Payment status updated.',
+      title: 'Payment updated',
+    );
   }
 
   Future<void> _reportPaymentIssue(BuildContext context) async {
@@ -182,8 +184,9 @@ class TrackDeliveryScreen extends StatelessWidget {
     }, SetOptions(merge: true));
 
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Payment issue sent to admin')),
+    AppNotificationBannerService.success(
+      'Payment issue sent to admin.',
+      title: 'Issue reported',
     );
   }
 
@@ -218,9 +221,10 @@ class TrackDeliveryScreen extends StatelessWidget {
     }, SetOptions(merge: true));
 
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Delivery request canceled')));
+    AppNotificationBannerService.success(
+      'Delivery request canceled.',
+      title: 'Request canceled',
+    );
   }
 
   int _progressIndex(String status) {

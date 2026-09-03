@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:logistics_app/core/controllers/app_settings_controller.dart';
+import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/features/map/map_picker_screen.dart';
 import 'package:logistics_app/features/tracking/track_delivery_screen.dart';
@@ -144,9 +145,14 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     return parts.first.trim().isEmpty ? address : parts.first.trim();
   }
 
-  List<PlaceSuggestion> _suggestionsFor(String query, {required bool isPickup}) {
+  List<PlaceSuggestion> _suggestionsFor(
+    String query, {
+    required bool isPickup,
+  }) {
     final cleaned = query.trim().toLowerCase();
-    final recent = isPickup ? recentPickupSuggestions : recentDropoffSuggestions;
+    final recent = isPickup
+        ? recentPickupSuggestions
+        : recentDropoffSuggestions;
     final source = [
       ...recent,
       ..._nigeriaPlaceCatalog.where((place) {
@@ -256,8 +262,9 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     if (access != LocationAccessStatus.granted) {
       if (!mounted) return;
       setState(() => isLocatingCurrent = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_locationAccessMessage(access))),
+      AppNotificationBannerService.error(
+        _locationAccessMessage(access),
+        title: 'Location unavailable',
       );
       return;
     }
@@ -294,8 +301,9 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     } catch (e) {
       if (!mounted) return;
       setState(() => isLocatingCurrent = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      AppNotificationBannerService.error(
+        e.toString().replaceFirst('Exception: ', ''),
+        title: 'Location unavailable',
       );
     }
   }
@@ -341,23 +349,18 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please login first')));
+      AppNotificationBannerService.error(
+        'Please login before requesting delivery.',
+        title: 'Login required',
+      );
       return;
     }
 
-    if (pickupController.text.isEmpty ||
-        dropoffController.text.isEmpty ||
-        itemController.text.isEmpty ||
-        pickupLat == null ||
-        pickupLng == null ||
-        dropoffLat == null ||
-        dropoffLng == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Choose pickup and drop-off from suggestions or map.'),
-        ),
+    final validationMessage = _bookingValidationMessage();
+    if (validationMessage != null) {
+      AppNotificationBannerService.error(
+        validationMessage,
+        title: 'Complete request',
       );
       return;
     }
@@ -400,11 +403,20 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
 
       if (!mounted) return;
 
+      AppNotificationBannerService.success(
+        'Your delivery request has been created.',
+        title: 'Request sent',
+      );
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => TrackDeliveryScreen(orderId: docRef.id),
         ),
+      );
+    } catch (_) {
+      AppNotificationBannerService.error(
+        'Network issue. Please try sending the delivery request again.',
       );
     } finally {
       if (mounted) {
@@ -413,6 +425,26 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
         });
       }
     }
+  }
+
+  String? _bookingValidationMessage() {
+    final pickupText = pickupController.text.trim();
+    final dropoffText = dropoffController.text.trim();
+    final itemText = itemController.text.trim();
+
+    if (pickupText.isEmpty || pickupLat == null || pickupLng == null) {
+      return 'Choose a pickup location from suggestions, current location, or map.';
+    }
+
+    if (dropoffText.isEmpty || dropoffLat == null || dropoffLng == null) {
+      return 'Choose a drop-off location from suggestions, current location, or map.';
+    }
+
+    if (itemText.isEmpty) {
+      return 'Tell us what you are sending before requesting delivery.';
+    }
+
+    return null;
   }
 
   Future<void> openSchedulePicker() async {
@@ -456,10 +488,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     final showLocationTools = isTypingLocation || !activeSelected;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Where's it going?"),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text("Where's it going?"), centerTitle: true),
       body: SafeArea(
         child: Column(
           children: [
@@ -522,7 +551,8 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
                     _SearchActionTile(
                       icon: Icons.search_rounded,
                       title: 'Set "$query" on map',
-                      subtitle: 'Drop the pin exactly where the driver should go.',
+                      subtitle:
+                          'Drop the pin exactly where the driver should go.',
                       onTap: () => openMapPicker(activeIsPickup),
                     )
                   else if (isTypingLocation)
@@ -938,11 +968,7 @@ class _SearchActionTile extends StatelessWidget {
           fontWeight: FontWeight.w900,
         ),
       ),
-      subtitle: Text(
-        subtitle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       onTap: onTap,
     );
   }
@@ -1196,8 +1222,8 @@ class _SchedulePickupSheetState extends State<_SchedulePickupSheet> {
                       label: index == 0
                           ? 'Today'
                           : index == 1
-                              ? 'Tomorrow'
-                              : _weekday(day),
+                          ? 'Tomorrow'
+                          : _weekday(day),
                       date: '${_month(day)} ${day.day}',
                       selected: selected,
                       onTap: () => setState(() => selectedDay = day),
@@ -1263,10 +1289,7 @@ class _SchedulePickupSheetState extends State<_SchedulePickupSheet> {
                 onPressed: () {
                   Navigator.pop(
                     context,
-                    const _PickupSchedule(
-                      dateTime: null,
-                      label: 'Pickup now',
-                    ),
+                    const _PickupSchedule(dateTime: null, label: 'Pickup now'),
                   );
                 },
                 child: const Text('Pickup now'),

@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/shared/widgets/app_live_map.dart';
 
@@ -139,8 +140,9 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
 
     if (!serviceEnabled) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please turn on your location service")),
+        AppNotificationBannerService.error(
+          'Please turn on your location service.',
+          title: 'Location needed',
         );
       }
       return false;
@@ -155,8 +157,9 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Location permission is required")),
+        AppNotificationBannerService.error(
+          'Location permission is required.',
+          title: 'Permission needed',
         );
       }
       return false;
@@ -332,12 +335,9 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
 
           void openVoiceNavigation({required bool includePickupStop}) {
             if (!canUseVoiceNavigation) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Voice navigation needs pickup and drop-off coordinates.',
-                  ),
-                ),
+              AppNotificationBannerService.error(
+                'Voice navigation needs pickup and drop-off coordinates.',
+                title: 'Route unavailable',
               );
               return;
             }

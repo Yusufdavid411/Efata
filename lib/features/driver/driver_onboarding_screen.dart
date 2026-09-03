@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:logistics_app/core/services/app_notification_banner_service.dart';
+
 import 'driver_home_screen.dart';
 
 class DriverOnboardingScreen extends StatefulWidget {
@@ -61,14 +63,16 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
         licenseUploaded = true;
       });
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Driver license uploaded')));
+      AppNotificationBannerService.success(
+        'Driver license uploaded.',
+        title: 'License uploaded',
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      AppNotificationBannerService.error(
+        'Upload failed: $e',
+        title: 'Upload failed',
+      );
     } finally {
       if (mounted) {
         setState(() => isUploadingLicense = false);
@@ -85,10 +89,9 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
         phoneController.text.trim().isEmpty ||
         plateController.text.trim().isEmpty ||
         !licenseUploaded) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please complete all fields and upload your license"),
-        ),
+      AppNotificationBannerService.error(
+        'Please complete all fields and upload your license.',
+        title: 'Missing driver details',
       );
       return;
     }
