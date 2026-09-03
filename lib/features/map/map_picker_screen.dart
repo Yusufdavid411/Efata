@@ -22,6 +22,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   String? locationMessage;
   bool locating = false;
   bool locationGranted = false;
+  MapType mapType = MapType.satellite;
 
   @override
   void initState() {
@@ -119,6 +120,68 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     }
   }
 
+  Future<void> showMapTypePicker() async {
+    final selected = await showModalBottomSheet<MapType>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Map Type',
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _MapTypeTile(
+                  icon: Icons.satellite_alt_rounded,
+                  title: 'Satellite',
+                  subtitle: 'Best for finding your exact pickup point.',
+                  isSelected: mapType == MapType.satellite,
+                  onTap: () => Navigator.pop(context, MapType.satellite),
+                ),
+                _MapTypeTile(
+                  icon: Icons.map_outlined,
+                  title: 'Default',
+                  subtitle: 'Clean road map view.',
+                  isSelected: mapType == MapType.normal,
+                  onTap: () => Navigator.pop(context, MapType.normal),
+                ),
+                _MapTypeTile(
+                  icon: Icons.terrain_rounded,
+                  title: 'Terrain',
+                  subtitle: 'Shows land shape and routes.',
+                  isSelected: mapType == MapType.terrain,
+                  onTap: () => Navigator.pop(context, MapType.terrain),
+                ),
+                _MapTypeTile(
+                  icon: Icons.layers_rounded,
+                  title: 'Hybrid',
+                  subtitle: 'Satellite view with road names.',
+                  isSelected: mapType == MapType.hybrid,
+                  onTap: () => Navigator.pop(context, MapType.hybrid),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selected == null || selected == mapType || !mounted) return;
+
+    setState(() => mapType = selected);
+  }
+
   @override
   void dispose() {
     labelController.dispose();
@@ -140,6 +203,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               target: selectedLocation,
               zoom: 13,
             ),
+            mapType: mapType,
             markers: {
               Marker(
                 markerId: const MarkerId('selected-location'),
@@ -157,6 +221,17 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                 mapController.complete(controller);
               }
             },
+          ),
+          Positioned(
+            right: 16,
+            top: MediaQuery.of(context).padding.top + 154,
+            child: _MapPickerButton(
+              icon: Icons.layers_rounded,
+              label: 'View',
+              tooltip: 'Change map type',
+              isActive: mapType != MapType.normal,
+              onTap: showMapTypePicker,
+            ),
           ),
           Positioned(
             left: 16,
@@ -258,6 +333,127 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MapPickerButton extends StatelessWidget {
+  const _MapPickerButton({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onTap,
+    this.isActive = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool isActive;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isActive ? const Color(0xFF0F766E) : const Color(0xFF0F172A);
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white,
+        elevation: 3,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            width: 54,
+            height: 50,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: color, size: 21),
+                const SizedBox(height: 1),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MapTypeTile extends StatelessWidget {
+  const _MapTypeTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isSelected
+        ? const Color(0xFF0F766E)
+        : const Color(0xFF334155);
+
+    return Material(
+      color: isSelected ? const Color(0xFFEFFDF6) : Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Color(0xFF16A34A),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

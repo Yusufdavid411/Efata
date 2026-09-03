@@ -51,6 +51,7 @@ class _DriverVoiceNavigationScreenState
   double? _remainingDistanceMeters;
   double? _remainingTimeSeconds;
   DateTime? _lastLocationWrite;
+  MapType _mapType = MapType.satellite;
 
   @override
   void initState() {
@@ -216,12 +217,72 @@ class _DriverVoiceNavigationScreenState
 
   Future<void> _onViewCreated(GoogleNavigationViewController controller) async {
     _controller = controller;
+    await controller.setMapType(mapType: _mapType);
     await controller.setMyLocationEnabled(true);
     await controller.settings.setZoomControlsEnabled(true);
     await controller.settings.setCompassEnabled(true);
     await controller.setSpeedometerEnabled(true);
     await controller.setSpeedLimitIconEnabled(true);
     await controller.followMyLocation(CameraPerspective.tilted, zoomLevel: 17);
+  }
+
+  Future<void> _showMapTypePicker() async {
+    final selected = await showModalBottomSheet<MapType>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Map Type',
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _NavigationMapTypeTile(
+                  icon: Icons.satellite_alt_rounded,
+                  title: 'Satellite',
+                  isSelected: _mapType == MapType.satellite,
+                  onTap: () => Navigator.pop(context, MapType.satellite),
+                ),
+                _NavigationMapTypeTile(
+                  icon: Icons.map_outlined,
+                  title: 'Default',
+                  isSelected: _mapType == MapType.normal,
+                  onTap: () => Navigator.pop(context, MapType.normal),
+                ),
+                _NavigationMapTypeTile(
+                  icon: Icons.terrain_rounded,
+                  title: 'Terrain',
+                  isSelected: _mapType == MapType.terrain,
+                  onTap: () => Navigator.pop(context, MapType.terrain),
+                ),
+                _NavigationMapTypeTile(
+                  icon: Icons.layers_rounded,
+                  title: 'Hybrid',
+                  isSelected: _mapType == MapType.hybrid,
+                  onTap: () => Navigator.pop(context, MapType.hybrid),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selected == null || selected == _mapType || !mounted) return;
+
+    setState(() => _mapType = selected);
+    await _controller?.setMapType(mapType: selected);
   }
 
   Future<void> _onRoadSnappedLocation(
@@ -385,6 +446,7 @@ class _DriverVoiceNavigationScreenState
                     initialNavigationUIEnabledPreference:
                         NavigationUIEnabledPreference.automatic,
                     initialForceNightMode: NavigationForceNightMode.auto,
+                    initialMapType: _mapType,
                     initialZoomControlsEnabled: true,
                     initialCompassEnabled: true,
                     initialCameraPosition: CameraPosition(
@@ -415,10 +477,20 @@ class _DriverVoiceNavigationScreenState
             right: 14,
             child: _RoundMapButton(
               icon: Icons.my_location_rounded,
+              tooltip: 'My location',
               onPressed: () => _controller?.followMyLocation(
                 CameraPerspective.tilted,
                 zoomLevel: 17,
               ),
+            ),
+          ),
+          Positioned(
+            top: topPadding + 62,
+            right: 14,
+            child: _RoundMapButton(
+              icon: Icons.layers_rounded,
+              tooltip: 'Change map type',
+              onPressed: _showMapTypePicker,
             ),
           ),
           if (!_promptVisible)
@@ -445,10 +517,15 @@ class _DriverVoiceNavigationScreenState
 }
 
 class _RoundMapButton extends StatelessWidget {
-  const _RoundMapButton({required this.icon, required this.onPressed});
+  const _RoundMapButton({
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+  });
 
   final IconData icon;
   final VoidCallback onPressed;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -457,8 +534,59 @@ class _RoundMapButton extends StatelessWidget {
       elevation: 4,
       shape: const CircleBorder(),
       child: IconButton(
+        tooltip: tooltip,
         icon: Icon(icon, color: const Color(0xFF0F172A)),
         onPressed: onPressed,
+      ),
+    );
+  }
+}
+
+class _NavigationMapTypeTile extends StatelessWidget {
+  const _NavigationMapTypeTile({
+    required this.icon,
+    required this.title,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isSelected
+        ? const Color(0xFF0F766E)
+        : const Color(0xFF334155);
+
+    return Material(
+      color: isSelected ? const Color(0xFFEFFDF6) : Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+          child: Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                ),
+              ),
+              if (isSelected)
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Color(0xFF16A34A),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

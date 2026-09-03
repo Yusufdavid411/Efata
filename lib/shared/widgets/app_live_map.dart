@@ -51,6 +51,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
   bool loadingRoute = false;
   bool loadingActiveRoute = false;
   bool locationChecked = false;
+  MapType mapType = MapType.satellite;
 
   @override
   void initState() {
@@ -89,16 +90,23 @@ class _AppLiveMapState extends State<AppLiveMap> {
     super.dispose();
   }
 
-  Future<void> _loadCurrentLocation() async {
+  Future<void> _loadCurrentLocation({bool centerAfterLoad = false}) async {
     final position = await LocationService.getCurrentPosition();
     if (!mounted) return;
 
+    final nextUserPoint = position == null
+        ? null
+        : LatLng(position.latitude, position.longitude);
+
     setState(() {
       locationChecked = true;
-      if (position != null) {
-        userPoint = LatLng(position.latitude, position.longitude);
-      }
+      if (nextUserPoint != null) userPoint = nextUserPoint;
     });
+
+    if (centerAfterLoad && nextUserPoint != null) {
+      await _centerOnPoint(nextUserPoint, zoom: 17);
+    }
+
     _loadActiveRouteIfNeeded(force: true);
   }
 
@@ -282,6 +290,88 @@ class _AppLiveMapState extends State<AppLiveMap> {
     );
   }
 
+  Future<void> _centerOnCurrentPosition() async {
+    if (userPoint != null) {
+      await _centerOnPoint(userPoint!, zoom: 17);
+      return;
+    }
+
+    await _loadCurrentLocation(centerAfterLoad: true);
+  }
+
+  Future<void> _centerOnPoint(LatLng point, {double zoom = 16}) async {
+    if (!_mapController.isCompleted) return;
+
+    final controller = await _mapController.future;
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: point, zoom: zoom, tilt: 45),
+      ),
+    );
+  }
+
+  Future<void> _showMapTypePicker() async {
+    final selected = await showModalBottomSheet<MapType>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Map Type',
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _MapTypeTile(
+                  icon: Icons.satellite_alt_rounded,
+                  title: 'Satellite',
+                  subtitle: 'Best for finding exact buildings and roads.',
+                  isSelected: mapType == MapType.satellite,
+                  onTap: () => Navigator.pop(context, MapType.satellite),
+                ),
+                _MapTypeTile(
+                  icon: Icons.map_outlined,
+                  title: 'Default',
+                  subtitle: 'Clean road map view.',
+                  isSelected: mapType == MapType.normal,
+                  onTap: () => Navigator.pop(context, MapType.normal),
+                ),
+                _MapTypeTile(
+                  icon: Icons.terrain_rounded,
+                  title: 'Terrain',
+                  subtitle: 'Shows land shape and major routes.',
+                  isSelected: mapType == MapType.terrain,
+                  onTap: () => Navigator.pop(context, MapType.terrain),
+                ),
+                _MapTypeTile(
+                  icon: Icons.layers_rounded,
+                  title: 'Hybrid',
+                  subtitle: 'Satellite view with road names.',
+                  isSelected: mapType == MapType.hybrid,
+                  onTap: () => Navigator.pop(context, MapType.hybrid),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selected == null || selected == mapType || !mounted) return;
+
+    setState(() => mapType = selected);
+  }
+
   LatLngBounds _boundsFor(List<LatLng> points) {
     var minLat = points.first.latitude;
     var maxLat = points.first.latitude;
@@ -361,6 +451,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
             target: widget.driverPoint ?? widget.pickupPoint,
             zoom: 13,
           ),
+          mapType: mapType,
           markers: markers,
           polylines: {
             Polyline(
@@ -389,7 +480,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
                 patterns: [PatternItem.dash(18), PatternItem.gap(10)],
               ),
           },
-          myLocationButtonEnabled: true,
+          myLocationButtonEnabled: false,
           myLocationEnabled: userPoint != null,
           zoomControlsEnabled: false,
           mapToolbarEnabled: false,
@@ -418,8 +509,9 @@ class _AppLiveMapState extends State<AppLiveMap> {
           left: 12,
           top: 12,
           child: _MapControlButton(
-            icon: Icons.center_focus_strong_rounded,
+            icon: Icons.route_rounded,
             tooltip: 'Fit route',
+            label: 'Route',
             onTap: _fitRoute,
           ),
         ),
@@ -428,7 +520,30 @@ class _AppLiveMapState extends State<AppLiveMap> {
           top: 62,
           child: _MapControlButton(
             icon: Icons.my_location_rounded,
+            tooltip: 'My location',
+            label: 'Me',
+            isActive: widget.followDriver || userPoint != null,
+            onTap: _centerOnCurrentPosition,
+          ),
+        ),
+        Positioned(
+          right: 12,
+          top: 12,
+          child: _MapControlButton(
+            icon: Icons.layers_rounded,
+            tooltip: 'Change map type',
+            label: 'View',
+            isActive: mapType != MapType.normal,
+            onTap: _showMapTypePicker,
+          ),
+        ),
+        Positioned(
+          right: 12,
+          top: 62,
+          child: _MapControlButton(
+            icon: Icons.navigation_rounded,
             tooltip: 'Follow driver',
+            label: 'Follow',
             isActive: widget.followDriver,
             onTap: _followDriver,
           ),
@@ -457,12 +572,14 @@ class _MapControlButton extends StatelessWidget {
   const _MapControlButton({
     required this.icon,
     required this.tooltip,
+    required this.label,
     required this.onTap,
     this.isActive = false,
   });
 
   final IconData icon;
   final String tooltip;
+  final String label;
   final VoidCallback onTap;
   final bool isActive;
 
@@ -480,9 +597,93 @@ class _MapControlButton extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(14),
           child: SizedBox(
-            width: 46,
-            height: 46,
-            child: Icon(icon, color: color),
+            width: 54,
+            height: 50,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: color, size: 21),
+                const SizedBox(height: 1),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MapTypeTile extends StatelessWidget {
+  const _MapTypeTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isSelected
+        ? const Color(0xFF0F766E)
+        : const Color(0xFF334155);
+
+    return Material(
+      color: isSelected ? const Color(0xFFEFFDF6) : Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Color(0xFF16A34A),
+                ),
+            ],
           ),
         ),
       ),

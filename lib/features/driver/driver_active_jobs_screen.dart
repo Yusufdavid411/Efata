@@ -377,9 +377,9 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                       ),
               ),
               DraggableScrollableSheet(
-                initialChildSize: 0.48,
-                minChildSize: 0.24,
-                maxChildSize: 0.82,
+                initialChildSize: 0.38,
+                minChildSize: 0.2,
+                maxChildSize: 0.78,
                 builder: (context, scrollController) {
                   return _DriverJobSheet(
                     scrollController: scrollController,
@@ -489,7 +489,7 @@ class _DriverJobAction {
   final VoidCallback onPressed;
 }
 
-class _DriverJobSheet extends StatelessWidget {
+class _DriverJobSheet extends StatefulWidget {
   const _DriverJobSheet({
     required this.scrollController,
     required this.statusLabel,
@@ -525,6 +525,13 @@ class _DriverJobSheet extends StatelessWidget {
   final _DriverJobAction? secondaryAction;
 
   @override
+  State<_DriverJobSheet> createState() => _DriverJobSheetState();
+}
+
+class _DriverJobSheetState extends State<_DriverJobSheet> {
+  bool showDetails = false;
+
+  @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -539,7 +546,7 @@ class _DriverJobSheet extends StatelessWidget {
         ],
       ),
       child: ListView(
-        controller: scrollController,
+        controller: widget.scrollController,
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
         children: [
           Center(
@@ -557,7 +564,7 @@ class _DriverJobSheet extends StatelessWidget {
             children: [
               const Expanded(
                 child: Text(
-                  "Live Delivery",
+                  'Live Delivery',
                   style: TextStyle(
                     color: Color(0xFF0F172A),
                     fontSize: 20,
@@ -565,51 +572,100 @@ class _DriverJobSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              _StatusPill(label: statusLabel),
+              _StatusPill(label: widget.statusLabel),
             ],
           ),
           const SizedBox(height: 16),
-          _RoutePoint(label: "Pickup", value: pickup),
+          _RoutePoint(label: 'Pickup', value: widget.pickup),
           const SizedBox(height: 12),
-          _RoutePoint(label: "Drop-off", value: dropoff),
-          const SizedBox(height: 16),
-          _InfoRow(icon: Icons.inventory_2_outlined, value: item),
-          if (vehicleType != null && vehicleType!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _InfoRow(icon: Icons.local_shipping_outlined, value: vehicleType!),
-          ],
-          const SizedBox(height: 8),
-          _InfoRow(icon: Icons.schedule_rounded, value: scheduleLabel),
-          const SizedBox(height: 8),
-          _InfoRow(icon: Icons.event_note_outlined, value: createdAtLabel),
-          if (priceLabel != null) ...[
-            const SizedBox(height: 8),
-            _InfoRow(icon: Icons.payments_outlined, value: priceLabel!),
-          ],
-          const SizedBox(height: 8),
-          _InfoRow(
-            icon: Icons.account_balance_wallet_outlined,
-            value: paymentLabel,
+          _RoutePoint(label: 'Drop-off', value: widget.dropoff),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _SummaryChip(
+                icon: Icons.inventory_2_outlined,
+                label: widget.item,
+              ),
+              if (widget.priceLabel != null)
+                _SummaryChip(
+                  icon: Icons.payments_outlined,
+                  label: widget.priceLabel!,
+                ),
+              if (widget.vehicleType != null && widget.vehicleType!.isNotEmpty)
+                _SummaryChip(
+                  icon: Icons.local_shipping_outlined,
+                  label: widget.vehicleType!,
+                ),
+            ],
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: () => setState(() => showDetails = !showDetails),
+            icon: Icon(
+              showDetails
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+            ),
+            label: Text(showDetails ? 'Hide Details' : 'Details'),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 12),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    _InfoRow(
+                      icon: Icons.schedule_rounded,
+                      value: widget.scheduleLabel,
+                    ),
+                    const SizedBox(height: 9),
+                    _InfoRow(
+                      icon: Icons.event_note_outlined,
+                      value: widget.createdAtLabel,
+                    ),
+                    const SizedBox(height: 9),
+                    _InfoRow(
+                      icon: Icons.account_balance_wallet_outlined,
+                      value: widget.paymentLabel,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            crossFadeState: showDetails
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 180),
+          ),
+          const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: onChat,
-            icon: _ChatBadge(count: unreadMessages),
-            label: Text(chatLabel),
+            onPressed: widget.onChat,
+            icon: _ChatBadge(count: widget.unreadMessages),
+            label: Text(widget.chatLabel),
           ),
           const SizedBox(height: 10),
-          if (secondaryAction != null) ...[
+          if (widget.secondaryAction != null) ...[
             OutlinedButton.icon(
-              onPressed: secondaryAction!.onPressed,
-              icon: Icon(secondaryAction!.icon),
-              label: Text(secondaryAction!.label),
+              onPressed: widget.secondaryAction!.onPressed,
+              icon: Icon(widget.secondaryAction!.icon),
+              label: Text(widget.secondaryAction!.label),
             ),
             const SizedBox(height: 10),
           ],
           ElevatedButton.icon(
-            onPressed: primaryAction.onPressed,
-            icon: Icon(primaryAction.icon),
-            label: Text(primaryAction.label),
+            onPressed: widget.primaryAction.onPressed,
+            icon: Icon(widget.primaryAction.icon),
+            label: Text(widget.primaryAction.label),
           ),
         ],
       ),
@@ -637,6 +693,45 @@ class _StatusPill extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.w900,
         ),
+      ),
+    );
+  }
+}
+
+class _SummaryChip extends StatelessWidget {
+  const _SummaryChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 38, maxWidth: 190),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: const Color(0xFF64748B), size: 17),
+          const SizedBox(width: 7),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF334155),
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
