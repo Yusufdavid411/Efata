@@ -218,6 +218,9 @@ class TrackDeliveryScreen extends StatelessWidget {
       'canceledAt': FieldValue.serverTimestamp(),
       'canceledBy': 'customer',
       'notificationStatus': 'canceled',
+      'unreadForCustomer': 0,
+      'unreadForDriver': 0,
+      'chatClosedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
     if (!context.mounted) return;

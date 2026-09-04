@@ -71,16 +71,25 @@ class ChatNotificationService {
     );
   }
 
-  void _handleOrderSnapshot(
+  Future<void> _handleOrderSnapshot(
     QuerySnapshot<Map<String, dynamic>> snapshot,
     String userId,
-  ) {
+  ) async {
     for (final change in snapshot.docChanges) {
       if (change.type == DocumentChangeType.removed) continue;
 
       final order = change.doc;
       final data = order.data();
       if (data == null) continue;
+
+      if (_isClosedOrder(data)) {
+        await _notifications.cancel(id: _notificationId(order.id));
+        final closedMessageTime = _messageTime(data['lastMessageAt']);
+        if (closedMessageTime != null) {
+          _seenMessageTimes[order.id] = closedMessageTime;
+        }
+        continue;
+      }
 
       final lastMessage = data['lastMessage']?.toString() ?? '';
       final senderId = data['lastMessageSenderId']?.toString();
@@ -151,27 +160,51 @@ class ChatNotificationService {
       icon: Icons.chat_bubble_outline_rounded,
     );
 
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = AndroidNotificationDetails(
       'delivery_chat_messages',
-      'Delivery chat messages',
-      channelDescription: 'Notifications for new delivery chat messages',
+      'EFATA chat',
+      channelDescription:
+          'Messages from drivers and customers during active deliveries',
       importance: Importance.high,
       priority: Priority.high,
       category: AndroidNotificationCategory.message,
       visibility: NotificationVisibility.public,
       ticker: 'New EFATA chat message',
       color: Color(0xFF0F766E),
+      colorized: true,
       enableVibration: true,
       playSound: true,
+      subText: 'Delivery chat',
+      styleInformation: BigTextStyleInformation(
+        cleanBody,
+        contentTitle: cleanTitle,
+        summaryText: 'Delivery chat',
+      ),
     );
 
     await _notifications.show(
-      id: orderId.hashCode & 0x7fffffff,
+      id: _notificationId(orderId),
       title: cleanTitle,
       body: cleanBody,
-      notificationDetails: const NotificationDetails(android: androidDetails),
+      notificationDetails: NotificationDetails(android: androidDetails),
       payload: orderId,
     );
+  }
+
+  int _notificationId(String orderId) => orderId.hashCode & 0x7fffffff;
+
+  bool _isClosedOrder(Map<String, dynamic> data) {
+    if (data['chatClosedAt'] != null) return true;
+
+    final status = data['status']?.toString().toLowerCase().replaceAll(
+      RegExp(r'[\s_-]+'),
+      '',
+    );
+
+    return status == 'completed' ||
+        status == 'canceled' ||
+        status == 'cancelled' ||
+        status == 'rejected';
   }
 
   Future<bool?> requestPhonePermission() async {

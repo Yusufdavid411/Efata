@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/location_service.dart';
+import 'package:logistics_app/core/services/voice_navigation_control_service.dart';
 import 'package:logistics_app/shared/widgets/app_live_map.dart';
 
 import '../chat/chat_screen.dart';
@@ -100,12 +101,18 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     await locationSubscription?.cancel();
     locationSubscription = null;
     trackingOrderId = null;
+    await VoiceNavigationControlService.stopActiveGuidance();
 
     await FirebaseFirestore.instance.collection('orders').doc(id).update({
       'status': 'completed',
       'completedAt': Timestamp.now(),
       'deliveryCompletedConfirmed': true,
       'notificationStatus': 'completed',
+      'unreadForCustomer': 0,
+      'unreadForDriver': 0,
+      'chatClosedAt': Timestamp.now(),
+      'voiceNavigationStatus': 'stopped',
+      'voiceNavigationStoppedAt': Timestamp.now(),
       'paymentStatus': paymentReceived
           ? 'paid'
           : data['paymentStatus'] ?? 'pending',

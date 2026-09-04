@@ -52,6 +52,9 @@ class OrderService {
       'status': 'rejected',
       'rejectedAt': Timestamp.now(),
       'notificationStatus': 'rejected',
+      'unreadForCustomer': 0,
+      'unreadForDriver': 0,
+      'chatClosedAt': Timestamp.now(),
     });
   }
 
@@ -68,6 +71,11 @@ class OrderService {
       'status': 'completed',
       'completedAt': Timestamp.now(),
       'notificationStatus': 'completed',
+      'unreadForCustomer': 0,
+      'unreadForDriver': 0,
+      'chatClosedAt': Timestamp.now(),
+      'voiceNavigationStatus': 'stopped',
+      'voiceNavigationStoppedAt': Timestamp.now(),
     });
   }
 

@@ -72,6 +72,22 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => isSending = true);
 
     try {
+      final order = await FirebaseFirestore.instance
+          .collection('orders')
+          .doc(widget.orderId)
+          .get();
+      final orderData = order.data();
+
+      if (_isClosedOrder(orderData)) {
+        if (!mounted) return;
+        AppNotificationBannerService.error(
+          'This delivery has ended, so the chat is now closed.',
+          title: 'Chat closed',
+        );
+        setState(() => isSending = false);
+        return;
+      }
+
       controller.clear();
 
       await messagesRef.add({
@@ -128,6 +144,20 @@ class _ChatScreenState extends State<ChatScreen> {
     final minute = date.minute.toString().padLeft(2, '0');
 
     return '$hour:$minute';
+  }
+
+  bool _isClosedOrder(Map<String, dynamic>? data) {
+    if (data == null || data['chatClosedAt'] != null) return true;
+
+    final status = data['status']?.toString().toLowerCase().replaceAll(
+      RegExp(r'[\s_-]+'),
+      '',
+    );
+
+    return status == 'completed' ||
+        status == 'canceled' ||
+        status == 'cancelled' ||
+        status == 'rejected';
   }
 
   @override

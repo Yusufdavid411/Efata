@@ -14,10 +14,12 @@ import 'package:logistics_app/features/settings/settings_screen.dart';
 import 'package:logistics_app/core/controllers/app_settings_controller.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/chat_notification_service.dart';
+import 'package:logistics_app/core/services/voice_navigation_control_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  await VoiceNavigationControlService.stopStaleGuidanceOnFreshLaunch();
   await appSettingsController.loadSettings();
   await ChatNotificationService.instance.initialize();
   runApp(const MyApp());

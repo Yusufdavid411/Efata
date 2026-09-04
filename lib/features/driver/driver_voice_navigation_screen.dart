@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_navigation_flutter/google_navigation_flutter.dart';
 import 'package:logistics_app/core/services/location_service.dart';
+import 'package:logistics_app/core/services/voice_navigation_control_service.dart';
 
 class DriverVoiceNavigationScreen extends StatefulWidget {
   const DriverVoiceNavigationScreen({
@@ -47,6 +48,8 @@ class _DriverVoiceNavigationScreenState
   bool _promptVisible = false;
   bool _pickupReached = false;
   bool _disposed = false;
+  bool _keepRunningAfterClose = false;
+  bool _stoppingNavigation = false;
   String _message = 'Preparing voice navigation';
   double? _remainingDistanceMeters;
   double? _remainingTimeSeconds;
@@ -87,7 +90,7 @@ class _DriverVoiceNavigationScreenState
       }
 
       await GoogleMapsNavigator.initializeNavigationSession(
-        taskRemovedBehavior: TaskRemovedBehavior.continueService,
+        taskRemovedBehavior: TaskRemovedBehavior.quitService,
       );
       await GoogleMapsNavigator.setAudioGuidance(
         NavigationAudioGuidanceSettings(
@@ -162,6 +165,13 @@ class _DriverVoiceNavigationScreenState
     }
 
     await GoogleMapsNavigator.startGuidance();
+    await FirebaseFirestore.instance
+        .collection('orders')
+        .doc(widget.orderId)
+        .set({
+          'voiceNavigationStatus': 'running',
+          'voiceNavigationStartedAt': Timestamp.now(),
+        }, SetOptions(merge: true));
     await _controller?.setNavigationUIEnabled(true);
     await _controller?.followMyLocation(
       CameraPerspective.tilted,
@@ -337,15 +347,58 @@ class _DriverVoiceNavigationScreenState
   }
 
   Future<void> _stopNavigation() async {
-    try {
-      if (_guidanceRunning) {
-        await GoogleMapsNavigator.stopGuidance();
-      }
-      await GoogleMapsNavigator.cleanup();
-    } on SessionNotInitializedException {
-      // The session may already be cleaned up by the platform.
-    }
+    if (_stoppingNavigation) return;
+
+    setState(() {
+      _stoppingNavigation = true;
+      _message = 'Stopping voice navigation';
+    });
+
+    await VoiceNavigationControlService.stopActiveGuidance();
+    await FirebaseFirestore.instance
+        .collection('orders')
+        .doc(widget.orderId)
+        .set({
+          'voiceNavigationStatus': 'stopped',
+          'voiceNavigationStoppedAt': Timestamp.now(),
+        }, SetOptions(merge: true));
+    _guidanceRunning = false;
     if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _keepRunningInBackground() async {
+    _keepRunningAfterClose = true;
+    await FirebaseFirestore.instance
+        .collection('orders')
+        .doc(widget.orderId)
+        .set({
+          'voiceNavigationStatus': 'background',
+          'voiceNavigationBackgroundAt': Timestamp.now(),
+        }, SetOptions(merge: true));
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _handleCloseRequest() async {
+    if (!_guidanceRunning) {
+      await _stopNavigation();
+      return;
+    }
+
+    final action = await showModalBottomSheet<_NavigationExitAction>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (context) => const _NavigationExitSheet(),
+    );
+
+    if (!mounted || action == null) return;
+
+    switch (action) {
+      case _NavigationExitAction.keepRunning:
+        await _keepRunningInBackground();
+      case _NavigationExitAction.stop:
+        await _stopNavigation();
+    }
   }
 
   Future<void> _clearListeners() async {
@@ -426,7 +479,11 @@ class _DriverVoiceNavigationScreenState
     _disposed = true;
     unawaited(_clearListeners());
     if (_sessionReady) {
-      unawaited(GoogleMapsNavigator.cleanup(resetSession: false));
+      if (_keepRunningAfterClose) {
+        unawaited(VoiceNavigationControlService.detachListenersOnly());
+      } else {
+        unawaited(VoiceNavigationControlService.stopActiveGuidance());
+      }
     }
     super.dispose();
   }
@@ -435,82 +492,145 @@ class _DriverVoiceNavigationScreenState
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FC),
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: _sessionReady
-                ? GoogleMapsNavigationView(
-                    onViewCreated: _onViewCreated,
-                    initialNavigationUIEnabledPreference:
-                        NavigationUIEnabledPreference.automatic,
-                    initialForceNightMode: NavigationForceNightMode.auto,
-                    initialMapType: _mapType,
-                    initialZoomControlsEnabled: true,
-                    initialCompassEnabled: true,
-                    initialCameraPosition: CameraPosition(
-                      target: LatLng(
-                        latitude: widget.pickupLat,
-                        longitude: widget.pickupLng,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) unawaited(_handleCloseRequest());
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF6F8FC),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: _sessionReady
+                  ? GoogleMapsNavigationView(
+                      onViewCreated: _onViewCreated,
+                      initialNavigationUIEnabledPreference:
+                          NavigationUIEnabledPreference.automatic,
+                      initialForceNightMode: NavigationForceNightMode.auto,
+                      initialMapType: _mapType,
+                      initialZoomControlsEnabled: true,
+                      initialCompassEnabled: true,
+                      initialCameraPosition: CameraPosition(
+                        target: LatLng(
+                          latitude: widget.pickupLat,
+                          longitude: widget.pickupLng,
+                        ),
+                        zoom: 15,
                       ),
-                      zoom: 15,
-                    ),
-                    onPromptVisibilityChanged: (visible) {
-                      if (mounted) {
-                        setState(() => _promptVisible = visible);
-                      }
-                    },
-                  )
-                : const Center(child: CircularProgressIndicator()),
-          ),
-          Positioned(
-            top: topPadding + 10,
-            left: 14,
-            child: _RoundMapButton(
-              icon: Icons.arrow_back_rounded,
-              onPressed: () => Navigator.pop(context),
+                      onPromptVisibilityChanged: (visible) {
+                        if (mounted) {
+                          setState(() => _promptVisible = visible);
+                        }
+                      },
+                    )
+                  : const Center(child: CircularProgressIndicator()),
             ),
-          ),
-          Positioned(
-            top: topPadding + 10,
-            right: 14,
-            child: _RoundMapButton(
-              icon: Icons.my_location_rounded,
-              tooltip: 'My location',
-              onPressed: () => _controller?.followMyLocation(
-                CameraPerspective.tilted,
-                zoomLevel: 17,
-              ),
-            ),
-          ),
-          Positioned(
-            top: topPadding + 62,
-            right: 14,
-            child: _RoundMapButton(
-              icon: Icons.layers_rounded,
-              tooltip: 'Change map type',
-              onPressed: _showMapTypePicker,
-            ),
-          ),
-          if (!_promptVisible)
             Positioned(
-              left: 16,
-              right: 16,
-              bottom: 18 + MediaQuery.of(context).padding.bottom,
-              child: _VoiceNavigationPanel(
-                message: _message,
-                pickupLabel: widget.pickupLabel,
-                dropoffLabel: widget.dropoffLabel,
-                routeFailed: _routeFailed,
-                guidanceRunning: _guidanceRunning,
-                remainingDistanceMeters: _remainingDistanceMeters,
-                remainingTimeSeconds: _remainingTimeSeconds,
-                onRetry: _routeFailed ? _startGuidanceWithRetry : null,
-                onStop: _stopNavigation,
+              top: topPadding + 10,
+              left: 14,
+              child: _RoundMapButton(
+                icon: Icons.arrow_back_rounded,
+                tooltip: 'Close navigation',
+                onPressed: _handleCloseRequest,
               ),
             ),
-        ],
+            Positioned(
+              top: topPadding + 10,
+              right: 14,
+              child: _RoundMapButton(
+                icon: Icons.my_location_rounded,
+                tooltip: 'My location',
+                onPressed: () => _controller?.followMyLocation(
+                  CameraPerspective.tilted,
+                  zoomLevel: 17,
+                ),
+              ),
+            ),
+            Positioned(
+              top: topPadding + 62,
+              right: 14,
+              child: _RoundMapButton(
+                icon: Icons.layers_rounded,
+                tooltip: 'Change map type',
+                onPressed: _showMapTypePicker,
+              ),
+            ),
+            if (!_promptVisible)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 18 + MediaQuery.of(context).padding.bottom,
+                child: _VoiceNavigationPanel(
+                  message: _message,
+                  pickupLabel: widget.pickupLabel,
+                  dropoffLabel: widget.dropoffLabel,
+                  routeFailed: _routeFailed,
+                  guidanceRunning: _guidanceRunning,
+                  remainingDistanceMeters: _remainingDistanceMeters,
+                  remainingTimeSeconds: _remainingTimeSeconds,
+                  onRetry: _routeFailed ? _startGuidanceWithRetry : null,
+                  onKeepRunning: _guidanceRunning
+                      ? _keepRunningInBackground
+                      : null,
+                  onStop: _stopNavigation,
+                  isStopping: _stoppingNavigation,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _NavigationExitAction { keepRunning, stop }
+
+class _NavigationExitSheet extends StatelessWidget {
+  const _NavigationExitSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Voice Navigation',
+              style: TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Do you want EFATA to keep giving directions in the background?',
+              style: TextStyle(
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w700,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton.icon(
+              onPressed: () =>
+                  Navigator.pop(context, _NavigationExitAction.keepRunning),
+              icon: const Icon(Icons.volume_up_rounded),
+              label: const Text('Keep Running'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  Navigator.pop(context, _NavigationExitAction.stop),
+              icon: const Icon(Icons.stop_circle_outlined),
+              label: const Text('Stop Navigation'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -602,7 +722,9 @@ class _VoiceNavigationPanel extends StatelessWidget {
     required this.remainingDistanceMeters,
     required this.remainingTimeSeconds,
     required this.onRetry,
+    required this.onKeepRunning,
     required this.onStop,
+    required this.isStopping,
   });
 
   final String message;
@@ -613,7 +735,9 @@ class _VoiceNavigationPanel extends StatelessWidget {
   final double? remainingDistanceMeters;
   final double? remainingTimeSeconds;
   final VoidCallback? onRetry;
+  final VoidCallback? onKeepRunning;
   final VoidCallback onStop;
+  final bool isStopping;
 
   @override
   Widget build(BuildContext context) {
@@ -719,15 +843,31 @@ class _VoiceNavigationPanel extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                 ],
+                if (onKeepRunning != null) ...[
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: isStopping ? null : onKeepRunning,
+                      icon: const Icon(Icons.open_in_new_rounded),
+                      label: const Text('Keep Running'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onStop,
+                  child: ElevatedButton.icon(
+                    onPressed: isStopping ? null : onStop,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      foregroundColor: Colors.white,
+                    ),
                     icon: Icon(
-                      Platform.isAndroid
+                      isStopping
+                          ? Icons.hourglass_top_rounded
+                          : Platform.isAndroid
                           ? Icons.stop_circle_outlined
                           : Icons.close_rounded,
                     ),
-                    label: const Text('Stop'),
+                    label: Text(isStopping ? 'Stopping...' : 'Stop'),
                   ),
                 ),
               ],
