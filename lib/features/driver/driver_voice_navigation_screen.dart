@@ -52,6 +52,7 @@ class _DriverVoiceNavigationScreenState
   bool _stoppingNavigation = false;
   bool _stopRequested = false;
   bool _reviewingGoogleNotice = false;
+  bool _voicePanelExpanded = false;
   String _message = 'Preparing voice navigation';
   double? _remainingDistanceMeters;
   double? _remainingTimeSeconds;
@@ -205,6 +206,7 @@ class _DriverVoiceNavigationScreenState
     setState(() {
       _guidanceRunning = true;
       _routeFailed = false;
+      _voicePanelExpanded = false;
       _message = widget.includePickupStop
           ? 'Voice guidance to pickup has started'
           : 'Voice guidance to drop-off has started';
@@ -488,6 +490,7 @@ class _DriverVoiceNavigationScreenState
 
     setState(() {
       _routeFailed = true;
+      _voicePanelExpanded = true;
       _message = message;
     });
   }
@@ -653,6 +656,12 @@ class _DriverVoiceNavigationScreenState
                       : null,
                   onStop: _stopNavigation,
                   isStopping: _stoppingNavigation,
+                  expanded: _voicePanelExpanded || _routeFailed,
+                  onToggleExpanded: () {
+                    setState(() {
+                      _voicePanelExpanded = !_voicePanelExpanded;
+                    });
+                  },
                 ),
               ),
           ],
@@ -983,6 +992,8 @@ class _VoiceNavigationPanel extends StatelessWidget {
     required this.onKeepRunning,
     required this.onStop,
     required this.isStopping,
+    required this.expanded,
+    required this.onToggleExpanded,
   });
 
   final String message;
@@ -996,9 +1007,26 @@ class _VoiceNavigationPanel extends StatelessWidget {
   final VoidCallback? onKeepRunning;
   final VoidCallback onStop;
   final bool isStopping;
+  final bool expanded;
+  final VoidCallback onToggleExpanded;
 
   @override
   Widget build(BuildContext context) {
+    if (guidanceRunning && !routeFailed && !expanded) {
+      return _CompactVoiceNavigationBar(
+        message: message,
+        distanceLabel: remainingDistanceMeters == null
+            ? null
+            : _formatDistance(remainingDistanceMeters!),
+        durationLabel: remainingTimeSeconds == null
+            ? null
+            : _formatDuration(remainingTimeSeconds!),
+        onMore: onToggleExpanded,
+        onStop: onStop,
+        isStopping: isStopping,
+      );
+    }
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1053,6 +1081,8 @@ class _VoiceNavigationPanel extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         message,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Color(0xFF64748B),
                           fontWeight: FontWeight.w700,
@@ -1061,6 +1091,12 @@ class _VoiceNavigationPanel extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (guidanceRunning && !routeFailed)
+                  IconButton(
+                    tooltip: 'Hide details',
+                    onPressed: onToggleExpanded,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                  ),
               ],
             ),
             if (remainingDistanceMeters != null ||
@@ -1149,6 +1185,123 @@ class _VoiceNavigationPanel extends StatelessWidget {
       return remainder == 0 ? '${hours}h' : '${hours}h ${remainder}m';
     }
     return '$minutes min';
+  }
+}
+
+class _CompactVoiceNavigationBar extends StatelessWidget {
+  const _CompactVoiceNavigationBar({
+    required this.message,
+    required this.distanceLabel,
+    required this.durationLabel,
+    required this.onMore,
+    required this.onStop,
+    required this.isStopping,
+  });
+
+  final String message;
+  final String? distanceLabel;
+  final String? durationLabel;
+  final VoidCallback onMore;
+  final VoidCallback onStop;
+  final bool isStopping;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 10,
+      shadowColor: const Color(0x330F172A),
+      borderRadius: BorderRadius.circular(22),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFFDF6),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: const Icon(
+                Icons.volume_up_rounded,
+                color: Color(0xFF0F766E),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: onMore,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Voice Navigation',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _compactStatus,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            IconButton.filledTonal(
+              tooltip: 'More details',
+              onPressed: onMore,
+              icon: const Icon(Icons.keyboard_arrow_up_rounded),
+            ),
+            const SizedBox(width: 6),
+            IconButton.filled(
+              tooltip: 'Stop navigation',
+              onPressed: isStopping ? null : onStop,
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: const Color(0xFFE5E7EB),
+                disabledForegroundColor: const Color(0xFF94A3B8),
+              ),
+              icon: Icon(
+                isStopping
+                    ? Icons.hourglass_top_rounded
+                    : Platform.isAndroid
+                    ? Icons.stop_circle_outlined
+                    : Icons.close_rounded,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String get _compactStatus {
+    final metrics = [
+      if (distanceLabel != null) distanceLabel!,
+      if (durationLabel != null) durationLabel!,
+    ].join(' - ');
+
+    if (metrics.isEmpty) return message;
+    return metrics;
   }
 }
 
