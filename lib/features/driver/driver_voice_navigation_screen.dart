@@ -51,6 +51,7 @@ class _DriverVoiceNavigationScreenState
   bool _keepRunningAfterClose = false;
   bool _stoppingNavigation = false;
   bool _stopRequested = false;
+  bool _reviewingGoogleNotice = false;
   String _message = 'Preparing voice navigation';
   double? _remainingDistanceMeters;
   double? _remainingTimeSeconds;
@@ -111,34 +112,28 @@ class _DriverVoiceNavigationScreenState
     if (await GoogleMapsNavigator.areTermsAccepted()) return true;
     if (!mounted) return false;
 
-    final shouldContinue = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      isDismissible: false,
-      enableDrag: false,
-      backgroundColor: Colors.white,
-      builder: (context) => _VoiceNavigationIntroSheet(
-        pickupLabel: widget.pickupLabel,
-        dropoffLabel: widget.dropoffLabel,
-      ),
-    );
+    setState(() {
+      _reviewingGoogleNotice = true;
+      _message = 'Review the Google navigation notice';
+    });
 
-    if (shouldContinue != true || !mounted) return false;
-
-    setState(() => _message = 'Review the Google navigation notice');
-
-    return GoogleMapsNavigator.showTermsAndConditionsDialog(
-      'EFATA voice navigation',
-      'EFATA',
-      uiParams: const TermsAndConditionsUIParams(
-        backgroundColor: Colors.white,
-        titleColor: Color(0xFF0F766E),
-        mainTextColor: Color(0xFF334155),
-        acceptButtonTextColor: Color(0xFF0F766E),
-        cancelButtonTextColor: Color(0xFFDC2626),
-      ),
-    );
+    try {
+      return await GoogleMapsNavigator.showTermsAndConditionsDialog(
+        'EFATA voice navigation',
+        'EFATA',
+        uiParams: const TermsAndConditionsUIParams(
+          backgroundColor: Colors.white,
+          titleColor: Color(0xFF0F766E),
+          mainTextColor: Color(0xFF334155),
+          acceptButtonTextColor: Color(0xFF0F766E),
+          cancelButtonTextColor: Color(0xFFDC2626),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _reviewingGoogleNotice = false);
+      }
+    }
   }
 
   Future<void> _setupListeners() async {
@@ -601,39 +596,45 @@ class _DriverVoiceNavigationScreenState
                         }
                       },
                     )
-                  : const Center(child: CircularProgressIndicator()),
+                  : _VoiceNavigationSetupView(
+                      pickupLabel: widget.pickupLabel,
+                      dropoffLabel: widget.dropoffLabel,
+                      reviewingGoogleNotice: _reviewingGoogleNotice,
+                    ),
             ),
-            Positioned(
-              top: topPadding + 10,
-              left: 14,
-              child: _RoundMapButton(
-                icon: Icons.arrow_back_rounded,
-                tooltip: 'Close navigation',
-                onPressed: _handleCloseRequest,
-              ),
-            ),
-            Positioned(
-              top: topPadding + 10,
-              right: 14,
-              child: _RoundMapButton(
-                icon: Icons.my_location_rounded,
-                tooltip: 'My location',
-                onPressed: () => _controller?.followMyLocation(
-                  CameraPerspective.tilted,
-                  zoomLevel: 17,
+            if (_sessionReady) ...[
+              Positioned(
+                top: topPadding + 10,
+                left: 14,
+                child: _RoundMapButton(
+                  icon: Icons.arrow_back_rounded,
+                  tooltip: 'Close navigation',
+                  onPressed: _handleCloseRequest,
                 ),
               ),
-            ),
-            Positioned(
-              top: topPadding + 62,
-              right: 14,
-              child: _RoundMapButton(
-                icon: Icons.layers_rounded,
-                tooltip: 'Change map type',
-                onPressed: _showMapTypePicker,
+              Positioned(
+                top: topPadding + 10,
+                right: 14,
+                child: _RoundMapButton(
+                  icon: Icons.my_location_rounded,
+                  tooltip: 'My location',
+                  onPressed: () => _controller?.followMyLocation(
+                    CameraPerspective.tilted,
+                    zoomLevel: 17,
+                  ),
+                ),
               ),
-            ),
-            if (!_promptVisible)
+              Positioned(
+                top: topPadding + 62,
+                right: 14,
+                child: _RoundMapButton(
+                  icon: Icons.layers_rounded,
+                  tooltip: 'Change map type',
+                  onPressed: _showMapTypePicker,
+                ),
+              ),
+            ],
+            if (!_promptVisible && _sessionReady)
               Positioned(
                 left: 16,
                 right: 16,
@@ -663,114 +664,134 @@ class _DriverVoiceNavigationScreenState
 
 enum _NavigationExitAction { keepRunning, stop }
 
-class _VoiceNavigationIntroSheet extends StatelessWidget {
-  const _VoiceNavigationIntroSheet({
+class _VoiceNavigationSetupView extends StatelessWidget {
+  const _VoiceNavigationSetupView({
     required this.pickupLabel,
     required this.dropoffLabel,
+    required this.reviewingGoogleNotice,
   });
 
   final String pickupLabel;
   final String dropoffLabel;
+  final bool reviewingGoogleNotice;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFFDF6),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(
-                    Icons.navigation_rounded,
-                    color: Color(0xFF0F766E),
-                  ),
+    return ColoredBox(
+      color: const Color(0xFFF6F8FC),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 28, 22, 22),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFFDF6),
+                  borderRadius: BorderRadius.circular(18),
                 ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Voice Navigation',
-                        style: TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'EFATA will guide this delivery through Google Navigation.',
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: const Icon(
+                  Icons.navigation_rounded,
+                  color: Color(0xFF0F766E),
+                  size: 30,
                 ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
-              child: _TinyRouteLine(
-                pickupLabel: pickupLabel,
-                dropoffLabel: dropoffLabel,
+              const SizedBox(height: 24),
+              const Text(
+                'Voice Navigation',
+                style: TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            const _NavigationSafetyNote(
-              icon: Icons.gps_fixed_rounded,
-              title: 'Live GPS route',
-              body:
-                  'The map will follow your current position and reroute when needed.',
-            ),
-            const SizedBox(height: 10),
-            const _NavigationSafetyNote(
-              icon: Icons.volume_up_rounded,
-              title: 'Voice instructions',
-              body:
-                  'Turn-by-turn voice guidance can continue until you stop it.',
-            ),
-            const SizedBox(height: 10),
-            const _NavigationSafetyNote(
-              icon: Icons.verified_user_rounded,
-              title: 'One-time Google notice',
-              body:
-                  'Google requires a navigation notice before voice guidance starts.',
-            ),
-            const SizedBox(height: 18),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pop(context, true),
-              icon: const Icon(Icons.check_circle_rounded),
-              label: const Text('Accept'),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                reviewingGoogleNotice
+                    ? 'Please accept the required Google notice to start turn-by-turn guidance.'
+                    : 'Preparing the route and voice guidance for this delivery.',
+                style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x140F172A),
+                      blurRadius: 16,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: _TinyRouteLine(
+                  pickupLabel: pickupLabel,
+                  dropoffLabel: dropoffLabel,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const _SetupStep(
+                icon: Icons.gps_fixed_rounded,
+                title: 'Live GPS route',
+                body: 'The map follows the driver position during delivery.',
+              ),
+              const SizedBox(height: 12),
+              const _SetupStep(
+                icon: Icons.alt_route_rounded,
+                title: 'Automatic rerouting',
+                body:
+                    'Google Navigation recalculates when the driver changes road.',
+              ),
+              const SizedBox(height: 12),
+              const _SetupStep(
+                icon: Icons.volume_up_rounded,
+                title: 'Voice instructions',
+                body:
+                    'Directions will continue until the driver stops guidance.',
+              ),
+              const Spacer(),
+              Center(
+                child: Column(
+                  children: [
+                    const SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 3),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      reviewingGoogleNotice
+                          ? 'Waiting for acceptance'
+                          : 'Preparing navigation',
+                      style: const TextStyle(
+                        color: Color(0xFF0F766E),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _NavigationSafetyNote extends StatelessWidget {
-  const _NavigationSafetyNote({
+class _SetupStep extends StatelessWidget {
+  const _SetupStep({
     required this.icon,
     required this.title,
     required this.body,
@@ -785,7 +806,15 @@ class _NavigationSafetyNote extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: const Color(0xFF0F766E), size: 22),
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFFDF6),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, color: const Color(0xFF0F766E), size: 22),
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
