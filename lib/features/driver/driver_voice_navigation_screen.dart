@@ -74,7 +74,7 @@ class _DriverVoiceNavigationScreenState
       final termsAccepted = await _confirmNavigationTerms();
 
       if (!termsAccepted) {
-        _setFailure('Accept Google navigation terms to use voice guidance.');
+        if (mounted) Navigator.pop(context);
         return;
       }
 
@@ -95,15 +95,16 @@ class _DriverVoiceNavigationScreenState
         _sessionReady = true;
         _message = 'Finding the best road route';
       });
-
-      await _startGuidanceWithRetry();
     } on SessionInitializationException catch (error) {
       _setFailure(_sessionErrorMessage(error.code));
     } catch (error) {
       _setFailure(
         'Voice navigation could not start. Please check the map key.',
       );
+      return;
     }
+
+    await _startGuidanceWithRetry();
   }
 
   Future<bool> _confirmNavigationTerms() async {
@@ -114,6 +115,8 @@ class _DriverVoiceNavigationScreenState
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
       backgroundColor: Colors.white,
       builder: (context) => _VoiceNavigationIntroSheet(
         pickupLabel: widget.pickupLabel,
@@ -167,17 +170,28 @@ class _DriverVoiceNavigationScreenState
   }
 
   Future<void> _startGuidanceWithRetry() async {
+    if (!mounted) return;
+    setState(() {
+      _routeFailed = false;
+      _message = 'Finding the best road route';
+    });
+
     NavigationRouteStatus status = NavigationRouteStatus.locationUnavailable;
 
-    for (var attempt = 0; attempt < 4; attempt++) {
-      status = await GoogleMapsNavigator.setDestinations(_destinations);
-      if (status == NavigationRouteStatus.statusOk) break;
+    try {
+      for (var attempt = 0; attempt < 4; attempt++) {
+        status = await GoogleMapsNavigator.setDestinations(_destinations);
+        if (status == NavigationRouteStatus.statusOk) break;
 
-      final shouldRetry =
-          status == NavigationRouteStatus.locationUnavailable ||
-          status == NavigationRouteStatus.locationUnknown;
-      if (!shouldRetry) break;
-      await Future.delayed(const Duration(seconds: 3));
+        final shouldRetry =
+            status == NavigationRouteStatus.locationUnavailable ||
+            status == NavigationRouteStatus.locationUnknown;
+        if (!shouldRetry) break;
+        await Future.delayed(const Duration(seconds: 3));
+      }
+    } catch (_) {
+      _setFailure('Voice navigation could not prepare the route. Try again.');
+      return;
     }
 
     if (status != NavigationRouteStatus.statusOk) {
@@ -185,19 +199,12 @@ class _DriverVoiceNavigationScreenState
       return;
     }
 
-    await GoogleMapsNavigator.startGuidance();
-    await FirebaseFirestore.instance
-        .collection('orders')
-        .doc(widget.orderId)
-        .set({
-          'voiceNavigationStatus': 'running',
-          'voiceNavigationStartedAt': Timestamp.now(),
-        }, SetOptions(merge: true));
-    await _controller?.setNavigationUIEnabled(true);
-    await _controller?.followMyLocation(
-      CameraPerspective.tilted,
-      zoomLevel: 17,
-    );
+    try {
+      await GoogleMapsNavigator.startGuidance();
+    } catch (_) {
+      _setFailure('Voice navigation could not start. Please try again.');
+      return;
+    }
 
     if (!mounted) return;
     setState(() {
@@ -207,6 +214,36 @@ class _DriverVoiceNavigationScreenState
           ? 'Voice guidance to pickup has started'
           : 'Voice guidance to drop-off has started';
     });
+
+    unawaited(_markVoiceNavigationRunning());
+    unawaited(_enableNavigationUi());
+  }
+
+  Future<void> _markVoiceNavigationRunning() async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('orders')
+          .doc(widget.orderId)
+          .set({
+            'voiceNavigationStatus': 'running',
+            'voiceNavigationStartedAt': Timestamp.now(),
+          }, SetOptions(merge: true))
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Guidance is already running; a slow status write should not show a false error.
+    }
+  }
+
+  Future<void> _enableNavigationUi() async {
+    try {
+      await _controller?.setNavigationUIEnabled(true);
+      await _controller?.followMyLocation(
+        CameraPerspective.tilted,
+        zoomLevel: 17,
+      );
+    } catch (_) {
+      // The native navigation UI can still keep guiding even if one view command fails.
+    }
   }
 
   Destinations get _destinations {
@@ -449,6 +486,11 @@ class _DriverVoiceNavigationScreenState
 
   void _setFailure(String message) {
     if (!mounted || _disposed) return;
+    if (_guidanceRunning) {
+      setState(() => _message = message);
+      return;
+    }
+
     setState(() {
       _routeFailed = true;
       _message = message;
@@ -659,7 +701,7 @@ class _VoiceNavigationIntroSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Start Voice Navigation',
+                        'Voice Navigation',
                         style: TextStyle(
                           color: Color(0xFF0F172A),
                           fontSize: 22,
@@ -718,12 +760,7 @@ class _VoiceNavigationIntroSheet extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: () => Navigator.pop(context, true),
               icon: const Icon(Icons.check_circle_rounded),
-              label: const Text('Continue'),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+              label: const Text('Accept'),
             ),
           ],
         ),
