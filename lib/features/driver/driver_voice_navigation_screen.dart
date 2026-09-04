@@ -54,7 +54,7 @@ class _DriverVoiceNavigationScreenState
   double? _remainingDistanceMeters;
   double? _remainingTimeSeconds;
   DateTime? _lastLocationWrite;
-  MapType _mapType = MapType.satellite;
+  MapType _mapType = MapType.hybrid;
 
   @override
   void initState() {

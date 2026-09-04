@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:logistics_app/core/controllers/app_settings_controller.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/location_service.dart';
+import 'package:logistics_app/core/services/place_suggestion_service.dart';
 import 'package:logistics_app/features/map/map_picker_screen.dart';
 import 'package:logistics_app/features/tracking/track_delivery_screen.dart';
 
@@ -130,7 +131,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     seen.add(key);
     target.add(
       PlaceSuggestion(
-        title: _primaryPlaceName(cleanAddress),
+        title: PlaceSuggestionService.primaryPlaceName(cleanAddress),
         subtitle: 'Used before',
         address: cleanAddress,
         latitude: lat,
@@ -140,43 +141,14 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     );
   }
 
-  String _primaryPlaceName(String address) {
-    final parts = address.split(',');
-    return parts.first.trim().isEmpty ? address : parts.first.trim();
-  }
-
   List<PlaceSuggestion> _suggestionsFor(
     String query, {
     required bool isPickup,
   }) {
-    final cleaned = query.trim().toLowerCase();
     final recent = isPickup
         ? recentPickupSuggestions
         : recentDropoffSuggestions;
-    final source = [
-      ...recent,
-      ..._nigeriaPlaceCatalog.where((place) {
-        return !recent.any(
-          (recentPlace) =>
-              recentPlace.address.toLowerCase() == place.address.toLowerCase(),
-        );
-      }),
-    ];
-
-    if (cleaned.isEmpty) return source.take(8).toList();
-
-    final startsWith = source
-        .where((place) => place.title.toLowerCase().startsWith(cleaned))
-        .toList();
-    final contains = source
-        .where(
-          (place) =>
-              !startsWith.contains(place) &&
-              place.address.toLowerCase().contains(cleaned),
-        )
-        .toList();
-
-    return [...startsWith, ...contains].take(8).toList();
+    return PlaceSuggestionService.suggestionsFor(query, recent: recent);
   }
 
   void onLocationTyped(String value, {required bool isPickup}) {
@@ -452,7 +424,11 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
-      builder: (_) => _SchedulePickupSheet(initialDate: scheduledPickupAt),
+      builder: (_) => _SchedulePickupSheet(
+        initialDate: scheduledPickupAt,
+        pickupLabel: pickupController.text.trim(),
+        hasExactPickup: pickupLat != null && pickupLng != null,
+      ),
     );
 
     if (result == null) return;
@@ -625,26 +601,6 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
       ),
     );
   }
-}
-
-class PlaceSuggestion {
-  const PlaceSuggestion({
-    required this.title,
-    required this.subtitle,
-    required this.address,
-    required this.latitude,
-    required this.longitude,
-    this.distanceLabel,
-    this.isRecent = false,
-  });
-
-  final String title;
-  final String subtitle;
-  final String address;
-  final double latitude;
-  final double longitude;
-  final String? distanceLabel;
-  final bool isRecent;
 }
 
 class _RouteSearchHeader extends StatelessWidget {
@@ -1155,9 +1111,15 @@ class _SummaryRow extends StatelessWidget {
 }
 
 class _SchedulePickupSheet extends StatefulWidget {
-  const _SchedulePickupSheet({required this.initialDate});
+  const _SchedulePickupSheet({
+    required this.initialDate,
+    required this.pickupLabel,
+    required this.hasExactPickup,
+  });
 
   final DateTime? initialDate;
+  final String pickupLabel;
+  final bool hasExactPickup;
 
   @override
   State<_SchedulePickupSheet> createState() => _SchedulePickupSheetState();
@@ -1166,12 +1128,22 @@ class _SchedulePickupSheet extends StatefulWidget {
 class _SchedulePickupSheetState extends State<_SchedulePickupSheet> {
   late DateTime selectedDay;
   late String selectedSlot;
+  TimeOfDay? customTime;
 
   @override
   void initState() {
     super.initState();
-    selectedDay = DateTime.now();
+    final initialDate = widget.initialDate;
+    selectedDay = initialDate == null
+        ? DateTime.now()
+        : DateTime(initialDate.year, initialDate.month, initialDate.day);
     selectedSlot = _timeSlots.first;
+    if (initialDate != null) {
+      customTime = TimeOfDay(
+        hour: initialDate.hour,
+        minute: initialDate.minute,
+      );
+    }
   }
 
   @override
@@ -1208,6 +1180,62 @@ class _SchedulePickupSheetState extends State<_SchedulePickupSheet> {
                 ],
               ),
               const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: widget.hasExactPickup
+                      ? const Color(0xFFEFFDF6)
+                      : const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: widget.hasExactPickup
+                        ? const Color(0xFFA7F3D0)
+                        : const Color(0xFFFDE68A),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      widget.hasExactPickup
+                          ? Icons.check_circle_rounded
+                          : Icons.info_outline_rounded,
+                      color: widget.hasExactPickup
+                          ? const Color(0xFF0F766E)
+                          : const Color(0xFFD97706),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Exact pickup location',
+                            style: TextStyle(
+                              color: Color(0xFF0F172A),
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            widget.hasExactPickup
+                                ? widget.pickupLabel
+                                : 'Choose the pickup from suggestions, current location, or map before requesting delivery.',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF475569),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
               SizedBox(
                 height: 84,
                 child: ListView.separated(
@@ -1239,7 +1267,7 @@ class _SchedulePickupSheetState extends State<_SchedulePickupSheet> {
                       const Divider(height: 1, color: Color(0xFFE2E8F0)),
                   itemBuilder: (context, index) {
                     final slot = _timeSlots[index];
-                    final selected = slot == selectedSlot;
+                    final selected = customTime == null && slot == selectedSlot;
 
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -1263,23 +1291,49 @@ class _SchedulePickupSheetState extends State<_SchedulePickupSheet> {
                           ),
                         ),
                       ),
-                      onTap: () => setState(() => selectedSlot = slot),
+                      onTap: () {
+                        setState(() {
+                          selectedSlot = slot;
+                          customTime = null;
+                        });
+                      },
                     );
                   },
                 ),
               ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _pickCustomTime,
+                icon: const Icon(Icons.edit_calendar_rounded),
+                label: Text(
+                  customTime == null
+                      ? 'Add exact time'
+                      : 'Exact time: ${_formatTimeOfDay(customTime!)}',
+                ),
+              ),
+              const SizedBox(height: 10),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,
                   foregroundColor: Colors.white,
                 ),
                 onPressed: () {
+                  final dateTime = customTime == null
+                      ? _slotStart(selectedDay, selectedSlot)
+                      : DateTime(
+                          selectedDay.year,
+                          selectedDay.month,
+                          selectedDay.day,
+                          customTime!.hour,
+                          customTime!.minute,
+                        );
+                  final label = customTime == null
+                      ? '${_dayLabel(selectedDay)}, $selectedSlot'
+                      : '${_dayLabel(selectedDay)}, ${_formatTimeOfDay(customTime!)}';
+
                   Navigator.pop(
                     context,
-                    _PickupSchedule(
-                      dateTime: _slotStart(selectedDay, selectedSlot),
-                      label: '${_dayLabel(selectedDay)}, $selectedSlot',
-                    ),
+                    _PickupSchedule(dateTime: dateTime, label: label),
                   );
                 },
                 child: const Text('Select time'),
@@ -1299,6 +1353,18 @@ class _SchedulePickupSheetState extends State<_SchedulePickupSheet> {
         ),
       ),
     );
+  }
+
+  Future<void> _pickCustomTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: customTime ?? TimeOfDay.fromDateTime(DateTime.now()),
+      helpText: 'Choose exact pickup time',
+    );
+
+    if (picked == null || !mounted) return;
+
+    setState(() => customTime = picked);
   }
 
   bool _sameDay(DateTime a, DateTime b) {
@@ -1325,6 +1391,13 @@ class _SchedulePickupSheetState extends State<_SchedulePickupSheet> {
     if (period == 'AM' && hour == 12) hour = 0;
 
     return DateTime(day.year, day.month, day.day, hour, minute);
+  }
+
+  String _formatTimeOfDay(TimeOfDay time) {
+    final hourOfPeriod = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$hourOfPeriod:$minute $period';
   }
 }
 
@@ -1433,110 +1506,3 @@ String _month(DateTime date) {
   ];
   return months[date.month - 1];
 }
-
-const _nigeriaPlaceCatalog = [
-  PlaceSuggestion(
-    title: 'Lagos Island',
-    subtitle: 'Lagos, Nigeria',
-    address: 'Lagos Island, Lagos, Nigeria',
-    latitude: 6.4541,
-    longitude: 3.3947,
-    distanceLabel: 'near',
-  ),
-  PlaceSuggestion(
-    title: 'Ikeja',
-    subtitle: 'Lagos, Nigeria',
-    address: 'Ikeja, Lagos, Nigeria',
-    latitude: 6.6018,
-    longitude: 3.3515,
-    distanceLabel: 'near',
-  ),
-  PlaceSuggestion(
-    title: 'Lekki Phase 1',
-    subtitle: 'Lagos, Nigeria',
-    address: 'Lekki Phase 1, Lagos, Nigeria',
-    latitude: 6.4474,
-    longitude: 3.4723,
-    distanceLabel: 'near',
-  ),
-  PlaceSuggestion(
-    title: 'Victoria Island',
-    subtitle: 'Lagos, Nigeria',
-    address: 'Victoria Island, Lagos, Nigeria',
-    latitude: 6.4281,
-    longitude: 3.4219,
-    distanceLabel: 'near',
-  ),
-  PlaceSuggestion(
-    title: 'Ajah',
-    subtitle: 'Lagos, Nigeria',
-    address: 'Ajah, Lagos, Nigeria',
-    latitude: 6.4698,
-    longitude: 3.5852,
-    distanceLabel: 'near',
-  ),
-  PlaceSuggestion(
-    title: 'Lugbe',
-    subtitle: 'Abuja, Nigeria',
-    address: 'Lugbe, Abuja, Nigeria',
-    latitude: 9.0068,
-    longitude: 7.3572,
-    distanceLabel: '92 mi',
-  ),
-  PlaceSuggestion(
-    title: 'Lugbe Plaza Abuja',
-    subtitle: 'Abuja, Nigeria',
-    address: 'Lugbe Plaza, Abuja, Nigeria',
-    latitude: 9.0083,
-    longitude: 7.3589,
-    distanceLabel: '93 mi',
-  ),
-  PlaceSuggestion(
-    title: 'CBN Quarters Lugbe',
-    subtitle: 'Abuja, Nigeria',
-    address: 'CBN Quarters Lugbe, Abuja, Nigeria',
-    latitude: 9.0112,
-    longitude: 7.3707,
-    distanceLabel: '93 mi',
-  ),
-  PlaceSuggestion(
-    title: 'Kaduna',
-    subtitle: 'Nigeria',
-    address: 'Kaduna, Nigeria',
-    latitude: 10.5105,
-    longitude: 7.4165,
-    distanceLabel: '192 mi',
-  ),
-  PlaceSuggestion(
-    title: 'Kaduna South',
-    subtitle: 'Kaduna, Nigeria',
-    address: 'Kaduna South, Kaduna, Nigeria',
-    latitude: 10.4697,
-    longitude: 7.4411,
-    distanceLabel: '188 mi',
-  ),
-  PlaceSuggestion(
-    title: 'Kaduna International Airport',
-    subtitle: 'Kaduna, Nigeria',
-    address: 'Kaduna International Airport, Kaduna, Nigeria',
-    latitude: 10.696,
-    longitude: 7.3201,
-    distanceLabel: '203 mi',
-  ),
-  PlaceSuggestion(
-    title: 'Lokaja International Stadium',
-    subtitle: 'Lokoja, Kogi, Nigeria',
-    address: 'Lokoja International Stadium, Lokoja, Kogi, Nigeria',
-    latitude: 7.8093,
-    longitude: 6.7388,
-    distanceLabel: '154 mi',
-  ),
-  PlaceSuggestion(
-    title: 'Federal University Lokoja',
-    subtitle: 'Felele Campus, Lokoja, Nigeria',
-    address: 'Federal University Lokoja, Felele Campus, Lokoja, Nigeria',
-    latitude: 7.7542,
-    longitude: 6.7551,
-    distanceLabel: '151 mi',
-  ),
-];

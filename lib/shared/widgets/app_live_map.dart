@@ -51,7 +51,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
   bool loadingRoute = false;
   bool loadingActiveRoute = false;
   bool locationChecked = false;
-  MapType mapType = MapType.satellite;
+  MapType mapType = MapType.hybrid;
 
   @override
   void initState() {
