@@ -50,6 +50,7 @@ class _DriverVoiceNavigationScreenState
   bool _disposed = false;
   bool _keepRunningAfterClose = false;
   bool _stoppingNavigation = false;
+  bool _stopRequested = false;
   String _message = 'Preparing voice navigation';
   double? _remainingDistanceMeters;
   double? _remainingTimeSeconds;
@@ -70,21 +71,9 @@ class _DriverVoiceNavigationScreenState
     }
 
     try {
-      final accepted =
-          await GoogleMapsNavigator.areTermsAccepted() ||
-          await GoogleMapsNavigator.showTermsAndConditionsDialog(
-            'EFATA voice navigation',
-            'EFATA',
-            uiParams: const TermsAndConditionsUIParams(
-              backgroundColor: Colors.white,
-              titleColor: Color(0xFF0F766E),
-              mainTextColor: Color(0xFF334155),
-              acceptButtonTextColor: Color(0xFF0F766E),
-              cancelButtonTextColor: Color(0xFFDC2626),
-            ),
-          );
+      final termsAccepted = await _confirmNavigationTerms();
 
-      if (!accepted) {
+      if (!termsAccepted) {
         _setFailure('Accept Google navigation terms to use voice guidance.');
         return;
       }
@@ -115,6 +104,38 @@ class _DriverVoiceNavigationScreenState
         'Voice navigation could not start. Please check the map key.',
       );
     }
+  }
+
+  Future<bool> _confirmNavigationTerms() async {
+    if (await GoogleMapsNavigator.areTermsAccepted()) return true;
+    if (!mounted) return false;
+
+    final shouldContinue = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (context) => _VoiceNavigationIntroSheet(
+        pickupLabel: widget.pickupLabel,
+        dropoffLabel: widget.dropoffLabel,
+      ),
+    );
+
+    if (shouldContinue != true || !mounted) return false;
+
+    setState(() => _message = 'Review the Google navigation notice');
+
+    return GoogleMapsNavigator.showTermsAndConditionsDialog(
+      'EFATA voice navigation',
+      'EFATA',
+      uiParams: const TermsAndConditionsUIParams(
+        backgroundColor: Colors.white,
+        titleColor: Color(0xFF0F766E),
+        mainTextColor: Color(0xFF334155),
+        acceptButtonTextColor: Color(0xFF0F766E),
+        cancelButtonTextColor: Color(0xFFDC2626),
+      ),
+    );
   }
 
   Future<void> _setupListeners() async {
@@ -351,18 +372,32 @@ class _DriverVoiceNavigationScreenState
 
     setState(() {
       _stoppingNavigation = true;
+      _stopRequested = true;
       _message = 'Stopping voice navigation';
     });
 
-    await VoiceNavigationControlService.stopActiveGuidance();
+    final controller = _controller;
+    if (controller != null) {
+      await controller
+          .setNavigationUIEnabled(false)
+          .timeout(const Duration(seconds: 2), onTimeout: () {})
+          .catchError((_) {});
+    }
+    await VoiceNavigationControlService.stopActiveGuidance().timeout(
+      const Duration(seconds: 12),
+      onTimeout: () => false,
+    );
     await FirebaseFirestore.instance
         .collection('orders')
         .doc(widget.orderId)
         .set({
           'voiceNavigationStatus': 'stopped',
           'voiceNavigationStoppedAt': Timestamp.now(),
-        }, SetOptions(merge: true));
+        }, SetOptions(merge: true))
+        .timeout(const Duration(seconds: 5), onTimeout: () {})
+        .catchError((_) {});
     _guidanceRunning = false;
+    _sessionReady = false;
     if (mounted) Navigator.pop(context);
   }
 
@@ -478,7 +513,7 @@ class _DriverVoiceNavigationScreenState
   void dispose() {
     _disposed = true;
     unawaited(_clearListeners());
-    if (_sessionReady) {
+    if (_sessionReady && !_stopRequested) {
       if (_keepRunningAfterClose) {
         unawaited(VoiceNavigationControlService.detachListenersOnly());
       } else {
@@ -585,6 +620,163 @@ class _DriverVoiceNavigationScreenState
 }
 
 enum _NavigationExitAction { keepRunning, stop }
+
+class _VoiceNavigationIntroSheet extends StatelessWidget {
+  const _VoiceNavigationIntroSheet({
+    required this.pickupLabel,
+    required this.dropoffLabel,
+  });
+
+  final String pickupLabel;
+  final String dropoffLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFFDF6),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(
+                    Icons.navigation_rounded,
+                    color: Color(0xFF0F766E),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Start Voice Navigation',
+                        style: TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'EFATA will guide this delivery through Google Navigation.',
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: _TinyRouteLine(
+                pickupLabel: pickupLabel,
+                dropoffLabel: dropoffLabel,
+              ),
+            ),
+            const SizedBox(height: 14),
+            const _NavigationSafetyNote(
+              icon: Icons.gps_fixed_rounded,
+              title: 'Live GPS route',
+              body:
+                  'The map will follow your current position and reroute when needed.',
+            ),
+            const SizedBox(height: 10),
+            const _NavigationSafetyNote(
+              icon: Icons.volume_up_rounded,
+              title: 'Voice instructions',
+              body:
+                  'Turn-by-turn voice guidance can continue until you stop it.',
+            ),
+            const SizedBox(height: 10),
+            const _NavigationSafetyNote(
+              icon: Icons.verified_user_rounded,
+              title: 'One-time Google notice',
+              body:
+                  'Google requires a navigation notice before voice guidance starts.',
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.check_circle_rounded),
+              label: const Text('Continue'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NavigationSafetyNote extends StatelessWidget {
+  const _NavigationSafetyNote({
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: const Color(0xFF0F766E), size: 22),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                body,
+                style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w600,
+                  height: 1.25,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _NavigationExitSheet extends StatelessWidget {
   const _NavigationExitSheet();
