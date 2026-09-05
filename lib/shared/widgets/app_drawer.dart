@@ -22,6 +22,90 @@ class AppDrawer extends StatelessWidget {
         .snapshots();
   }
 
+  Future<void> confirmLogout(BuildContext context) async {
+    final shouldLogout = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(
+                        Icons.logout_rounded,
+                        color: Color(0xFFDC2626),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Log out of EFATA?',
+                            style: TextStyle(
+                              color: Color(0xFF0F172A),
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'You will need to sign in again before booking, tracking, or accepting deliveries.',
+                            style: TextStyle(
+                              color: Color(0xFF64748B),
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(sheetContext, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.logout_rounded),
+                  label: const Text('Logout'),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(sheetContext, false),
+                  child: const Text('Stay Logged In'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (shouldLogout != true) return;
+
+    await FirebaseAuth.instance.signOut();
+
+    if (!context.mounted) return;
+
+    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -109,17 +193,7 @@ class AppDrawer extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              onTap: () async {
-                await FirebaseAuth.instance.signOut();
-
-                if (!context.mounted) return;
-
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/',
-                  (route) => false,
-                );
-              },
+              onTap: () => confirmLogout(context),
             ),
           ),
         ],

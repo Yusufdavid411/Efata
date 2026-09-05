@@ -117,9 +117,92 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
   }
 
   Future<void> hideJobForDriver(String orderId, String driverId) async {
+    final shouldReject = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7ED),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(
+                        Icons.block_rounded,
+                        color: Color(0xFFEA580C),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Reject this delivery?',
+                            style: TextStyle(
+                              color: Color(0xFF0F172A),
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'This delivery will be removed from your available jobs. You may not see it again.',
+                            style: TextStyle(
+                              color: Color(0xFF64748B),
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(sheetContext, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.block_rounded),
+                  label: const Text('Reject Delivery'),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(sheetContext, false),
+                  child: const Text('Keep Delivery'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (shouldReject != true) return;
+
     await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
       'rejectedBy': FieldValue.arrayUnion([driverId]),
     });
+
+    if (!mounted) return;
+    AppNotificationBannerService.info(
+      'This delivery has been removed from your available jobs.',
+      title: 'Delivery rejected',
+      icon: Icons.block_rounded,
+    );
   }
 
   List<QueryDocumentSnapshot> _prepareJobs(
