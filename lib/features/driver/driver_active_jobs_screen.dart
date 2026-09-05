@@ -339,6 +339,11 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
               pickupLng != null &&
               dropoffLat != null &&
               dropoffLng != null;
+          final voiceNavigationStatus =
+              data['voiceNavigationStatus']?.toString().toLowerCase() ?? '';
+          final voiceNavigationActive =
+              voiceNavigationStatus == 'running' ||
+              voiceNavigationStatus == 'background';
 
           void openVoiceNavigation({required bool includePickupStop}) {
             if (!canUseVoiceNavigation) {
@@ -377,6 +382,18 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                         followDriver: status == 'intransit',
                         activeTargetPoint: activeTargetPoint,
                         activeTargetLabel: activeTargetLabel,
+                        voiceNavigationActive: voiceNavigationActive,
+                        onVoiceNavigation: () {
+                          () async {
+                            if (status == 'accepted') {
+                              final started = await startTransit(job.id);
+                              if (!started || !context.mounted) return;
+                              openVoiceNavigation(includePickupStop: true);
+                              return;
+                            }
+                            openVoiceNavigation(includePickupStop: false);
+                          }();
+                        },
                       )
                     : const Padding(
                         padding: EdgeInsets.all(16),
@@ -415,8 +432,8 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                     },
                     primaryAction: status == 'accepted'
                         ? _DriverJobAction(
-                            label: 'Start Voice Navigation',
-                            icon: Icons.volume_up_rounded,
+                            label: 'Start Transit',
+                            icon: Icons.play_arrow_rounded,
                             onPressed: () async {
                               final started = await startTransit(job.id);
                               if (!started || !context.mounted) return;
@@ -428,14 +445,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                             icon: Icons.check_circle_outline,
                             onPressed: () => completeJob(job.id, data),
                           ),
-                    secondaryAction: status == 'intransit'
-                        ? _DriverJobAction(
-                            label: 'Voice Navigation',
-                            icon: Icons.navigation_rounded,
-                            onPressed: () =>
-                                openVoiceNavigation(includePickupStop: false),
-                          )
-                        : null,
+                    secondaryAction: null,
                   );
                 },
               ),

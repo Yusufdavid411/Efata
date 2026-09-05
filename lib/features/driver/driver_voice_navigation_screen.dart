@@ -636,8 +636,24 @@ class _DriverVoiceNavigationScreenState
                   onPressed: _showMapTypePicker,
                 ),
               ),
+              Positioned(
+                top: topPadding + 114,
+                right: 14,
+                child: _VoiceMapControlButton(
+                  active: _guidanceRunning && !_routeFailed,
+                  attention: _routeFailed || _stoppingNavigation,
+                  onPressed: () {
+                    setState(() => _voicePanelExpanded = true);
+                  },
+                ),
+              ),
             ],
-            if (!_promptVisible && _sessionReady)
+            if (!_promptVisible &&
+                _sessionReady &&
+                (_voicePanelExpanded ||
+                    _routeFailed ||
+                    _stoppingNavigation ||
+                    !_guidanceRunning))
               Positioned(
                 left: 16,
                 right: 16,
@@ -924,6 +940,65 @@ class _RoundMapButton extends StatelessWidget {
         tooltip: tooltip,
         icon: Icon(icon, color: const Color(0xFF0F172A)),
         onPressed: onPressed,
+      ),
+    );
+  }
+}
+
+class _VoiceMapControlButton extends StatelessWidget {
+  const _VoiceMapControlButton({
+    required this.active,
+    required this.attention,
+    required this.onPressed,
+  });
+
+  final bool active;
+  final bool attention;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = attention
+        ? const Color(0xFFDC2626)
+        : active
+        ? const Color(0xFF0F766E)
+        : const Color(0xFF0F172A);
+
+    return Tooltip(
+      message: 'Voice navigation',
+      child: Material(
+        color: Colors.white,
+        elevation: 4,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onPressed,
+          child: SizedBox(
+            width: 58,
+            height: 58,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  attention
+                      ? Icons.warning_amber_rounded
+                      : Icons.volume_up_rounded,
+                  color: color,
+                  size: 22,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Voice',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

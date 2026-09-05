@@ -19,6 +19,8 @@ class AppLiveMap extends StatefulWidget {
     this.activeTargetPoint,
     this.activeTargetLabel,
     this.showRouteStatus = true,
+    this.onVoiceNavigation,
+    this.voiceNavigationActive = false,
   });
 
   final LatLng pickupPoint;
@@ -28,6 +30,8 @@ class AppLiveMap extends StatefulWidget {
   final LatLng? activeTargetPoint;
   final String? activeTargetLabel;
   final bool showRouteStatus;
+  final VoidCallback? onVoiceNavigation;
+  final bool voiceNavigationActive;
 
   @override
   State<AppLiveMap> createState() => _AppLiveMapState();
@@ -517,7 +521,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
         ),
         Positioned(
           left: 12,
-          top: 78,
+          top: 84,
           child: _MapControlButton(
             icon: Icons.my_location_rounded,
             tooltip: 'My location',
@@ -526,6 +530,20 @@ class _AppLiveMapState extends State<AppLiveMap> {
             onTap: _centerOnCurrentPosition,
           ),
         ),
+        if (widget.onVoiceNavigation != null)
+          Positioned(
+            left: 12,
+            top: 156,
+            child: _MapControlButton(
+              icon: Icons.volume_up_rounded,
+              tooltip: widget.voiceNavigationActive
+                  ? 'Voice navigation'
+                  : 'Start voice navigation',
+              label: 'Voice',
+              isActive: widget.voiceNavigationActive,
+              onTap: widget.onVoiceNavigation!,
+            ),
+          ),
         Positioned(
           right: 12,
           top: 12,
@@ -539,7 +557,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
         ),
         Positioned(
           right: 12,
-          top: 78,
+          top: 84,
           child: _MapControlButton(
             icon: Icons.navigation_rounded,
             tooltip: 'Follow driver',
