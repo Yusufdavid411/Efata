@@ -34,13 +34,46 @@ class CustomerSummaryCard extends StatelessWidget {
 
         return Card(
           child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                summaryItem("Active", active),
-                summaryItem("Pending", pending),
-                summaryItem("Completed", completed),
+                const Text(
+                  'Delivery Overview',
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    summaryItem(
+                      context,
+                      Icons.route_outlined,
+                      "Active",
+                      active,
+                      const Color(0xFF0F766E),
+                    ),
+                    const SizedBox(width: 10),
+                    summaryItem(
+                      context,
+                      Icons.schedule_outlined,
+                      "Pending",
+                      pending,
+                      const Color(0xFFD97706),
+                    ),
+                    const SizedBox(width: 10),
+                    summaryItem(
+                      context,
+                      Icons.check_circle_outline_rounded,
+                      "Completed",
+                      completed,
+                      const Color(0xFF16A34A),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -49,15 +82,45 @@ class CustomerSummaryCard extends StatelessWidget {
     );
   }
 
-  Widget summaryItem(String title, int value) {
-    return Column(
-      children: [
-        Text(
-          value.toString(),
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+  Widget summaryItem(
+    BuildContext context,
+    IconData icon,
+    String title,
+    int value,
+    Color color,
+  ) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
         ),
-        Text(title),
-      ],
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 21),
+            const SizedBox(height: 8),
+            Text(
+              value.toString(),
+              style: const TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

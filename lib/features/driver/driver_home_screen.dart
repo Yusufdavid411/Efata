@@ -160,41 +160,86 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         ? 'Admin is reviewing your driver profile. You can go online after approval.'
         : 'Your account must be approved before you can receive delivery requests.';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.shade200),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            approved
-                ? Icons.verified_user_outlined
-                : Icons.pending_actions_outlined,
-            color: color.shade700,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: !profileCompleted
+              ? () => Navigator.pushNamed(context, '/driverOnboarding')
+              : null,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: color.shade50,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: color.shade200),
+            ),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: color.shade900,
-                    fontWeight: FontWeight.w900,
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: color.shade100,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Icon(
+                    approved
+                        ? Icons.verified_user_outlined
+                        : Icons.pending_actions_outlined,
+                    color: color.shade700,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(message, style: const TextStyle(color: Color(0xFF475569))),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: color.shade900,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        message,
+                        style: const TextStyle(
+                          color: Color(0xFF475569),
+                          height: 1.35,
+                        ),
+                      ),
+                      if (!profileCompleted) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Text(
+                              'Continue setup',
+                              style: TextStyle(
+                                color: color.shade800,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.arrow_forward_rounded,
+                              color: color.shade800,
+                              size: 18,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }

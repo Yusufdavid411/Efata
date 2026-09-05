@@ -331,6 +331,68 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               ? Icons.pending_actions_rounded
               : Icons.error_outline_rounded;
 
+          Widget setupRequiredCard() {
+            return Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(statusIcon, color: statusColor),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                statusLabel,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                statusMessage,
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B),
+                                  height: 1.35,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    ElevatedButton.icon(
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/driverOnboarding'),
+                      icon: const Icon(Icons.assignment_turned_in_outlined),
+                      label: const Text('Continue Driver Setup'),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Your editable driver profile will open after this setup is submitted.',
+                      style: TextStyle(color: Color(0xFF64748B), height: 1.35),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -420,64 +482,70 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
               const SizedBox(height: 20),
 
-              Card(
-                child: Column(
-                  children: [
-                    tile(
-                      title: "Full Name",
-                      value: name,
-                      icon: Icons.person,
-                      onEdit: () => updateField(
-                        field: 'fullName',
-                        title: 'Full Name',
-                        currentValue: name,
+              if (!profileCompleted) ...[
+                setupRequiredCard(),
+                const SizedBox(height: 20),
+                Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.email_outlined),
+                        title: const Text("Email"),
+                        subtitle: Text(user.email ?? 'No email'),
                       ),
-                    ),
-                    tile(
-                      title: "Phone",
-                      value: phone,
-                      icon: Icons.phone,
-                      onEdit: () => updateField(
-                        field: 'phone',
-                        title: 'Phone',
-                        currentValue: phone,
-                      ),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.email_outlined),
-                      title: const Text("Email"),
-                      subtitle: Text(user.email ?? 'No email'),
-                    ),
-                    ListTile(
-                      leading: Icon(statusIcon, color: statusColor),
-                      title: const Text("Verification"),
-                      subtitle: Text(statusMessage),
-                      trailing: isVerified
-                          ? const Icon(
-                              Icons.verified_rounded,
-                              color: Color(0xFF16A34A),
-                            )
-                          : null,
-                    ),
-                    tile(
-                      title: "Vehicle",
-                      value: vehicle,
-                      icon: Icons.local_shipping,
-                      onEdit: () => updateVehicleType(vehicle),
-                    ),
-                    tile(
-                      title: "Plate Number",
-                      value: plate,
-                      icon: Icons.confirmation_number,
-                      onEdit: () => updateField(
-                        field: 'plateNumber',
-                        title: 'Plate Number',
-                        currentValue: plate,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
+
+              if (profileCompleted)
+                Card(
+                  child: Column(
+                    children: [
+                      tile(
+                        title: "Full Name",
+                        value: name,
+                        icon: Icons.person,
+                        onEdit: () => updateField(
+                          field: 'fullName',
+                          title: 'Full Name',
+                          currentValue: name,
+                        ),
+                      ),
+                      tile(
+                        title: "Phone",
+                        value: phone,
+                        icon: Icons.phone,
+                        onEdit: () => updateField(
+                          field: 'phone',
+                          title: 'Phone',
+                          currentValue: phone,
+                        ),
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.email_outlined),
+                        title: const Text("Email"),
+                        subtitle: Text(user.email ?? 'No email'),
+                      ),
+                      tile(
+                        title: "Vehicle",
+                        value: vehicle,
+                        icon: Icons.local_shipping,
+                        onEdit: () => updateVehicleType(vehicle),
+                      ),
+                      tile(
+                        title: "Plate Number",
+                        value: plate,
+                        icon: Icons.confirmation_number,
+                        onEdit: () => updateField(
+                          field: 'plateNumber',
+                          title: 'Plate Number',
+                          currentValue: plate,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           );
         },

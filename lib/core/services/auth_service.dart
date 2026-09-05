@@ -101,6 +101,8 @@ class AuthService {
         'photoUrl': user.photoURL,
         'role': role,
         'authProvider': 'google',
+        'profileCompleted': false,
+        'onboardingSkipped': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
     }

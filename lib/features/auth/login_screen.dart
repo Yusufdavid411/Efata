@@ -222,16 +222,23 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (role == 'customer') {
-        Navigator.pushReplacementNamed(context, '/customerHome');
+        final completed = userDoc.data()?['profileCompleted'] == true;
+        Navigator.pushReplacementNamed(
+          context,
+          completed ? '/customerHome' : '/customerOnboarding',
+        );
       } else if (role == 'driver') {
         final driverDoc = await FirebaseFirestore.instance
             .collection('drivers')
             .doc(user.uid)
             .get();
+        final driverCompleted = driverDoc.data()?['profileCompleted'] == true;
         if (!mounted) return;
         Navigator.pushReplacementNamed(
           context,
-          driverDoc.exists ? '/driverHome' : '/driverOnboarding',
+          driverDoc.exists && driverCompleted
+              ? '/driverHome'
+              : '/driverOnboarding',
         );
       } else {
         AppNotificationBannerService.error(

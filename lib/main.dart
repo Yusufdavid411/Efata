@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:logistics_app/features/booking/customer/customer_home_screen.dart';
+import 'package:logistics_app/features/booking/customer/customer_onboarding_screen.dart';
 import 'package:logistics_app/features/booking/customer/customer_profile_screen.dart';
 import 'package:logistics_app/features/booking/customer/order_history_screen.dart';
 import 'package:logistics_app/features/booking/customer/simple_order_form.dart';
@@ -124,6 +125,8 @@ class MyApp extends StatelessWidget {
             '/': (context) => const SplashScreen(),
             '/login': (context) => const LoginScreen(),
             '/customerHome': (context) => const CustomerHomeScreen(),
+            '/customerOnboarding': (context) =>
+                const CustomerOnboardingScreen(),
             '/driverHome': (context) => const DriverHomeScreen(),
             '/orders': (context) => const OrderHistoryScreen(),
             '/createOrder': (context) => const SimpleOrderForm(),
