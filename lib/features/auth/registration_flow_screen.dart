@@ -36,6 +36,8 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
   bool obscureConfirmPassword = true;
   String? issuedCode;
   DateTime? codeExpiresAt;
+  String? pendingUserId;
+  String? reservedEmail;
 
   @override
   void dispose() {
@@ -66,6 +68,13 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
     return List.generate(6, (_) => random.nextInt(10)).join();
   }
 
+  String _generateTemporaryPassword() {
+    const chars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#%';
+    final random = Random.secure();
+    return List.generate(28, (_) => chars[random.nextInt(chars.length)]).join();
+  }
+
   String _nameFromEmail(String value) {
     final rawName = value.split('@').first.replaceAll(RegExp(r'[._-]+'), ' ');
     return rawName
@@ -86,7 +95,48 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
 
     setState(() => isLoading = true);
 
-    await Future<void>.delayed(const Duration(milliseconds: 550));
+    try {
+      if (pendingUserId == null || reservedEmail != email) {
+        await _discardPendingRegistration();
+        await FirebaseAuth.instance.signOut();
+
+        final credential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(
+              email: email,
+              password: _generateTemporaryPassword(),
+            );
+
+        pendingUserId = credential.user?.uid;
+        reservedEmail = email;
+
+        if (pendingUserId == null) {
+          throw Exception('Email could not be reserved. Please try again.');
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+
+      final message = switch (e.code) {
+        'email-already-in-use' => 'This email already has an EFATA account.',
+        'invalid-email' => 'Enter a valid email address.',
+        'operation-not-allowed' =>
+          'Email registration is not enabled yet. Please contact support.',
+        'too-many-requests' =>
+          'Too many attempts. Please wait a moment and try again.',
+        'network-request-failed' =>
+          'Network issue. Please check your connection and try again.',
+        _ => e.message ?? 'Email check failed. Please try again.',
+      };
+
+      AppNotificationBannerService.error(message, title: 'Check email');
+      setState(() => isLoading = false);
+      return;
+    } catch (e) {
+      if (!mounted) return;
+      AppNotificationBannerService.error(e.toString(), title: 'Check email');
+      setState(() => isLoading = false);
+      return;
+    }
 
     if (!mounted) return;
 
@@ -151,15 +201,16 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
     setState(() => isLoading = true);
 
     try {
-      final credential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
-      final user = credential.user;
+      final user = FirebaseAuth.instance.currentUser;
 
-      if (user == null) {
-        throw Exception('Account could not be created. Please try again.');
+      if (user == null || user.uid != pendingUserId) {
+        throw Exception(
+          'Registration session expired. Please request a new EFATA code.',
+        );
       }
 
       final displayName = _nameFromEmail(email);
+      await user.updatePassword(password);
       await user.updateDisplayName(displayName);
 
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
@@ -213,9 +264,10 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       final message = switch (e.code) {
-        'email-already-in-use' => 'This email already has an EFATA account.',
         'invalid-email' => 'Enter a valid email address.',
         'weak-password' => 'Use a stronger password for this account.',
+        'requires-recent-login' =>
+          'Registration session expired. Please request a new EFATA code.',
         _ => e.message ?? 'Account creation failed. Please try again.',
       };
       AppNotificationBannerService.error(message, title: 'Registration failed');
@@ -230,9 +282,31 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
     }
   }
 
-  void goBackOneStep() {
+  Future<void> _discardPendingRegistration() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && pendingUserId != null && user.uid == pendingUserId) {
+      await user.delete();
+      await FirebaseAuth.instance.signOut();
+    }
+    pendingUserId = null;
+    reservedEmail = null;
+    issuedCode = null;
+    codeExpiresAt = null;
+  }
+
+  Future<void> goBackOneStep() async {
     if (step == 0) {
       Navigator.pop(context);
+      return;
+    }
+    if (step == 1) {
+      setState(() => isLoading = true);
+      await _discardPendingRegistration();
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+        step = 0;
+      });
       return;
     }
     setState(() => step -= 1);
