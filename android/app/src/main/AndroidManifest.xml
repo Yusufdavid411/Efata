@@ -21,6 +21,9 @@
         <meta-data
             android:name="com.efata.google.ROUTES_API_KEY"
             android:value="${GOOGLE_ROUTES_API_KEY}" />
+        <meta-data
+            android:name="com.efata.google.WEB_CLIENT_ID"
+            android:value="${GOOGLE_WEB_CLIENT_ID}" />
 
         <activity
             android:name=".MainActivity"

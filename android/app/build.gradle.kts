@@ -27,6 +27,12 @@ val googleRoutesApiKey =
         ?: System.getenv("GOOGLE_ROUTES_API_KEY")
         ?: ""
 
+val googleWebClientId =
+    localProperties.getProperty("GOOGLE_WEB_CLIENT_ID")
+        ?: (project.findProperty("GOOGLE_WEB_CLIENT_ID") as String?)
+        ?: System.getenv("GOOGLE_WEB_CLIENT_ID")
+        ?: ""
+
 configurations.configureEach {
     exclude(group = "com.google.android.gms", module = "play-services-maps")
 }
@@ -57,6 +63,7 @@ android {
         versionName = flutter.versionName
         manifestPlaceholders["GOOGLE_MAPS_ANDROID_API_KEY"] = googleMapsAndroidApiKey
         manifestPlaceholders["GOOGLE_ROUTES_API_KEY"] = googleRoutesApiKey
+        manifestPlaceholders["GOOGLE_WEB_CLIENT_ID"] = googleWebClientId
     }
 
     buildTypes {

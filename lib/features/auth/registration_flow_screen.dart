@@ -1,10 +1,11 @@
-import 'dart:math';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/services/app_notification_banner_service.dart';
+import '../../core/services/auth_service.dart';
+import '../../core/services/email_registration_service.dart';
+import '../../core/services/password_strength_service.dart';
 
 class RegistrationFlowScreen extends StatefulWidget {
   const RegistrationFlowScreen({
@@ -29,15 +30,22 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
   final codeController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
+  final registrationService = EmailRegistrationService.instance;
+  final authService = AuthService();
 
   int step = 0;
   bool isLoading = false;
+  bool isGoogleLoading = false;
   bool obscurePassword = true;
   bool obscureConfirmPassword = true;
-  String? issuedCode;
-  DateTime? codeExpiresAt;
-  String? pendingUserId;
-  String? reservedEmail;
+  String? verifiedCode;
+
+  @override
+  void initState() {
+    super.initState();
+    passwordController.addListener(_refreshPasswordUi);
+    confirmPasswordController.addListener(_refreshPasswordUi);
+  }
 
   @override
   void dispose() {
@@ -52,36 +60,12 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
 
   String get email => emailController.text.trim().toLowerCase();
 
-  bool get codeStillValid {
-    final expiresAt = codeExpiresAt;
-    return issuedCode != null &&
-        expiresAt != null &&
-        DateTime.now().isBefore(expiresAt);
-  }
-
   bool _isValidEmail(String value) {
     return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
   }
 
-  String _generateCode() {
-    final random = Random.secure();
-    return List.generate(6, (_) => random.nextInt(10)).join();
-  }
-
-  String _generateTemporaryPassword() {
-    const chars =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#%';
-    final random = Random.secure();
-    return List.generate(28, (_) => chars[random.nextInt(chars.length)]).join();
-  }
-
-  String _nameFromEmail(String value) {
-    final rawName = value.split('@').first.replaceAll(RegExp(r'[._-]+'), ' ');
-    return rawName
-        .split(' ')
-        .where((part) => part.trim().isNotEmpty)
-        .map((part) => part[0].toUpperCase() + part.substring(1))
-        .join(' ');
+  void _refreshPasswordUi() {
+    if (mounted && step == 2) setState(() {});
   }
 
   Future<void> sendCode() async {
@@ -96,104 +80,36 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
     setState(() => isLoading = true);
 
     try {
-      if (pendingUserId == null || reservedEmail != email) {
-        await _discardPendingRegistration();
-        await FirebaseAuth.instance.signOut();
+      await registrationService.sendRegistrationCode(
+        email: email,
+        role: widget.role,
+      );
 
-        final credential = await FirebaseAuth.instance
-            .createUserWithEmailAndPassword(
-              email: email,
-              password: _generateTemporaryPassword(),
-            );
-
-        pendingUserId = credential.user?.uid;
-        reservedEmail = email;
-
-        if (pendingUserId == null) {
-          throw Exception('Email could not be reserved. Please try again.');
-        }
-      }
-    } on FirebaseAuthException catch (e) {
       if (!mounted) return;
+      setState(() {
+        codeController.clear();
+        verifiedCode = null;
+        step = 1;
+      });
 
-      final message = switch (e.code) {
-        'email-already-in-use' => 'This email already has an EFATA account.',
-        'invalid-email' => 'Enter a valid email address.',
-        'operation-not-allowed' =>
-          'Email registration is not enabled yet. Please contact support.',
-        'too-many-requests' =>
-          'Too many attempts. Please wait a moment and try again.',
-        'network-request-failed' =>
-          'Network issue. Please check your connection and try again.',
-        _ => e.message ?? 'Email check failed. Please try again.',
-      };
-
-      AppNotificationBannerService.error(message, title: 'Check email');
-      setState(() => isLoading = false);
-      return;
-    } catch (e) {
+      AppNotificationBannerService.success(
+        'We sent a 6-digit EFATA code to $email.',
+        title: 'Check your email',
+      );
+    } on EmailRegistrationException catch (e) {
       if (!mounted) return;
-      AppNotificationBannerService.error(e.toString(), title: 'Check email');
-      setState(() => isLoading = false);
-      return;
+      AppNotificationBannerService.error(e.message, title: 'Check email');
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
-
-    if (!mounted) return;
-
-    setState(() {
-      issuedCode = _generateCode();
-      codeExpiresAt = DateTime.now().add(const Duration(minutes: 10));
-      codeController.clear();
-      step = 1;
-      isLoading = false;
-    });
-
-    AppNotificationBannerService.success(
-      'Use code $issuedCode to continue testing this flow.',
-      title: 'EFATA code ready',
-    );
   }
 
-  void verifyCode() {
-    if (!codeStillValid) {
+  Future<void> verifyCode() async {
+    final code = codeController.text.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
       AppNotificationBannerService.error(
-        'Your code has expired. Request a new EFATA code.',
-        title: 'Code expired',
-      );
-      return;
-    }
-
-    if (codeController.text.trim() != issuedCode) {
-      AppNotificationBannerService.error(
-        'The code you entered does not match the EFATA code.',
-        title: 'Wrong code',
-      );
-      return;
-    }
-
-    setState(() => step = 2);
-    AppNotificationBannerService.success(
-      'Email confirmed. Create a secure password.',
-      title: 'Email verified',
-    );
-  }
-
-  Future<void> createAccount() async {
-    final password = passwordController.text;
-    final confirmPassword = confirmPasswordController.text;
-
-    if (password.length < 6) {
-      AppNotificationBannerService.error(
-        'Password must be at least 6 characters.',
-        title: 'Password too short',
-      );
-      return;
-    }
-
-    if (password != confirmPassword) {
-      AppNotificationBannerService.error(
-        'Both passwords must be exactly the same.',
-        title: 'Passwords do not match',
+        'Enter the 6-digit EFATA code from your email.',
+        title: 'Check code',
       );
       return;
     }
@@ -201,112 +117,175 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
     setState(() => isLoading = true);
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-
-      if (user == null || user.uid != pendingUserId) {
-        throw Exception(
-          'Registration session expired. Please request a new EFATA code.',
-        );
-      }
-
-      final displayName = _nameFromEmail(email);
-      await user.updatePassword(password);
-      await user.updateDisplayName(displayName);
-
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'uid': user.uid,
-        'name': displayName,
-        'fullName': displayName,
-        'email': email,
-        'role': widget.role,
-        'authProvider': 'email',
-        'emailVerifiedByCode': true,
-        'profileCompleted': false,
-        'onboardingSkipped': false,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      if (isDriver) {
-        await FirebaseFirestore.instance
-            .collection('drivers')
-            .doc(user.uid)
-            .set({
-              'uid': user.uid,
-              'driverId': user.uid,
-              'name': displayName,
-              'fullName': displayName,
-              'email': email,
-              'isAvailable': false,
-              'isOnline': false,
-              'profileCompleted': false,
-              'onboardingSkipped': false,
-              'licenseUploaded': false,
-              'verificationStatus': 'incomplete',
-              'authProvider': 'email',
-              'createdAt': FieldValue.serverTimestamp(),
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-      }
+      await registrationService.verifyRegistrationCode(
+        email: email,
+        role: widget.role,
+        code: code,
+      );
 
       if (!mounted) return;
+      setState(() {
+        verifiedCode = code;
+        step = 2;
+      });
+      AppNotificationBannerService.success(
+        'Email confirmed. Create a secure password.',
+        title: 'Email verified',
+      );
+    } on EmailRegistrationException catch (e) {
+      if (!mounted) return;
+      AppNotificationBannerService.error(e.message, title: 'Code failed');
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
 
+  Future<void> createAccount() async {
+    final password = passwordController.text;
+    final confirmPassword = confirmPasswordController.text;
+    final code = verifiedCode ?? codeController.text.trim();
+    final strength = PasswordStrengthService.evaluate(
+      password: password,
+      confirmPassword: confirmPassword,
+      email: email,
+    );
+
+    if (!strength.isAcceptable) {
+      AppNotificationBannerService.error(
+        strength.feedback.first,
+        title: 'Strengthen password',
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      await registrationService.completeRegistration(
+        email: email,
+        role: widget.role,
+        code: code,
+        password: password,
+      );
+
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (!mounted) return;
       AppNotificationBannerService.success(
         'Your account is ready. Complete your profile next.',
         title: 'Welcome to EFATA',
       );
-
       Navigator.pushNamedAndRemoveUntil(
         context,
         widget.onboardingRoute,
         (_) => false,
       );
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      final message = switch (e.code) {
-        'invalid-email' => 'Enter a valid email address.',
-        'weak-password' => 'Use a stronger password for this account.',
-        'requires-recent-login' =>
-          'Registration session expired. Please request a new EFATA code.',
-        _ => e.message ?? 'Account creation failed. Please try again.',
-      };
-      AppNotificationBannerService.error(message, title: 'Registration failed');
-    } catch (e) {
+    } on EmailRegistrationException catch (e) {
       if (!mounted) return;
       AppNotificationBannerService.error(
-        e.toString(),
+        e.message,
         title: 'Registration failed',
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      AppNotificationBannerService.error(
+        e.message ?? 'Account created, but sign-in failed. Please log in.',
+        title: 'Sign-in failed',
       );
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
   }
 
-  Future<void> _discardPendingRegistration() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null && pendingUserId != null && user.uid == pendingUserId) {
-      await user.delete();
+  Future<void> continueWithGoogle() async {
+    setState(() => isGoogleLoading = true);
+
+    try {
       await FirebaseAuth.instance.signOut();
+      final credential = await authService.signInWithGoogle();
+      final user = credential.user;
+      if (user == null) throw Exception('Google sign-in failed.');
+
+      final userRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid);
+      final userDoc = await userRef.get();
+      final existingRole = userDoc.data()?['role']?.toString();
+
+      if (existingRole != null &&
+          existingRole.isNotEmpty &&
+          existingRole != widget.role) {
+        await FirebaseAuth.instance.signOut();
+        if (!mounted) return;
+        AppNotificationBannerService.error(
+          'This Google account is already registered as $existingRole.',
+          title: 'Account already exists',
+        );
+        return;
+      }
+
+      await authService.createGoogleProfileIfNeeded(
+        user: user,
+        role: widget.role,
+      );
+
+      final route = await _routeForGoogleUser(user.uid, widget.role);
+      if (!mounted) return;
+      AppNotificationBannerService.success(
+        'Google account connected. Continue your EFATA setup.',
+        title: 'Welcome',
+      );
+      Navigator.pushNamedAndRemoveUntil(context, route, (_) => false);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      final message = switch (e.code) {
+        'missing-google-web-client-id' =>
+          'Add the Firebase Web Client ID to this build before Google sign-in can work.',
+        'account-exists-with-different-credential' =>
+          'This email already uses password login. Sign in with password, then add Google in Settings.',
+        _ => e.message ?? 'Google sign-in failed. Please try again.',
+      };
+      AppNotificationBannerService.error(
+        message,
+        title: 'Google sign-up failed',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppNotificationBannerService.error(
+        e.toString(),
+        title: 'Google sign-up failed',
+      );
+    } finally {
+      if (mounted) setState(() => isGoogleLoading = false);
     }
-    pendingUserId = null;
-    reservedEmail = null;
-    issuedCode = null;
-    codeExpiresAt = null;
+  }
+
+  Future<String> _routeForGoogleUser(String uid, String role) async {
+    if (role == 'driver') {
+      final driverDoc = await FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(uid)
+          .get();
+      return driverDoc.data()?['profileCompleted'] == true
+          ? '/driverHome'
+          : '/driverOnboarding';
+    }
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    return userDoc.data()?['profileCompleted'] == true
+        ? '/customerHome'
+        : '/customerOnboarding';
   }
 
   Future<void> goBackOneStep() async {
     if (step == 0) {
       Navigator.pop(context);
-      return;
-    }
-    if (step == 1) {
-      setState(() => isLoading = true);
-      await _discardPendingRegistration();
-      if (!mounted) return;
-      setState(() {
-        isLoading = false;
-        step = 0;
-      });
       return;
     }
     setState(() => step -= 1);
@@ -320,7 +299,7 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: isLoading ? null : goBackOneStep,
+          onPressed: isLoading || isGoogleLoading ? null : goBackOneStep,
         ),
         title: Text(widget.title),
       ),
@@ -360,15 +339,17 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
               child: switch (step) {
                 0 => _EmailStep(
                   key: const ValueKey('email'),
+                  role: widget.role,
                   subtitle: widget.subtitle,
                   controller: emailController,
                   isLoading: isLoading,
+                  isGoogleLoading: isGoogleLoading,
                   onContinue: sendCode,
+                  onGoogle: continueWithGoogle,
                 ),
                 1 => _CodeStep(
                   key: const ValueKey('code'),
                   email: email,
-                  code: issuedCode,
                   controller: codeController,
                   isLoading: isLoading,
                   onVerify: verifyCode,
@@ -376,6 +357,7 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
                 ),
                 _ => _PasswordStep(
                   key: const ValueKey('password'),
+                  email: email,
                   passwordController: passwordController,
                   confirmPasswordController: confirmPasswordController,
                   obscurePassword: obscurePassword,
@@ -403,16 +385,22 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
 class _EmailStep extends StatelessWidget {
   const _EmailStep({
     super.key,
+    required this.role,
     required this.subtitle,
     required this.controller,
     required this.isLoading,
+    required this.isGoogleLoading,
     required this.onContinue,
+    required this.onGoogle,
   });
 
+  final String role;
   final String subtitle;
   final TextEditingController controller;
   final bool isLoading;
+  final bool isGoogleLoading;
   final VoidCallback onContinue;
+  final VoidCallback onGoogle;
 
   @override
   Widget build(BuildContext context) {
@@ -440,6 +428,14 @@ class _EmailStep extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 28),
+        _GoogleAccountButton(
+          isLoading: isGoogleLoading,
+          label: 'Continue with Google',
+          onPressed: isLoading || isGoogleLoading ? null : onGoogle,
+        ),
+        const SizedBox(height: 18),
+        const _DividerLabel(label: 'or use email code'),
+        const SizedBox(height: 18),
         TextField(
           controller: controller,
           keyboardType: TextInputType.emailAddress,
@@ -455,11 +451,11 @@ class _EmailStep extends StatelessWidget {
           icon: Icons.verified_user_outlined,
           title: 'Email verification',
           body:
-              'EFATA checks your email first, then you create your password and complete your profile.',
+              'EFATA will send a secure 6-digit code to verify this $role account.',
         ),
         const SizedBox(height: 28),
         ElevatedButton(
-          onPressed: isLoading ? null : onContinue,
+          onPressed: isLoading || isGoogleLoading ? null : onContinue,
           child: Text(isLoading ? 'Sending code...' : 'Send EFATA Code'),
         ),
       ],
@@ -471,7 +467,6 @@ class _CodeStep extends StatelessWidget {
   const _CodeStep({
     super.key,
     required this.email,
-    required this.code,
     required this.controller,
     required this.isLoading,
     required this.onVerify,
@@ -479,7 +474,6 @@ class _CodeStep extends StatelessWidget {
   });
 
   final String email;
-  final String? code;
   final TextEditingController controller;
   final bool isLoading;
   final VoidCallback onVerify;
@@ -504,7 +498,7 @@ class _CodeStep extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          'We prepared an EFATA verification code for $email.',
+          'We sent an EFATA verification code to $email.',
           style: const TextStyle(
             color: Color(0xFF64748B),
             fontSize: 15,
@@ -512,41 +506,11 @@ class _CodeStep extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 22),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF0FDFA),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFF99F6E4)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'EFATA verification code',
-                style: TextStyle(
-                  color: Color(0xFF134E4A),
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                code ?? '------',
-                style: const TextStyle(
-                  color: Color(0xFF0F766E),
-                  fontSize: 28,
-                  letterSpacing: 4,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Temporary testing preview until the email sender is connected.',
-                style: TextStyle(color: Color(0xFF0F766E), height: 1.35),
-              ),
-            ],
-          ),
+        const _InfoPanel(
+          icon: Icons.mail_lock_outlined,
+          title: 'Check your inbox',
+          body:
+              'Enter the 6-digit code from EFATA. The code expires after 10 minutes.',
         ),
         const SizedBox(height: 20),
         TextField(
@@ -563,7 +527,7 @@ class _CodeStep extends StatelessWidget {
         const SizedBox(height: 18),
         ElevatedButton(
           onPressed: isLoading ? null : onVerify,
-          child: const Text('Verify Code'),
+          child: Text(isLoading ? 'Checking code...' : 'Verify Code'),
         ),
         const SizedBox(height: 8),
         Center(
@@ -580,6 +544,7 @@ class _CodeStep extends StatelessWidget {
 class _PasswordStep extends StatelessWidget {
   const _PasswordStep({
     super.key,
+    required this.email,
     required this.passwordController,
     required this.confirmPasswordController,
     required this.obscurePassword,
@@ -590,6 +555,7 @@ class _PasswordStep extends StatelessWidget {
     required this.onCreateAccount,
   });
 
+  final String email;
   final TextEditingController passwordController;
   final TextEditingController confirmPasswordController;
   final bool obscurePassword;
@@ -601,6 +567,12 @@ class _PasswordStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strength = PasswordStrengthService.evaluate(
+      password: passwordController.text,
+      confirmPassword: confirmPasswordController.text,
+      email: email,
+    );
+
     return Column(
       key: key,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -618,7 +590,7 @@ class _PasswordStep extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         const Text(
-          'Create a password you can remember. Type it twice so EFATA can confirm it matches.',
+          'Use a strong passphrase. EFATA checks strength and confirms both passwords match before continuing.',
           style: TextStyle(
             color: Color(0xFF64748B),
             fontSize: 15,
@@ -665,17 +637,207 @@ class _PasswordStep extends StatelessWidget {
           onSubmitted: (_) => onCreateAccount(),
         ),
         const SizedBox(height: 18),
-        const _InfoPanel(
-          icon: Icons.shield_outlined,
-          title: 'Next step',
-          body:
-              'After this, EFATA takes you straight into profile setup so your dashboard starts clean.',
-        ),
+        _PasswordStrengthPanel(result: strength),
         const SizedBox(height: 28),
         ElevatedButton(
-          onPressed: isLoading ? null : onCreateAccount,
+          onPressed: isLoading || !strength.isAcceptable
+              ? null
+              : onCreateAccount,
           child: Text(isLoading ? 'Creating account...' : 'Create Account'),
         ),
+      ],
+    );
+  }
+}
+
+class _PasswordStrengthPanel extends StatelessWidget {
+  const _PasswordStrengthPanel({required this.result});
+
+  final PasswordStrengthResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (result.score) {
+      <= 2 => const Color(0xFFDC2626),
+      3 || 4 => const Color(0xFFD97706),
+      5 => const Color(0xFF0F766E),
+      _ => const Color(0xFF16A34A),
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Password strength: ${result.label}',
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                ),
+              ),
+              Icon(
+                result.isAcceptable
+                    ? Icons.check_circle_rounded
+                    : Icons.shield_outlined,
+                color: color,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              minHeight: 7,
+              value: (result.score / 6).clamp(0.05, 1),
+              backgroundColor: const Color(0xFFE2E8F0),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _RuleRow(
+            passed: result.passedRules.contains(PasswordRule.length),
+            label: 'At least 12 characters',
+          ),
+          _RuleRow(
+            passed: result.passedRules.contains(PasswordRule.passphrase),
+            label: '15+ characters recommended',
+          ),
+          _RuleRow(
+            passed: result.passedRules.contains(PasswordRule.mixedCharacters),
+            label: 'Mix letters with numbers, spaces, or symbols',
+          ),
+          _RuleRow(
+            passed: result.passedRules.contains(PasswordRule.noObviousWords),
+            label: 'Avoid common words, EFATA, or your email name',
+          ),
+          _RuleRow(
+            passed: result.passedRules.contains(PasswordRule.passwordsMatch),
+            label: 'Passwords match',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RuleRow extends StatelessWidget {
+  const _RuleRow({required this.passed, required this.label});
+
+  final bool passed;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Icon(
+            passed ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+            size: 18,
+            color: passed ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: passed
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFF64748B),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GoogleAccountButton extends StatelessWidget {
+  const _GoogleAccountButton({
+    required this.isLoading,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final bool isLoading;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF0F172A),
+          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'G',
+                    style: TextStyle(
+                      color: Color(0xFF4285F4),
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    label,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _DividerLabel extends StatelessWidget {
+  const _DividerLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(child: Divider(color: Color(0xFFCBD5E1))),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider(color: Color(0xFFCBD5E1))),
       ],
     );
   }

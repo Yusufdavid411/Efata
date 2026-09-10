@@ -17,6 +17,7 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "googleRoutesApiKey" -> result.success(readMetadata("com.efata.google.ROUTES_API_KEY"))
+                "googleWebClientId" -> result.success(readMetadata("com.efata.google.WEB_CLIENT_ID"))
                 else -> result.notImplemented()
             }
         }
