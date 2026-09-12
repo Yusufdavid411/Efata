@@ -60,7 +60,7 @@ class CustomerSummaryCard extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               const Text(
-                'A clean view of your active and past orders.',
+                'Track every order from request to completion.',
                 style: TextStyle(color: Color(0xFF64748B), height: 1.35),
               ),
               const SizedBox(height: 18),

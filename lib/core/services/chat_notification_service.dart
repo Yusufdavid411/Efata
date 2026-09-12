@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/app_settings_controller.dart';
 import 'app_notification_banner_service.dart';
@@ -75,6 +76,8 @@ class ChatNotificationService {
     QuerySnapshot<Map<String, dynamic>> snapshot,
     String userId,
   ) async {
+    final prefs = await SharedPreferences.getInstance();
+
     for (final change in snapshot.docChanges) {
       if (change.type == DocumentChangeType.removed) continue;
 
@@ -82,25 +85,22 @@ class ChatNotificationService {
       final data = order.data();
       if (data == null) continue;
 
-      if (_isClosedOrder(data)) {
-        await _notifications.cancel(id: _notificationId(order.id));
-        final closedMessageTime = _messageTime(data['lastMessageAt']);
-        if (closedMessageTime != null) {
-          _seenMessageTimes[order.id] = closedMessageTime;
-        }
-        continue;
-      }
-
       final lastMessage = data['lastMessage']?.toString() ?? '';
       final senderId = data['lastMessageSenderId']?.toString();
       final lastMessageAt = data['lastMessageAt'];
       final messageTime = _messageTime(lastMessageAt);
       final unreadCount = _unreadCountForUser(data, userId);
+      final isClosedOrder = _isClosedOrder(data);
 
       if (lastMessage.isEmpty || senderId == null || messageTime == null) {
+        if (isClosedOrder) {
+          await _notifications.cancel(id: _notificationId(order.id));
+        }
         continue;
       }
 
+      final deliveredKey = _deliveredMessageKey(userId, order.id);
+      final deliveredTime = prefs.getInt(deliveredKey) ?? 0;
       final previousTime = _seenMessageTimes[order.id];
       _seenMessageTimes[order.id] = messageTime;
 
@@ -108,16 +108,28 @@ class ChatNotificationService {
       final isOwnMessage = senderId == userId;
 
       if (isOwnMessage) continue;
-      if (isInitialLoad && unreadCount <= 0) continue;
+      if (unreadCount <= 0) continue;
+      if (messageTime <= deliveredTime) {
+        if (isClosedOrder) {
+          await _notifications.cancel(id: _notificationId(order.id));
+        }
+        continue;
+      }
       if (!isInitialLoad && messageTime <= previousTime) continue;
       if (!appSettingsController.orderNotificationsEnabled) continue;
 
-      showChatNotification(
+      await showChatNotification(
         orderId: order.id,
         title: _senderTitle(data['lastMessageSenderRole']),
         body: lastMessage,
       );
+
+      await prefs.setInt(deliveredKey, messageTime);
     }
+  }
+
+  String _deliveredMessageKey(String userId, String orderId) {
+    return 'efata_chat_notified_${userId}_$orderId';
   }
 
   int? _messageTime(dynamic value) {

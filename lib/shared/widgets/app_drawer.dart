@@ -30,6 +30,7 @@ class AppDrawer extends StatelessWidget {
 
     return Drawer(
       width: drawerWidth,
+      backgroundColor: Colors.white,
       child: Column(
         children: [
           if (user == null)
@@ -64,7 +65,7 @@ class AppDrawer extends StatelessWidget {
 
                 return _DrawerProfileHeader(
                   name: name,
-                  role: isDriver ? 'Driver account' : 'Customer account',
+                  role: isDriver ? 'Driver' : 'Customer',
                   status: status,
                   statusOk: isDriver ? verificationStatus == 'approved' : true,
                   photoUrl: photoUrl,
@@ -73,78 +74,81 @@ class AppDrawer extends StatelessWidget {
               },
             ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
-              children: [
-                _DrawerSectionLabel(
-                  label: isDriver ? 'Driver tools' : 'Customer tools',
-                ),
-                _DrawerTile(
-                  icon: Icons.person_outline_rounded,
-                  title: 'Profile',
-                  subtitle: isDriver
-                      ? 'Account details and approval status'
-                      : 'Account details',
-                  onTap: () => openProfile(context),
-                ),
-                if (!isDriver) ...[
+            child: Container(
+              color: Colors.white,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
+                children: [
+                  _DrawerSectionLabel(
+                    label: isDriver ? 'Driver tools' : 'Customer tools',
+                  ),
                   _DrawerTile(
-                    icon: Icons.add_road_outlined,
-                    title: 'Create Transport Request',
-                    subtitle: 'Book a new pickup and delivery',
+                    icon: Icons.person_outline_rounded,
+                    title: 'Profile',
+                    subtitle: isDriver
+                        ? 'Account details and approval status'
+                        : 'Account details',
+                    onTap: () => openProfile(context),
+                  ),
+                  if (!isDriver) ...[
+                    _DrawerTile(
+                      icon: Icons.add_road_outlined,
+                      title: 'Create Transport Request',
+                      subtitle: 'Book a new pickup and delivery',
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/createOrder');
+                      },
+                    ),
+                    _DrawerTile(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'My Orders',
+                      subtitle: 'Track active and previous deliveries',
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/orders');
+                      },
+                    ),
+                  ],
+                  if (isDriver)
+                    _DrawerTile(
+                      icon: Icons.work_history_outlined,
+                      title: 'Job History',
+                      subtitle: 'Completed delivery records',
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/driverJobs');
+                      },
+                    ),
+                  const SizedBox(height: 10),
+                  const _DrawerSectionLabel(label: 'Support'),
+                  _DrawerTile(
+                    icon: Icons.settings_outlined,
+                    title: 'Settings',
+                    subtitle: 'Theme, notifications, and sign-in',
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.pushNamed(context, '/createOrder');
+                      Navigator.pushNamed(context, '/settings');
                     },
                   ),
                   _DrawerTile(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'My Orders',
-                    subtitle: 'Track active and previous deliveries',
+                    icon: Icons.support_agent_outlined,
+                    title: 'Help & Support',
+                    subtitle: isDriver
+                        ? 'Get help with jobs, payouts, or verification'
+                        : 'Get help with booking, tracking, or payment',
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.pushNamed(context, '/orders');
+                      Navigator.pushNamed(context, '/settings');
                     },
+                  ),
+                  const _DrawerTile(
+                    icon: Icons.verified_user_outlined,
+                    title: 'Trust & Safety',
+                    subtitle: 'Account protection and delivery support',
                   ),
                 ],
-                if (isDriver)
-                  _DrawerTile(
-                    icon: Icons.work_history_outlined,
-                    title: 'Job History',
-                    subtitle: 'Completed delivery records',
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.pushNamed(context, '/driverJobs');
-                    },
-                  ),
-                const SizedBox(height: 10),
-                const _DrawerSectionLabel(label: 'Support'),
-                _DrawerTile(
-                  icon: Icons.settings_outlined,
-                  title: 'Settings',
-                  subtitle: 'Theme, notifications, and sign-in',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, '/settings');
-                  },
-                ),
-                _DrawerTile(
-                  icon: Icons.support_agent_outlined,
-                  title: 'Help & Support',
-                  subtitle: isDriver
-                      ? 'Get help with jobs, payouts, or verification'
-                      : 'Get help with booking, tracking, or payment',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, '/settings');
-                  },
-                ),
-                const _DrawerTile(
-                  icon: Icons.verified_user_outlined,
-                  title: 'Trust & Safety',
-                  subtitle: 'Account protection and delivery support',
-                ),
-              ],
+              ),
             ),
           ),
         ],
@@ -239,17 +243,6 @@ class _DrawerProfileHeader extends StatelessWidget {
                         ],
                       ),
                     ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Color(0xFF475569),
                   ),
                 ),
               ],
