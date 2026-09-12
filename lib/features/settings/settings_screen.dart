@@ -51,6 +51,13 @@ class SettingsScreen extends StatelessWidget {
               const _PasswordSigninCard(),
               const SizedBox(height: 20),
               const Text(
+                "Account",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              const _AccountActionsCard(),
+              const SizedBox(height: 20),
+              const Text(
                 "Preferences",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
@@ -106,6 +113,151 @@ class SettingsScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _AccountActionsCard extends StatefulWidget {
+  const _AccountActionsCard();
+
+  @override
+  State<_AccountActionsCard> createState() => _AccountActionsCardState();
+}
+
+class _AccountActionsCardState extends State<_AccountActionsCard> {
+  bool isLoggingOut = false;
+
+  Future<void> confirmLogout() async {
+    final role = await _currentRole();
+    if (!mounted) return;
+
+    final body = role == 'driver'
+        ? 'You will stop receiving delivery requests after logging out.'
+        : 'You will need to sign in again before booking or tracking deliveries.';
+
+    final shouldLogout = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(
+                        Icons.logout_rounded,
+                        color: Color(0xFFDC2626),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Log out of EFATA?',
+                            style: TextStyle(
+                              color: Color(0xFF0F172A),
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            body,
+                            style: const TextStyle(
+                              color: Color(0xFF64748B),
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(sheetContext, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.logout_rounded),
+                  label: const Text('Logout'),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(sheetContext, false),
+                  child: const Text('Stay Logged In'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (shouldLogout != true) return;
+
+    setState(() => isLoggingOut = true);
+    try {
+      await AuthService().logout();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    } finally {
+      if (mounted) setState(() => isLoggingOut = false);
+    }
+  }
+
+  Future<String> _currentRole() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return '';
+    final data = await AuthService().getUserData(user.uid);
+    return data?['role']?.toString().toLowerCase() ?? '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF2F2),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Icon(Icons.logout_rounded, color: Color(0xFFDC2626)),
+        ),
+        title: const Text(
+          'Logout',
+          style: TextStyle(
+            color: Color(0xFFDC2626),
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        subtitle: const Text('Sign out on this device'),
+        trailing: isLoggingOut
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.chevron_right_rounded),
+        onTap: isLoggingOut ? null : confirmLogout,
+      ),
     );
   }
 }

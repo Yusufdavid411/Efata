@@ -118,8 +118,8 @@ class AuthService {
     if (!userDoc.exists) {
       await userRef.set({
         'uid': user.uid,
-        'name':
-            user.displayName ?? user.email?.split('@').first ?? 'EFATA user',
+        'name': user.displayName ?? '',
+        'fullName': user.displayName ?? '',
         'email': user.email,
         'photoUrl': user.photoURL,
         'role': role,
@@ -138,7 +138,7 @@ class AuthService {
         await driverRef.set({
           'uid': user.uid,
           'driverId': user.uid,
-          'name': user.displayName ?? user.email?.split('@').first ?? 'Driver',
+          'name': user.displayName ?? '',
           'fullName': user.displayName ?? '',
           'email': user.email,
           'photoUrl': user.photoURL,

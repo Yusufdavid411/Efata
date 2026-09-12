@@ -83,10 +83,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
+    final savedName = _customerNameFromData(data);
     final nameController = TextEditingController(
-      text: data['fullName']?.toString() == 'Customer profile not completed'
-          ? ''
-          : data['fullName']?.toString() ?? '',
+      text: savedName == 'Customer' ? '' : savedName,
     );
 
     final phoneController = TextEditingController(
@@ -232,6 +231,16 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     );
   }
 
+  String _customerNameFromData(Map<String, dynamic> data) {
+    final fullName = data['fullName']?.toString().trim();
+    if (fullName != null && fullName.isNotEmpty) return fullName;
+
+    final name = data['name']?.toString().trim();
+    if (name != null && name.isNotEmpty) return name;
+
+    return 'Customer';
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -252,16 +261,11 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               ? snapshot.data!.data() as Map<String, dynamic>
               : <String, dynamic>{};
 
-          final fullName =
-              data['fullName']?.toString() ??
-              data['name']?.toString() ??
-              user.displayName ??
-              'Customer profile not completed';
+          final fullName = _customerNameFromData(data);
 
           final phone = data['phone']?.toString() ?? 'Not added';
           final address = data['address']?.toString() ?? 'Not added';
           final photoUrl = data['photoUrl']?.toString();
-          final profileCompleted = data['profileCompleted'] == true;
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -322,95 +326,39 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
               const SizedBox(height: 24),
 
-              if (!profileCompleted) ...[
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFF7ED),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: const Icon(
-                                Icons.assignment_outlined,
-                                color: Color(0xFFEA580C),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Profile Incomplete',
-                                    style: TextStyle(
-                                      color: Color(0xFF9A3412),
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'Finish setup before editing your customer profile.',
-                                    style: TextStyle(
-                                      color: Color(0xFF64748B),
-                                      height: 1.35,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        ElevatedButton.icon(
-                          onPressed: () => Navigator.pushNamed(
-                            context,
-                            '/customerOnboarding',
-                          ),
-                          icon: const Icon(Icons.assignment_turned_in_outlined),
-                          label: const Text('Continue Customer Setup'),
-                        ),
-                      ],
+              Card(
+                child: Column(
+                  children: [
+                    infoTile(
+                      icon: Icons.phone_outlined,
+                      title: "Phone",
+                      value: phone,
                     ),
-                  ),
+                    infoTile(
+                      icon: Icons.email_outlined,
+                      title: "Email",
+                      value: user.email ?? "No email",
+                    ),
+                    infoTile(
+                      icon: Icons.location_on_outlined,
+                      title: "Address",
+                      value: address,
+                    ),
+                  ],
                 ),
-              ] else ...[
-                Card(
-                  child: Column(
-                    children: [
-                      infoTile(
-                        icon: Icons.phone_outlined,
-                        title: "Phone",
-                        value: phone,
-                      ),
-                      infoTile(
-                        icon: Icons.email_outlined,
-                        title: "Email",
-                        value: user.email ?? "No email",
-                      ),
-                      infoTile(
-                        icon: Icons.location_on_outlined,
-                        title: "Address",
-                        value: address,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text("Edit Profile"),
-                  onPressed: () => showEditProfileForm(data),
-                ),
-              ],
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text("Edit Profile"),
+                onPressed: () => showEditProfileForm(data),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.tune_outlined),
+                label: const Text("Open Settings"),
+                onPressed: () => Navigator.pushNamed(context, '/settings'),
+              ),
             ],
           );
         },

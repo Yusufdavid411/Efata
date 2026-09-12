@@ -2,8 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/services/auth_service.dart';
-
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key, required this.isDriver});
 
@@ -24,107 +22,18 @@ class AppDrawer extends StatelessWidget {
         .snapshots();
   }
 
-  Future<void> confirmLogout(BuildContext context) async {
-    final shouldLogout = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: Colors.white,
-      builder: (sheetContext) {
-        final body = isDriver
-            ? 'You will stop receiving delivery requests after logging out.'
-            : 'You will need to sign in again before booking or tracking deliveries.';
-
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF2F2),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.logout_rounded,
-                        color: Color(0xFFDC2626),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Log out of EFATA?',
-                            style: TextStyle(
-                              color: Color(0xFF0F172A),
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            body,
-                            style: const TextStyle(
-                              color: Color(0xFF64748B),
-                              height: 1.35,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(sheetContext, true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC2626),
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: const Icon(Icons.logout_rounded),
-                  label: const Text('Logout'),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  onPressed: () => Navigator.pop(sheetContext, false),
-                  child: const Text('Stay Logged In'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-
-    if (shouldLogout != true) return;
-
-    await AuthService().logout();
-
-    if (!context.mounted) return;
-    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final drawerWidth = screenWidth < 430 ? screenWidth * 0.78 : 340.0;
 
     return Drawer(
-      width: MediaQuery.of(context).size.width.clamp(300, 380).toDouble(),
+      width: drawerWidth,
       child: Column(
         children: [
           if (user == null)
-            const _DrawerProfileHeader(
-              name: 'EFATA',
-              email: 'Not signed in',
-              role: 'Account',
-            )
+            const _DrawerProfileHeader(name: 'EFATA', role: 'Account')
           else
             StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
               stream: profileStream(user),
@@ -135,7 +44,7 @@ class AppDrawer extends StatelessWidget {
                     ? data['fullName'].toString()
                     : data['name']?.toString().trim().isNotEmpty == true
                     ? data['name'].toString()
-                    : user.displayName?.trim().isNotEmpty == true
+                    : isDriver && user.displayName?.trim().isNotEmpty == true
                     ? user.displayName!
                     : isDriver
                     ? 'Driver'
@@ -151,18 +60,13 @@ class AppDrawer extends StatelessWidget {
                           : profileCompleted
                           ? 'Approval in review'
                           : 'Profile incomplete'
-                    : profileCompleted
-                    ? 'Profile ready'
-                    : 'Profile incomplete';
+                    : null;
 
                 return _DrawerProfileHeader(
                   name: name,
-                  email: user.email ?? 'No email',
                   role: isDriver ? 'Driver account' : 'Customer account',
                   status: status,
-                  statusOk: isDriver
-                      ? verificationStatus == 'approved'
-                      : profileCompleted,
+                  statusOk: isDriver ? verificationStatus == 'approved' : true,
                   photoUrl: photoUrl,
                   onTap: () => openProfile(context),
                 );
@@ -178,7 +82,9 @@ class AppDrawer extends StatelessWidget {
                 _DrawerTile(
                   icon: Icons.person_outline_rounded,
                   title: 'Profile',
-                  subtitle: 'Account details and setup status',
+                  subtitle: isDriver
+                      ? 'Account details and approval status'
+                      : 'Account details',
                   onTap: () => openProfile(context),
                 ),
                 if (!isDriver) ...[
@@ -236,23 +142,9 @@ class AppDrawer extends StatelessWidget {
                 const _DrawerTile(
                   icon: Icons.verified_user_outlined,
                   title: 'Trust & Safety',
-                  subtitle: 'Verified accounts and delivery protection',
+                  subtitle: 'Account protection and delivery support',
                 ),
               ],
-            ),
-          ),
-          const Divider(height: 1),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-              child: _DrawerTile(
-                icon: Icons.logout_rounded,
-                title: 'Logout',
-                subtitle: 'Leave this device signed out',
-                danger: true,
-                onTap: () => confirmLogout(context),
-              ),
             ),
           ),
         ],
@@ -264,18 +156,16 @@ class AppDrawer extends StatelessWidget {
 class _DrawerProfileHeader extends StatelessWidget {
   const _DrawerProfileHeader({
     required this.name,
-    required this.email,
     required this.role,
-    this.status = 'Account',
+    this.status,
     this.statusOk = false,
     this.photoUrl,
     this.onTap,
   });
 
   final String name;
-  final String email;
   final String role;
-  final String status;
+  final String? status;
   final bool statusOk;
   final String? photoUrl;
   final VoidCallback? onTap;
@@ -287,26 +177,24 @@ class _DrawerProfileHeader extends StatelessWidget {
       child: Container(
         width: double.infinity,
         padding: EdgeInsets.fromLTRB(
-          20,
-          MediaQuery.of(context).padding.top + 22,
-          20,
-          22,
+          18,
+          MediaQuery.of(context).padding.top + 18,
+          14,
+          18,
         ),
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0F172A), Color(0xFF134E4A)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: Colors.white,
+          border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 CircleAvatar(
-                  radius: 36,
-                  backgroundColor: Colors.white,
+                  radius: 34,
+                  backgroundColor: const Color(0xFFEFFAF7),
                   backgroundImage:
                       photoUrl != null && photoUrl!.trim().isNotEmpty
                       ? NetworkImage(photoUrl!)
@@ -315,54 +203,54 @@ class _DrawerProfileHeader extends StatelessWidget {
                       ? const Icon(
                           Icons.person_rounded,
                           color: Color(0xFF0F766E),
-                          size: 38,
+                          size: 36,
                         )
                       : null,
                 ),
-                const Spacer(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _HeaderPill(label: role),
+                          if (status != null)
+                            _HeaderPill(
+                              label: status!,
+                              icon: statusOk
+                                  ? Icons.verified_rounded
+                                  : Icons.error_outline_rounded,
+                              highlighted: statusOk,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(
                     Icons.chevron_right_rounded,
-                    color: Colors.white,
+                    color: Color(0xFF475569),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 21,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              email,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFFCBD5E1)),
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _HeaderPill(label: role),
-                _HeaderPill(
-                  label: status,
-                  icon: statusOk
-                      ? Icons.verified_rounded
-                      : Icons.error_outline_rounded,
-                  highlighted: statusOk,
                 ),
               ],
             ),
@@ -385,9 +273,7 @@ class _HeaderPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: highlighted
-            ? const Color(0xFFDCFCE7)
-            : Colors.white.withValues(alpha: 0.12),
+        color: highlighted ? const Color(0xFFDCFCE7) : const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
@@ -397,14 +283,18 @@ class _HeaderPill extends StatelessWidget {
             Icon(
               icon,
               size: 14,
-              color: highlighted ? const Color(0xFF16A34A) : Colors.white,
+              color: highlighted
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFF475569),
             ),
             const SizedBox(width: 5),
           ],
           Text(
             label,
             style: TextStyle(
-              color: highlighted ? const Color(0xFF166534) : Colors.white,
+              color: highlighted
+                  ? const Color(0xFF166534)
+                  : const Color(0xFF475569),
               fontWeight: FontWeight.w800,
               fontSize: 12,
             ),
@@ -442,24 +332,22 @@ class _DrawerTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.danger = false,
     this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
-  final bool danger;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? const Color(0xFFDC2626) : const Color(0xFF0F766E);
+    const color = Color(0xFF0F766E);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: danger ? const Color(0xFFFEF2F2) : Colors.transparent,
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -484,8 +372,8 @@ class _DrawerTile extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: TextStyle(
-                          color: danger ? color : const Color(0xFF0F172A),
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
                           fontWeight: FontWeight.w900,
                         ),
                       ),
@@ -505,7 +393,7 @@ class _DrawerTile extends StatelessWidget {
                 if (onTap != null)
                   Icon(
                     Icons.chevron_right_rounded,
-                    color: danger ? color : const Color(0xFF94A3B8),
+                    color: const Color(0xFF94A3B8),
                   ),
               ],
             ),

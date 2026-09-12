@@ -38,7 +38,7 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
           ? data!['fullName'].toString()
           : data?['name']?.toString().trim().isNotEmpty == true
           ? data!['name'].toString()
-          : user.displayName ?? '';
+          : '';
       final savedPhone = data?['phone']?.toString() ?? '';
       final savedAddress = data?['address']?.toString() ?? '';
 
@@ -48,7 +48,7 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
       addressController.text = savedAddress;
     } catch (_) {
       if (!mounted) return;
-      nameController.text = user.displayName ?? '';
+      nameController.text = '';
     }
   }
 
