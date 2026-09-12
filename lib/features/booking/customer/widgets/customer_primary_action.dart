@@ -8,7 +8,7 @@ class CustomerPrimaryAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFF0F766E),
+      color: const Color(0xFF0B6F68),
       borderRadius: BorderRadius.circular(22),
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
@@ -44,7 +44,7 @@ class CustomerPrimaryAction extends StatelessWidget {
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'Pick locations, vehicle, payment, and schedule in one flow.',
+                      'Create a delivery request and track it from pickup to drop-off.',
                       style: TextStyle(color: Color(0xFFCCFBF1), height: 1.35),
                     ),
                   ],

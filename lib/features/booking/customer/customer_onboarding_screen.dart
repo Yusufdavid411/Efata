@@ -21,8 +21,35 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
   @override
   void initState() {
     super.initState();
+    loadSavedProfile();
+  }
+
+  Future<void> loadSavedProfile() async {
     final user = FirebaseAuth.instance.currentUser;
-    nameController.text = user?.displayName ?? '';
+    if (user == null) return;
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final data = doc.data();
+      final savedName = data?['fullName']?.toString().trim().isNotEmpty == true
+          ? data!['fullName'].toString()
+          : data?['name']?.toString().trim().isNotEmpty == true
+          ? data!['name'].toString()
+          : user.displayName ?? '';
+      final savedPhone = data?['phone']?.toString() ?? '';
+      final savedAddress = data?['address']?.toString() ?? '';
+
+      if (!mounted) return;
+      nameController.text = savedName;
+      phoneController.text = savedPhone;
+      addressController.text = savedAddress;
+    } catch (_) {
+      if (!mounted) return;
+      nameController.text = user.displayName ?? '';
+    }
   }
 
   @override
@@ -87,17 +114,34 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
   Future<void> skip() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final data = doc.data();
+      final updates = <String, dynamic>{
         'uid': user.uid,
         'customerId': user.uid,
         'email': user.email,
-        'name': user.displayName ?? user.email?.split('@').first ?? 'Customer',
-        'fullName':
-            user.displayName ?? user.email?.split('@').first ?? 'Customer',
         'role': 'customer',
         'profileCompleted': false,
         'onboardingSkipped': true,
         'updatedAt': FieldValue.serverTimestamp(),
+      };
+      final existingName =
+          data?['fullName']?.toString().trim().isNotEmpty == true
+          ? data!['fullName'].toString()
+          : data?['name']?.toString().trim().isNotEmpty == true
+          ? data!['name'].toString()
+          : null;
+
+      if (existingName != null) {
+        updates['name'] = existingName;
+        updates['fullName'] = existingName;
+      }
+
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        ...updates,
       }, SetOptions(merge: true));
     }
 

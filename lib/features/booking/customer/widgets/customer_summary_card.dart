@@ -23,7 +23,6 @@ class CustomerSummaryCard extends StatelessWidget {
         int active = 0;
         int completed = 0;
         int pending = 0;
-        int issues = 0;
 
         for (final order in orders) {
           final data = order.data() as Map<String, dynamic>;
@@ -31,7 +30,6 @@ class CustomerSummaryCard extends StatelessWidget {
           if (status == 'completed') completed++;
           if (status == 'pending') pending++;
           if (status == 'accepted' || status == 'inTransit') active++;
-          if (data['needsAdminReview'] == true) issues++;
         }
 
         return Container(
@@ -52,42 +50,18 @@ class CustomerSummaryCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0FDFA),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Icon(
-                      Icons.dashboard_customize_outlined,
-                      color: Color(0xFF0F766E),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Delivery Command Center',
-                          style: TextStyle(
-                            color: Color(0xFF0F172A),
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        SizedBox(height: 3),
-                        Text(
-                          'Track what needs attention today.',
-                          style: TextStyle(color: Color(0xFF64748B)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              const Text(
+                'Deliveries',
+                style: TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'A clean view of your active and past orders.',
+                style: TextStyle(color: Color(0xFF64748B), height: 1.35),
               ),
               const SizedBox(height: 18),
               Row(
@@ -112,16 +86,9 @@ class CustomerSummaryCard extends StatelessWidget {
                 children: [
                   _summaryItem(
                     Icons.check_circle_outline_rounded,
-                    'Completed',
+                    'Completed deliveries',
                     completed,
                     const Color(0xFF16A34A),
-                  ),
-                  const SizedBox(width: 10),
-                  _summaryItem(
-                    Icons.support_agent_outlined,
-                    'Reviews',
-                    issues,
-                    const Color(0xFF7C3AED),
                   ),
                 ],
               ),
