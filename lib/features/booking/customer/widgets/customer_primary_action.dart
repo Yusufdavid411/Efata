@@ -8,21 +8,34 @@ class CustomerPrimaryAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFF0B6F68),
-      borderRadius: BorderRadius.circular(22),
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      shadowColor: const Color(0x1A0F172A),
+      elevation: 0,
       child: InkWell(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         onTap: onPressed,
-        child: Padding(
+        child: Container(
           padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0D0F172A),
+                blurRadius: 18,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
           child: Row(
             children: [
               Container(
-                width: 54,
-                height: 54,
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(18),
+                  color: const Color(0xFF0F766E),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Icon(
                   Icons.local_shipping_outlined,
@@ -37,15 +50,15 @@ class CustomerPrimaryAction extends StatelessWidget {
                     Text(
                       'Send goods now',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Color(0xFF0F172A),
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'Create a delivery request and track it from pickup to drop-off.',
-                      style: TextStyle(color: Color(0xFFCCFBF1), height: 1.35),
+                      'Create a delivery request and follow it live.',
+                      style: TextStyle(color: Color(0xFF64748B), height: 1.35),
                     ),
                   ],
                 ),
@@ -55,7 +68,7 @@ class CustomerPrimaryAction extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Color(0xFFF0FDFA),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(

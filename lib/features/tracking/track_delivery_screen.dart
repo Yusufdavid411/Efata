@@ -488,41 +488,72 @@ class _TrackingSummary extends StatelessWidget {
         ? Colors.red
         : isCompleted
         ? Colors.green
-        : Colors.blue;
+        : const MaterialColor(0xFF0F766E, <int, Color>{
+            50: Color(0xFFF0FDFA),
+            100: Color(0xFFCCFBF1),
+            500: Color(0xFF14B8A6),
+            700: Color(0xFF0F766E),
+          });
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      decoration: BoxDecoration(
-        color: statusColor.shade50,
-        border: Border(bottom: BorderSide(color: statusColor.shade100)),
-      ),
+      padding: const EdgeInsets.fromLTRB(22, 14, 22, 22),
+      color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  'Status: $status',
-                  style: const TextStyle(
-                    color: Color(0xFF0F172A),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Delivery status',
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      status,
+                      style: const TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 23,
+                        height: 1.05,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Icon(
-                hasDriverLocation
-                    ? Icons.gps_fixed_rounded
-                    : Icons.timeline_rounded,
-                color: statusColor.shade700,
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Icon(
+                  hasDriverLocation
+                      ? Icons.gps_fixed_rounded
+                      : Icons.timeline_rounded,
+                  color: statusColor.shade700,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(message, style: const TextStyle(color: Color(0xFF475569))),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: const TextStyle(color: Color(0xFF475569), height: 1.35),
+          ),
+          const SizedBox(height: 18),
           Row(
             children: [
               Expanded(
@@ -534,7 +565,7 @@ class _TrackingSummary extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
@@ -578,7 +609,7 @@ class _TrackingSummary extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: 18),
           Row(
             children: [
               for (var i = 0; i < steps.length; i++) ...[
@@ -618,8 +649,8 @@ class _DetailPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: const Color(0xFFFAFBFC),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(

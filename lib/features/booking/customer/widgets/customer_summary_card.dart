@@ -37,13 +37,13 @@ class CustomerSummaryCard extends StatelessWidget {
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(color: const Color(0xFFE2E8F0)),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x120F172A),
-                blurRadius: 22,
-                offset: Offset(0, 12),
+                color: Color(0x0D0F172A),
+                blurRadius: 18,
+                offset: Offset(0, 8),
               ),
             ],
           ),
@@ -54,13 +54,13 @@ class CustomerSummaryCard extends StatelessWidget {
                 'Deliveries',
                 style: TextStyle(
                   color: Color(0xFF0F172A),
-                  fontSize: 20,
+                  fontSize: 21,
                   fontWeight: FontWeight.w900,
                 ),
               ),
               const SizedBox(height: 6),
               const Text(
-                'Track every order from request to completion.',
+                'Active requests and delivery history in one place.',
                 style: TextStyle(color: Color(0xFF64748B), height: 1.35),
               ),
               const SizedBox(height: 18),
@@ -102,15 +102,23 @@ class CustomerSummaryCard extends StatelessWidget {
   Widget _summaryItem(IconData icon, String title, int value, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.14)),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
         child: Row(
           children: [
-            Icon(icon, color: color, size: 22),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(

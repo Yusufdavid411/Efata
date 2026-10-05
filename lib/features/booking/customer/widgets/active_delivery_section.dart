@@ -163,7 +163,7 @@ class OrderPreviewCard extends StatelessWidget {
     final current = isCurrentOrder(status);
 
     return Card(
-      color: isPrimary ? const Color(0xFFEFFDF6) : Colors.white,
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(

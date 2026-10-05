@@ -118,17 +118,14 @@ class DriverEarningsSummary extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF0F766E), Color(0xFF115E59)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(22),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x330F766E),
-                blurRadius: 26,
-                offset: Offset(0, 14),
+                color: Color(0x0D0F172A),
+                blurRadius: 18,
+                offset: Offset(0, 8),
               ),
             ],
           ),
@@ -141,12 +138,12 @@ class DriverEarningsSummary extends StatelessWidget {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.14),
+                      color: Color(0xFFF0FDFA),
                       borderRadius: BorderRadius.circular(15),
                     ),
                     child: const Icon(
                       Icons.account_balance_wallet_outlined,
-                      color: Colors.white,
+                      color: Color(0xFF0F766E),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -157,15 +154,15 @@ class DriverEarningsSummary extends StatelessWidget {
                         Text(
                           'Earnings Wallet',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: Color(0xFF0F172A),
                             fontSize: 17,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
                         SizedBox(height: 3),
                         Text(
-                          'Ready for payout',
-                          style: TextStyle(color: Color(0xFFCCFBF1)),
+                          'Payouts, completed trips, and monthly earnings',
+                          style: TextStyle(color: Color(0xFF64748B)),
                         ),
                       ],
                     ),
@@ -176,8 +173,11 @@ class DriverEarningsSummary extends StatelessWidget {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Color(0xFFF0FDFA),
                       borderRadius: BorderRadius.circular(999),
+                      border: Border.fromBorderSide(
+                        BorderSide(color: Color(0xFFCCFBF1)),
+                      ),
                     ),
                     child: const Text(
                       'Live',
@@ -193,7 +193,10 @@ class DriverEarningsSummary extends StatelessWidget {
               const SizedBox(height: 22),
               const Text(
                 'Available balance',
-                style: TextStyle(color: Color(0xFFCCFBF1)),
+                style: TextStyle(
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 4),
               FittedBox(
@@ -201,7 +204,7 @@ class DriverEarningsSummary extends StatelessWidget {
                 child: Text(
                   'NGN ${totalEarnings.toStringAsFixed(0)}',
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: Color(0xFF0F172A),
                     fontSize: 34,
                     height: 1,
                     fontWeight: FontWeight.w900,
@@ -233,8 +236,8 @@ class DriverEarningsSummary extends StatelessWidget {
                   onPressed: () =>
                       showWithdrawalProcess(context, totalEarnings),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF0F766E),
+                    backgroundColor: const Color(0xFF0F766E),
+                    foregroundColor: Colors.white,
                   ),
                   icon: const Icon(Icons.call_made_rounded),
                   label: const Text('Withdraw to Bank Account'),
@@ -259,21 +262,27 @@ class _WalletMetric extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        color: const Color(0xFFFAFBFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: Color(0xFFCCFBF1))),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 4),
           FittedBox(
             alignment: Alignment.centerLeft,
             child: Text(
               value,
               style: const TextStyle(
-                color: Colors.white,
+                color: Color(0xFF0F172A),
                 fontWeight: FontWeight.w900,
               ),
             ),
