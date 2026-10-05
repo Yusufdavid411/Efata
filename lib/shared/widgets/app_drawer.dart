@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/services/auth_service.dart';
+
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key, required this.isDriver});
 
@@ -20,6 +22,94 @@ class AppDrawer extends StatelessWidget {
         .collection(isDriver ? 'drivers' : 'users')
         .doc(user.uid)
         .snapshots();
+  }
+
+  Future<void> confirmLogout(BuildContext context) async {
+    Navigator.pop(context);
+
+    final body = isDriver
+        ? 'You will stop receiving delivery requests after logging out.'
+        : 'You will need to sign in again before booking or tracking deliveries.';
+
+    final shouldLogout = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(
+                        Icons.logout_rounded,
+                        color: Color(0xFFDC2626),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Log out of EFATA?',
+                            style: TextStyle(
+                              color: Color(0xFF0F172A),
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            body,
+                            style: const TextStyle(
+                              color: Color(0xFF64748B),
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(sheetContext, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.logout_rounded),
+                  label: const Text('Logout'),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(sheetContext, false),
+                  child: const Text('Stay Logged In'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (shouldLogout != true || !context.mounted) return;
+
+    await AuthService().logout();
+    if (!context.mounted) return;
+    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
   }
 
   @override
@@ -146,6 +236,16 @@ class AppDrawer extends StatelessWidget {
                     icon: Icons.verified_user_outlined,
                     title: 'Trust & Safety',
                     subtitle: 'Account protection and delivery support',
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(color: Color(0xFFE2E8F0), height: 1),
+                  const SizedBox(height: 10),
+                  _DrawerTile(
+                    icon: Icons.logout_rounded,
+                    title: 'Logout',
+                    subtitle: 'Sign out on this device',
+                    color: const Color(0xFFDC2626),
+                    onTap: () => confirmLogout(context),
                   ),
                 ],
               ),
@@ -325,18 +425,18 @@ class _DrawerTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.color = const Color(0xFF0F766E),
     this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
+  final Color color;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    const color = Color(0xFF0F766E);
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -365,8 +465,10 @@ class _DrawerTile extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
-                          color: Color(0xFF0F172A),
+                        style: TextStyle(
+                          color: color == const Color(0xFFDC2626)
+                              ? color
+                              : const Color(0xFF0F172A),
                           fontWeight: FontWeight.w900,
                         ),
                       ),
