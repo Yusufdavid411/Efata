@@ -90,8 +90,7 @@ class AuthService {
       );
     }
 
-    await _googleSignIn.signOut();
-    final googleUser = await _googleSignIn.authenticate();
+    final googleUser = await _authenticateWithGoogle();
     final googleAuth = googleUser.authentication;
 
     if (googleAuth.idToken == null) {
@@ -106,6 +105,171 @@ class AuthService {
     );
 
     return _auth.signInWithCredential(credential);
+  }
+
+  Future<GoogleSignInAccount> _authenticateWithGoogle() async {
+    try {
+      return await _googleSignIn.authenticate();
+    } on GoogleSignInException catch (e) {
+      throw _googleExceptionToFirebaseAuth(e);
+    }
+  }
+
+  FirebaseAuthException _googleExceptionToFirebaseAuth(
+    GoogleSignInException exception,
+  ) {
+    final details = exception.details?.toString() ?? '';
+    final description = exception.description ?? '';
+    final combined = '$description $details'.toLowerCase();
+
+    if (exception.code == GoogleSignInExceptionCode.canceled &&
+        combined.contains('account reauth failed')) {
+      return FirebaseAuthException(
+        code: 'google-account-reauth-failed',
+        message:
+            'Google could not verify this account on the device. Update Google Play Services or remove and add the Google account again, then retry.',
+      );
+    }
+
+    return switch (exception.code) {
+      GoogleSignInExceptionCode.canceled => FirebaseAuthException(
+        code: 'google-sign-in-cancelled',
+        message: 'Google sign-in was cancelled.',
+      ),
+      GoogleSignInExceptionCode.clientConfigurationError => FirebaseAuthException(
+        code: 'google-client-configuration-error',
+        message:
+            'Google login is not fully configured for this app build. Check the Web Client ID, package name, and SHA fingerprint.',
+      ),
+      GoogleSignInExceptionCode.providerConfigurationError =>
+        FirebaseAuthException(
+          code: 'google-provider-configuration-error',
+          message:
+              'Google login is not fully configured on this device or Firebase project.',
+        ),
+      GoogleSignInExceptionCode.uiUnavailable => FirebaseAuthException(
+        code: 'google-ui-unavailable',
+        message: 'Google sign-in cannot open on this screen. Please try again.',
+      ),
+      GoogleSignInExceptionCode.interrupted => FirebaseAuthException(
+        code: 'google-sign-in-interrupted',
+        message: 'Google sign-in was interrupted. Please try again.',
+      ),
+      _ => FirebaseAuthException(
+        code: 'google-sign-in-failed',
+        message: exception.description ?? 'Google sign-in failed.',
+      ),
+    };
+  }
+
+  Future<String?> ensureGoogleProfile({
+    required User user,
+    String? preferredRole,
+  }) async {
+    final userRef = _firestore.collection('users').doc(user.uid);
+    final userDoc = await userRef.get();
+
+    if (userDoc.exists) {
+      final role = userDoc.data()?['role']?.toString();
+      await userRef.set({
+        'uid': user.uid,
+        'email': user.email,
+        'photoUrl': user.photoURL,
+        'googleLinked': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      return role?.isNotEmpty == true ? role : preferredRole;
+    }
+
+    final email = user.email?.trim().toLowerCase();
+    if (email != null && email.isNotEmpty) {
+      final existing = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+
+      if (existing.docs.isNotEmpty) {
+        final existingDoc = existing.docs.first;
+        final existingData = existingDoc.data();
+        final existingRole = existingData['role']?.toString();
+        final resolvedRole = existingRole?.isNotEmpty == true
+            ? existingRole!
+            : preferredRole;
+
+        await userRef.set({
+          ...existingData,
+          'uid': user.uid,
+          'email': email,
+          'role': resolvedRole,
+          'photoUrl': existingData['photoUrl'] ?? user.photoURL,
+          'googleLinked': true,
+          'authProvider': existingData['authProvider'] == 'password'
+              ? 'email_google'
+              : (existingData['authProvider'] ?? 'google'),
+          'migratedFromUid': existingDoc.id == user.uid ? null : existingDoc.id,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        if (resolvedRole == 'driver') {
+          await _copyDriverProfileIfNeeded(
+            fromUid: existingDoc.id,
+            toUid: user.uid,
+            user: user,
+          );
+        }
+
+        return resolvedRole;
+      }
+    }
+
+    if (preferredRole == null || preferredRole.isEmpty) return null;
+    await createGoogleProfileIfNeeded(user: user, role: preferredRole);
+    return preferredRole;
+  }
+
+  Future<void> _copyDriverProfileIfNeeded({
+    required String fromUid,
+    required String toUid,
+    required User user,
+  }) async {
+    final driverRef = _firestore.collection('drivers').doc(toUid);
+    final driverDoc = await driverRef.get();
+    if (driverDoc.exists) return;
+
+    final oldDriverDoc = await _firestore
+        .collection('drivers')
+        .doc(fromUid)
+        .get();
+    if (oldDriverDoc.exists) {
+      await driverRef.set({
+        ...oldDriverDoc.data()!,
+        'uid': toUid,
+        'driverId': toUid,
+        'email': user.email,
+        'photoUrl': oldDriverDoc.data()?['photoUrl'] ?? user.photoURL,
+        'googleLinked': true,
+        'migratedFromUid': fromUid == toUid ? null : fromUid,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      return;
+    }
+
+    await driverRef.set({
+      'uid': toUid,
+      'driverId': toUid,
+      'name': user.displayName ?? '',
+      'fullName': user.displayName ?? '',
+      'email': user.email,
+      'photoUrl': user.photoURL,
+      'isAvailable': false,
+      'isOnline': false,
+      'profileCompleted': false,
+      'licenseUploaded': false,
+      'verificationStatus': 'incomplete',
+      'authProvider': 'google',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<void> createGoogleProfileIfNeeded({
@@ -185,8 +349,7 @@ class AuthService {
     }
 
     await _ensureGoogleInitialized();
-    await _googleSignIn.signOut();
-    final googleUser = await _googleSignIn.authenticate();
+    final googleUser = await _authenticateWithGoogle();
     final googleAuth = googleUser.authentication;
 
     if (googleAuth.idToken == null) {

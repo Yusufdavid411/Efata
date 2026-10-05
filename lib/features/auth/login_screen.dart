@@ -168,12 +168,11 @@ class _LoginScreenState extends State<LoginScreen> {
         throw Exception('Google sign-in failed. Please try again.');
       }
 
-      final userDoc = await FirebaseFirestore.instance
+      String? role = await authService.ensureGoogleProfile(user: user);
+      var userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
-
-      String? role = userDoc.data()?['role']?.toString();
 
       if (userDoc.exists && userDoc.data()?['isSuspended'] == true) {
         await FirebaseAuth.instance.signOut();
@@ -193,7 +192,14 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        await authService.createGoogleProfileIfNeeded(user: user, role: role);
+        role = await authService.ensureGoogleProfile(
+          user: user,
+          preferredRole: role,
+        );
+        userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
       }
 
       if (role == 'driver') {
@@ -253,6 +259,12 @@ class _LoginScreenState extends State<LoginScreen> {
         'account-exists-with-different-credential' =>
           'This email already uses another login method.',
         'google-sign-in-unavailable' => 'Google sign-in is unavailable here.',
+        'google-sign-in-cancelled' => 'Google sign-in was cancelled.',
+        'google-account-reauth-failed' =>
+          'Google could not verify this account on this phone. Update Google Play Services or remove and add the Google account again, then retry.',
+        'google-client-configuration-error' ||
+        'google-provider-configuration-error' =>
+          'Google login is not fully configured for this app build yet.',
         'missing-google-token' => 'Google sign-in could not be verified.',
         'missing-google-web-client-id' =>
           'Google login needs the Web client ID to be added to this build.',

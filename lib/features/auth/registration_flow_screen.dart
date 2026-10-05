@@ -209,11 +209,7 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
       final user = credential.user;
       if (user == null) throw Exception('Google sign-in failed.');
 
-      final userRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid);
-      final userDoc = await userRef.get();
-      final existingRole = userDoc.data()?['role']?.toString();
+      final existingRole = await authService.ensureGoogleProfile(user: user);
 
       if (existingRole != null &&
           existingRole.isNotEmpty &&
@@ -227,9 +223,9 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
         return;
       }
 
-      await authService.createGoogleProfileIfNeeded(
+      await authService.ensureGoogleProfile(
         user: user,
-        role: widget.role,
+        preferredRole: widget.role,
       );
 
       final route = await _routeForGoogleUser(user.uid, widget.role);
@@ -244,6 +240,12 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
       final message = switch (e.code) {
         'missing-google-web-client-id' =>
           'Add the Firebase Web Client ID to this build before Google sign-in can work.',
+        'google-sign-in-cancelled' => 'Google sign-in was cancelled.',
+        'google-account-reauth-failed' =>
+          'Google could not verify this account on this phone. Update Google Play Services or remove and add the Google account again, then retry.',
+        'google-client-configuration-error' ||
+        'google-provider-configuration-error' =>
+          'Google sign-in is not fully configured for this app build yet.',
         'account-exists-with-different-credential' =>
           'This email already uses password login. Sign in with password, then add Google in Settings.',
         _ => e.message ?? 'Google sign-in failed. Please try again.',
