@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -56,10 +57,15 @@ class _AppLiveMapState extends State<AppLiveMap> {
   bool loadingActiveRoute = false;
   bool locationChecked = false;
   MapType mapType = MapType.hybrid;
+  BitmapDescriptor? pickupMarkerIcon;
+  BitmapDescriptor? dropoffMarkerIcon;
+  BitmapDescriptor? driverMarkerIcon;
+  BitmapDescriptor? currentLocationMarkerIcon;
 
   @override
   void initState() {
     super.initState();
+    _loadMarkerIcons();
     _loadCurrentLocation();
     _loadRouteIfNeeded();
     _loadActiveRouteIfNeeded(force: true);
@@ -251,6 +257,97 @@ class _AppLiveMapState extends State<AppLiveMap> {
     );
   }
 
+  Future<void> _loadMarkerIcons() async {
+    final icons = await Future.wait([
+      _buildMapMarkerIcon(
+        icon: Icons.inventory_2_rounded,
+        background: const Color(0xFF0F766E),
+      ),
+      _buildMapMarkerIcon(
+        icon: Icons.flag_rounded,
+        background: const Color(0xFFDC2626),
+      ),
+      _buildMapMarkerIcon(
+        icon: Icons.directions_car_filled_rounded,
+        background: const Color(0xFF111827),
+        iconColor: const Color(0xFF34D399),
+        size: 116,
+        iconSize: 54,
+      ),
+      _buildMapMarkerIcon(
+        icon: Icons.my_location_rounded,
+        background: const Color(0xFF2563EB),
+        size: 86,
+        iconSize: 38,
+      ),
+    ]);
+
+    if (!mounted) return;
+
+    setState(() {
+      pickupMarkerIcon = icons[0];
+      dropoffMarkerIcon = icons[1];
+      driverMarkerIcon = icons[2];
+      currentLocationMarkerIcon = icons[3];
+    });
+  }
+
+  Future<BitmapDescriptor> _buildMapMarkerIcon({
+    required IconData icon,
+    required Color background,
+    Color iconColor = Colors.white,
+    double size = 96,
+    double iconSize = 44,
+  }) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final markerSize = Size(size, size + 18);
+    final center = Offset(size / 2, size / 2);
+    final radius = size * 0.36;
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.22)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    canvas.drawCircle(center.translate(0, 5), radius, shadowPaint);
+
+    final pointerPath = Path()
+      ..moveTo(center.dx - 11, size * 0.76)
+      ..lineTo(center.dx + 11, size * 0.76)
+      ..lineTo(center.dx, size + 13)
+      ..close();
+    canvas.drawPath(pointerPath, Paint()..color = background);
+
+    canvas.drawCircle(center, radius + 6, Paint()..color = Colors.white);
+    canvas.drawCircle(center, radius, Paint()..color = background);
+
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(icon.codePoint),
+      style: TextStyle(
+        color: iconColor,
+        fontSize: iconSize,
+        fontFamily: icon.fontFamily,
+        package: icon.fontPackage,
+      ),
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        center.dx - textPainter.width / 2,
+        center.dy - textPainter.height / 2,
+      ),
+    );
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(
+      markerSize.width.toInt(),
+      markerSize.height.toInt(),
+    );
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+  }
+
   void _fitRouteAfterFrame() {
     WidgetsBinding.instance.addPostFrameCallback((_) => _fitRoute());
   }
@@ -420,31 +517,38 @@ class _AppLiveMapState extends State<AppLiveMap> {
         markerId: const MarkerId('pickup'),
         position: widget.pickupPoint,
         infoWindow: const InfoWindow(title: 'Pickup'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        icon:
+            pickupMarkerIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       ),
       Marker(
         markerId: const MarkerId('dropoff'),
         position: widget.dropoffPoint,
         infoWindow: const InfoWindow(title: 'Drop-off'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        icon:
+            dropoffMarkerIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
       ),
       if (widget.driverPoint != null)
         Marker(
           markerId: const MarkerId('driver'),
           position: widget.driverPoint!,
           infoWindow: const InfoWindow(title: 'Driver'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueAzure,
-          ),
+          icon:
+              driverMarkerIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          anchor: const Offset(0.5, 0.62),
         ),
       if (userPoint != null)
         Marker(
           markerId: const MarkerId('current-location'),
           position: userPoint!,
           infoWindow: const InfoWindow(title: 'Your location'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueViolet,
-          ),
+          icon:
+              currentLocationMarkerIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueViolet,
+              ),
         ),
     };
 

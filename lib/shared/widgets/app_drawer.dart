@@ -25,14 +25,13 @@ class AppDrawer extends StatelessWidget {
   }
 
   Future<void> confirmLogout(BuildContext context) async {
-    Navigator.pop(context);
-
     final body = isDriver
         ? 'You will stop receiving delivery requests after logging out.'
         : 'You will need to sign in again before booking or tracking deliveries.';
 
     final shouldLogout = await showModalBottomSheet<bool>(
       context: context,
+      useRootNavigator: true,
       showDragHandle: true,
       backgroundColor: Colors.white,
       builder: (sheetContext) {
@@ -109,7 +108,10 @@ class AppDrawer extends StatelessWidget {
 
     await AuthService().logout();
     if (!context.mounted) return;
-    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    Navigator.of(
+      context,
+      rootNavigator: true,
+    ).pushNamedAndRemoveUntil('/', (route) => false);
   }
 
   @override
