@@ -279,56 +279,87 @@ class _AppLiveMapState extends State<AppLiveMap> {
   Future<BitmapDescriptor> _buildPickupMarkerIcon() async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const markerSize = Size(72, 72);
+    const markerSize = Size(76, 78);
 
     final shadow = Paint()
       ..color = Colors.black.withValues(alpha: 0.22)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawOval(const Rect.fromLTWH(17, 55, 38, 10), shadow);
+    canvas.drawOval(const Rect.fromLTWH(17, 61, 42, 10), shadow);
 
-    final top = Path()
-      ..moveTo(19, 25)
-      ..lineTo(36, 14)
-      ..lineTo(54, 25)
-      ..lineTo(37, 36)
+    final handlePaint = Paint()
+      ..color = const Color(0xFF064E3B)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      const Rect.fromLTWH(25, 10, 26, 28),
+      math.pi,
+      math.pi,
+      false,
+      handlePaint,
+    );
+
+    final bag = Path()
+      ..moveTo(20, 27)
+      ..quadraticBezierTo(20, 22, 25, 22)
+      ..lineTo(52, 22)
+      ..quadraticBezierTo(57, 22, 57, 27)
+      ..lineTo(62, 61)
+      ..quadraticBezierTo(63, 67, 57, 68)
+      ..lineTo(20, 68)
+      ..quadraticBezierTo(14, 67, 15, 61)
       ..close();
     canvas.drawPath(
-      top,
+      bag.shift(const Offset(0, 3)),
+      Paint()..color = const Color(0xFF047857),
+    );
+    canvas.drawPath(
+      bag,
       Paint()
         ..shader = ui.Gradient.linear(
-          const Offset(28, 14),
-          const Offset(48, 36),
-          const [Color(0xFFA7F3D0), Color(0xFF34D399)],
+          const Offset(18, 22),
+          const Offset(58, 68),
+          const [Color(0xFF6EE7B7), Color(0xFF0F766E)],
         ),
     );
 
-    final left = Path()
-      ..moveTo(19, 25)
-      ..lineTo(37, 36)
-      ..lineTo(37, 57)
-      ..lineTo(19, 45)
+    final sideShade = Path()
+      ..moveTo(48, 23)
+      ..quadraticBezierTo(56, 24, 57, 29)
+      ..lineTo(62, 61)
+      ..quadraticBezierTo(62, 67, 56, 68)
+      ..lineTo(48, 68)
       ..close();
-    canvas.drawPath(left, Paint()..color = const Color(0xFF0F766E));
+    canvas.drawPath(
+      sideShade,
+      Paint()..color = const Color(0xFF065F46).withValues(alpha: 0.28),
+    );
 
-    final right = Path()
-      ..moveTo(54, 25)
-      ..lineTo(37, 36)
-      ..lineTo(37, 57)
-      ..lineTo(54, 45)
-      ..close();
-    canvas.drawPath(right, Paint()..color = const Color(0xFF14B8A6));
-
-    final tape = Paint()
-      ..color = Colors.white.withValues(alpha: 0.72)
-      ..strokeWidth = 2.2
+    final creasePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.46)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
       ..strokeCap = StrokeCap.round;
-    canvas.drawLine(const Offset(36, 14), const Offset(37, 36), tape);
-    canvas.drawLine(
-      const Offset(27, 31),
-      const Offset(45, 20),
+    canvas.drawLine(const Offset(25, 33), const Offset(52, 33), creasePaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(28, 43, 20, 11),
+        const Radius.circular(4),
+      ),
       Paint()
-        ..color = const Color(0xFF064E3B).withValues(alpha: 0.28)
-        ..strokeWidth = 1.5,
+        ..color = Colors.white.withValues(alpha: 0.24)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6,
+    );
+    canvas.drawCircle(
+      const Offset(28, 28),
+      2,
+      Paint()..color = const Color(0xFFECFDF5),
+    );
+    canvas.drawCircle(
+      const Offset(49, 28),
+      2,
+      Paint()..color = const Color(0xFFECFDF5),
     );
 
     return _bitmapFromRecorder(recorder, markerSize);
