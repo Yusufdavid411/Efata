@@ -1,4 +1,4 @@
-package com.example.logistics_app
+package com.efata.logistics
 
 import android.content.pm.PackageManager
 import io.flutter.embedding.engine.FlutterEngine

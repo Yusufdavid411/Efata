@@ -72,10 +72,8 @@ The Android app now uses `minSdk = 24` because the Google Navigation Flutter SDK
 The current Android package/application ID is:
 
 ```text
-com.example.logistics_app
+com.efata.logistics
 ```
-
-Before production, change this package ID to the final EFATA package name and update Google Cloud key restrictions accordingly.
 
 ## Google Cloud Console Restrictions
 
@@ -84,7 +82,7 @@ Create separate keys where possible.
 Android Maps SDK key:
 
 - Application restriction: Android apps
-- Package name: `com.example.logistics_app`
+- Package name: `com.efata.logistics`
 - SHA-1 certificate fingerprint: use the debug SHA-1 for testing and release SHA-1 for production
 - API restriction: Maps SDK for Android and Navigation SDK
 

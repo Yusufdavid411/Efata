@@ -7,12 +7,20 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:214568690652:android:8f29f7d0ae7fd370b06519",
+        "mobilesdk_app_id": "1:214568690652:android:641f6abf94593c35b06519",
         "android_client_info": {
-          "package_name": "com.example.logistics_app"
+          "package_name": "com.efata.logistics"
         }
       },
       "oauth_client": [
+        {
+          "client_id": "214568690652-47jbohc08jbml59qfb7hgfrrl817nr7l.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.efata.logistics",
+            "certificate_hash": "8e8eb3e12636622955ceb754ffbc664079211b33"
+          }
+        },
         {
           "client_id": "214568690652-te03qc4kjpjnde76n6h7ck9auqhoeohu.apps.googleusercontent.com",
           "client_type": 3
