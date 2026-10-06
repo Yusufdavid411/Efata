@@ -110,10 +110,8 @@ class DriverHistorySection extends StatelessWidget {
                   if (maxItems != null && completed.length > maxItems!) ...[
                     const SizedBox(width: 8),
                     TextButton(
-                      onPressed: () => Navigator.pushNamed(
-                        context,
-                        '/driverJobs',
-                      ),
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/driverJobs'),
                       child: const Text('See more'),
                     ),
                   ],
@@ -168,14 +166,14 @@ class _RecentJobCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         side: const BorderSide(color: Color(0xFFE2E8F0)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Container(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _showDetails(context),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
@@ -187,75 +185,120 @@ class _RecentJobCard extends StatelessWidget {
                   color: Color(0xFF0F766E),
                 ),
               ),
-              title: Text(
-                dropoff,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF0F172A),
-                  fontWeight: FontWeight.w900,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      dropoff,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'From $pickup',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Completed delivery',
+                      style: TextStyle(
+                        color: Color(0xFF0F766E),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              subtitle: Text(
-                'From $pickup',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF64748B),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _MetaPill(
-                  icon: Icons.event_available_outlined,
-                  label: completedAt,
-                ),
-                _MetaPill(icon: Icons.payments_outlined, label: price),
-                if (vehicleType != null && vehicleType!.isNotEmpty)
-                  _MetaPill(
-                    icon: Icons.local_shipping_outlined,
-                    label: vehicleType!,
-                  ),
-              ],
-            ),
-          ],
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  void _showDetails(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Job details',
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _DetailRow(label: 'Pickup', value: pickup),
+                _DetailRow(label: 'Drop-off', value: dropoff),
+                _DetailRow(label: 'Completed', value: completedAt),
+                _DetailRow(label: 'Amount', value: price),
+                if (vehicleType != null && vehicleType!.isNotEmpty)
+                  _DetailRow(label: 'Vehicle', value: vehicleType!),
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
-class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.icon, required this.label});
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
 
-  final IconData icon;
   final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 15, color: const Color(0xFF64748B)),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF475569),
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
+          SizedBox(
+            width: 88,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: Color(0xFF0F172A),
+                fontWeight: FontWeight.w800,
+                height: 1.3,
+              ),
             ),
           ),
         ],

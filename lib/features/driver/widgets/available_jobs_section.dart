@@ -257,7 +257,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
                     children: [
                       const Expanded(
                         child: Text(
-                          'Pickup preview',
+                          'Route preview',
                           style: TextStyle(
                             color: Color(0xFF0F172A),
                             fontSize: 18,
@@ -286,12 +286,17 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                  ),
                   child: Column(
                     children: [
                       _PreviewRouteRow(label: 'Pickup', value: pickup),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       _PreviewRouteRow(label: 'Drop-off', value: dropoff),
                     ],
                   ),
@@ -477,7 +482,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
                   dropoff: dropoff,
                 ),
                 icon: const Icon(Icons.map_outlined),
-                label: const Text('Preview pickup on map'),
+                label: const Text('View route'),
               ),
             ],
             const SizedBox(height: 12),
@@ -628,7 +633,8 @@ class _RouteEtaChipGroup extends StatelessWidget {
     if (minutes < 60) return '$minutes min';
     final hours = minutes ~/ 60;
     final remainder = minutes % 60;
-    return remainder == 0 ? '${hours}h' : '${hours}h ${remainder}m';
+    final hourLabel = hours == 1 ? '1hr' : '${hours}hrs';
+    return remainder == 0 ? hourLabel : '$hourLabel ${remainder}min';
   }
 
   @override
@@ -679,11 +685,7 @@ class _RouteEtaChipGroup extends StatelessWidget {
 }
 
 class _JobChip extends StatelessWidget {
-  const _JobChip({
-    required this.icon,
-    required this.label,
-    required this.tone,
-  });
+  const _JobChip({required this.icon, required this.label, required this.tone});
 
   final IconData icon;
   final String label;
@@ -729,9 +731,7 @@ class _PreviewRouteRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(
-          label == 'Pickup'
-              ? Icons.inventory_2_outlined
-              : Icons.flag_outlined,
+          label == 'Pickup' ? Icons.inventory_2_outlined : Icons.flag_outlined,
           color: const Color(0xFF0F766E),
           size: 19,
         ),

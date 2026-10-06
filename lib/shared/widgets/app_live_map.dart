@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -259,27 +260,10 @@ class _AppLiveMapState extends State<AppLiveMap> {
 
   Future<void> _loadMarkerIcons() async {
     final icons = await Future.wait([
-      _buildMapMarkerIcon(
-        icon: Icons.inventory_2_rounded,
-        background: const Color(0xFF0F766E),
-      ),
-      _buildMapMarkerIcon(
-        icon: Icons.flag_rounded,
-        background: const Color(0xFFDC2626),
-      ),
-      _buildMapMarkerIcon(
-        icon: Icons.directions_car_filled_rounded,
-        background: const Color(0xFF111827),
-        iconColor: const Color(0xFF34D399),
-        size: 116,
-        iconSize: 54,
-      ),
-      _buildMapMarkerIcon(
-        icon: Icons.my_location_rounded,
-        background: const Color(0xFF2563EB),
-        size: 86,
-        iconSize: 38,
-      ),
+      _buildPickupMarkerIcon(),
+      _buildDropoffMarkerIcon(),
+      _buildDriverMarkerIcon(),
+      _buildCurrentLocationMarkerIcon(),
     ]);
 
     if (!mounted) return;
@@ -292,53 +276,150 @@ class _AppLiveMapState extends State<AppLiveMap> {
     });
   }
 
-  Future<BitmapDescriptor> _buildMapMarkerIcon({
-    required IconData icon,
-    required Color background,
-    Color iconColor = Colors.white,
-    double size = 96,
-    double iconSize = 44,
-  }) async {
+  Future<BitmapDescriptor> _buildPickupMarkerIcon() async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    final markerSize = Size(size, size + 18);
-    final center = Offset(size / 2, size / 2);
-    final radius = size * 0.36;
+    const markerSize = Size(74, 82);
 
-    final shadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.22)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawCircle(center.translate(0, 5), radius, shadowPaint);
+    final shadow = Paint()
+      ..color = Colors.black.withValues(alpha: 0.2)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7);
+    canvas.drawOval(const Rect.fromLTWH(18, 60, 38, 10), shadow);
 
-    final pointerPath = Path()
-      ..moveTo(center.dx - 11, size * 0.76)
-      ..lineTo(center.dx + 11, size * 0.76)
-      ..lineTo(center.dx, size + 13)
+    final top = Path()
+      ..moveTo(23, 24)
+      ..lineTo(38, 14)
+      ..lineTo(55, 24)
+      ..lineTo(39, 34)
       ..close();
-    canvas.drawPath(pointerPath, Paint()..color = background);
+    canvas.drawPath(top, Paint()..color = const Color(0xFF6EE7B7));
 
-    canvas.drawCircle(center, radius + 6, Paint()..color = Colors.white);
-    canvas.drawCircle(center, radius, Paint()..color = background);
+    final left = Path()
+      ..moveTo(23, 24)
+      ..lineTo(39, 34)
+      ..lineTo(39, 55)
+      ..lineTo(23, 44)
+      ..close();
+    canvas.drawPath(left, Paint()..color = const Color(0xFF0F766E));
 
-    final textPainter = TextPainter(textDirection: TextDirection.ltr);
-    textPainter.text = TextSpan(
-      text: String.fromCharCode(icon.codePoint),
-      style: TextStyle(
-        color: iconColor,
-        fontSize: iconSize,
-        fontFamily: icon.fontFamily,
-        package: icon.fontPackage,
-      ),
+    final right = Path()
+      ..moveTo(55, 24)
+      ..lineTo(39, 34)
+      ..lineTo(39, 55)
+      ..lineTo(55, 44)
+      ..close();
+    canvas.drawPath(right, Paint()..color = const Color(0xFF14B8A6));
+
+    canvas.drawLine(
+      const Offset(38, 14),
+      const Offset(39, 34),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.5)
+        ..strokeWidth = 2,
     );
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset(
-        center.dx - textPainter.width / 2,
-        center.dy - textPainter.height / 2,
-      ),
+
+    return _bitmapFromRecorder(recorder, markerSize);
+  }
+
+  Future<BitmapDescriptor> _buildDropoffMarkerIcon() async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    const markerSize = Size(66, 78);
+
+    final shadow = Paint()
+      ..color = Colors.black.withValues(alpha: 0.18)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7);
+    canvas.drawOval(const Rect.fromLTWH(20, 60, 28, 8), shadow);
+
+    final pole = Paint()
+      ..color = const Color(0xFF334155)
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(const Offset(28, 16), const Offset(28, 58), pole);
+
+    final flag = Path()
+      ..moveTo(30, 16)
+      ..cubicTo(42, 10, 47, 18, 57, 13)
+      ..lineTo(57, 38)
+      ..cubicTo(47, 43, 42, 35, 30, 41)
+      ..close();
+    canvas.drawPath(flag, Paint()..color = const Color(0xFFEF4444));
+    canvas.drawPath(
+      flag,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.24)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
     );
 
+    return _bitmapFromRecorder(recorder, markerSize);
+  }
+
+  Future<BitmapDescriptor> _buildDriverMarkerIcon() async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    const markerSize = Size(86, 86);
+
+    final shadow = Paint()
+      ..color = Colors.black.withValues(alpha: 0.2)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    canvas.drawOval(const Rect.fromLTWH(19, 58, 48, 12), shadow);
+
+    final body = RRect.fromRectAndRadius(
+      const Rect.fromLTWH(21, 25, 44, 34),
+      const Radius.circular(12),
+    );
+    canvas.drawRRect(
+      body.shift(const Offset(0, 5)),
+      Paint()..color = const Color(0xFF047857),
+    );
+    canvas.drawRRect(body, Paint()..color = const Color(0xFF34D399));
+
+    final cabin = Path()
+      ..moveTo(30, 25)
+      ..lineTo(38, 14)
+      ..lineTo(53, 14)
+      ..lineTo(61, 25)
+      ..close();
+    canvas.drawPath(cabin, Paint()..color = const Color(0xFF6EE7B7));
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(34, 18, 21, 12),
+        const Radius.circular(4),
+      ),
+      Paint()..color = const Color(0xFFE0F2FE),
+    );
+
+    final wheelPaint = Paint()..color = const Color(0xFF0F172A);
+    canvas.drawCircle(const Offset(29, 58), 5, wheelPaint);
+    canvas.drawCircle(const Offset(58, 58), 5, wheelPaint);
+    canvas.drawCircle(const Offset(29, 58), 2, Paint()..color = Colors.white);
+    canvas.drawCircle(const Offset(58, 58), 2, Paint()..color = Colors.white);
+
+    return _bitmapFromRecorder(recorder, markerSize);
+  }
+
+  Future<BitmapDescriptor> _buildCurrentLocationMarkerIcon() async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    const markerSize = Size(52, 52);
+    const center = Offset(26, 26);
+
+    canvas.drawCircle(
+      center,
+      18,
+      Paint()..color = const Color(0xFF2563EB).withValues(alpha: 0.22),
+    );
+    canvas.drawCircle(center, 9, Paint()..color = Colors.white);
+    canvas.drawCircle(center, 6, Paint()..color = const Color(0xFF2563EB));
+
+    return _bitmapFromRecorder(recorder, markerSize);
+  }
+
+  Future<BitmapDescriptor> _bitmapFromRecorder(
+    ui.PictureRecorder recorder,
+    Size markerSize,
+  ) async {
     final picture = recorder.endRecording();
     final image = await picture.toImage(
       markerSize.width.toInt(),
@@ -346,6 +427,17 @@ class _AppLiveMapState extends State<AppLiveMap> {
     );
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+  }
+
+  double _bearingBetween(LatLng from, LatLng to) {
+    final fromLat = from.latitude * math.pi / 180;
+    final toLat = to.latitude * math.pi / 180;
+    final deltaLng = (to.longitude - from.longitude) * math.pi / 180;
+    final y = math.sin(deltaLng) * math.cos(toLat);
+    final x =
+        math.cos(fromLat) * math.sin(toLat) -
+        math.sin(fromLat) * math.cos(toLat) * math.cos(deltaLng);
+    return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
   }
 
   void _fitRouteAfterFrame() {
@@ -512,6 +604,10 @@ class _AppLiveMapState extends State<AppLiveMap> {
         : null;
     final driverRouteStart = widget.driverPoint ?? userPoint;
     final activeTargetPoint = widget.activeTargetPoint;
+    final driverBearing =
+        widget.driverPoint != null && activeTargetPoint != null
+        ? _bearingBetween(widget.driverPoint!, activeTargetPoint)
+        : 0.0;
     final markers = {
       Marker(
         markerId: const MarkerId('pickup'),
@@ -537,7 +633,9 @@ class _AppLiveMapState extends State<AppLiveMap> {
           icon:
               driverMarkerIcon ??
               BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-          anchor: const Offset(0.5, 0.62),
+          anchor: const Offset(0.5, 0.5),
+          flat: true,
+          rotation: driverBearing,
         ),
       if (userPoint != null)
         Marker(
@@ -546,9 +644,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
           infoWindow: const InfoWindow(title: 'Your location'),
           icon:
               currentLocationMarkerIcon ??
-              BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueViolet,
-              ),
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
         ),
     };
 
@@ -832,11 +928,20 @@ class _RouteStatusCard extends StatelessWidget {
   final String? activeTargetLabel;
   final bool isFollowing;
 
+  String _formatDuration(int minutes) {
+    if (minutes <= 0) return 'time unavailable';
+    if (minutes < 60) return '$minutes min';
+    final hours = minutes ~/ 60;
+    final remainder = minutes % 60;
+    final hourLabel = hours == 1 ? '1hr' : '${hours}hrs';
+    return remainder == 0 ? hourLabel : '$hourLabel ${remainder}min';
+  }
+
   @override
   Widget build(BuildContext context) {
     final displayRoute = activeRoute ?? route;
     final routeMessage = displayRoute != null
-        ? '${displayRoute.distanceKm.toStringAsFixed(1)} km, about ${displayRoute.durationMinutes} min'
+        ? '${displayRoute.distanceKm.toStringAsFixed(1)} km, about ${_formatDuration(displayRoute.durationMinutes)}'
         : routeError ?? 'Delivery route';
     final message = activeTargetLabel == null
         ? routeMessage
