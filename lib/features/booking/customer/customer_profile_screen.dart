@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/services/app_notification_banner_service.dart';
+import '../../../shared/widgets/app_bottom_navigation.dart';
 
 class CustomerProfileScreen extends StatefulWidget {
   const CustomerProfileScreen({super.key});
@@ -251,6 +252,10 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Customer Profile")),
+      bottomNavigationBar: const AppBottomNavigation(
+        isDriver: false,
+        currentIndex: 3,
+      ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')

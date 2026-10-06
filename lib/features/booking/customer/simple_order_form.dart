@@ -10,6 +10,7 @@ import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/core/services/place_suggestion_service.dart';
 import 'package:logistics_app/features/map/map_picker_screen.dart';
 import 'package:logistics_app/features/tracking/track_delivery_screen.dart';
+import '../../../shared/widgets/app_bottom_navigation.dart';
 
 class SimpleOrderForm extends StatefulWidget {
   const SimpleOrderForm({super.key});
@@ -465,6 +466,10 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Where's it going?"), centerTitle: true),
+      bottomNavigationBar: const AppBottomNavigation(
+        isDriver: false,
+        currentIndex: 1,
+      ),
       body: SafeArea(
         child: Column(
           children: [

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/app_bottom_navigation.dart';
 import '../../../shared/widgets/app_drawer.dart';
 import '../../../shared/widgets/ai_floating_button.dart';
 import 'widgets/customer_summary_card.dart';
@@ -14,6 +15,10 @@ class CustomerHomeScreen extends StatelessWidget {
     return Scaffold(
       drawer: const AppDrawer(isDriver: false),
       appBar: AppBar(title: const Text("Customer Dashboard")),
+      bottomNavigationBar: const AppBottomNavigation(
+        isDriver: false,
+        currentIndex: 0,
+      ),
       body: Stack(
         children: [
           Padding(

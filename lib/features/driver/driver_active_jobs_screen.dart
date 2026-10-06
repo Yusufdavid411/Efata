@@ -168,29 +168,34 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
   }
 
   Future<bool> ensureLocationPermission() async {
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    final access = await LocationService.requestLocationAccess();
 
-    if (!serviceEnabled) {
+    if (access == LocationAccessStatus.serviceDisabled) {
       if (mounted) {
         AppNotificationBannerService.error(
-          'Please turn on your location service.',
+          'Turn on location so EFATA can guide you to the pickup and keep the customer updated.',
           title: 'Location needed',
         );
       }
+      await LocationService.openLocationSettings();
       return false;
     }
 
-    LocationPermission permission = await Geolocator.checkPermission();
-
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
+    if (access == LocationAccessStatus.deniedForever) {
       if (mounted) {
         AppNotificationBannerService.error(
-          'Location permission is required.',
+          'Allow location permission from app settings to start this trip.',
+          title: 'Permission needed',
+        );
+      }
+      await LocationService.openAppSettings();
+      return false;
+    }
+
+    if (access != LocationAccessStatus.granted) {
+      if (mounted) {
+        AppNotificationBannerService.error(
+          'Location permission is required to start this trip.',
           title: 'Permission needed',
         );
       }
@@ -222,6 +227,14 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
             'driverLng': position.longitude,
             'lastLocationUpdate': Timestamp.now(),
           });
+          final driver = FirebaseAuth.instance.currentUser;
+          if (driver != null) {
+            FirebaseFirestore.instance.collection('drivers').doc(driver.uid).set({
+              'driverLat': position.latitude,
+              'driverLng': position.longitude,
+              'lastLocationUpdate': Timestamp.now(),
+            }, SetOptions(merge: true));
+          }
         });
   }
 
@@ -342,7 +355,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
               dropoffLat != null &&
               dropoffLng != null;
 
-          if (status == 'intransit') {
+          if (status == 'accepted' || status == 'intransit') {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               startLiveLocationTracking(job.id);
             });

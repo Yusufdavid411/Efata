@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/services/app_notification_banner_service.dart';
+import '../../shared/widgets/app_bottom_navigation.dart';
 
 class DriverProfileScreen extends StatefulWidget {
   const DriverProfileScreen({super.key});
@@ -283,6 +284,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Driver Profile")),
+      bottomNavigationBar: const AppBottomNavigation(
+        isDriver: true,
+        currentIndex: 2,
+      ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('drivers')

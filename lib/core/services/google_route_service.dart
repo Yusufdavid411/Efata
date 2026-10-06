@@ -113,7 +113,7 @@ class GoogleRouteService {
               },
             },
             'travelMode': 'DRIVE',
-            'routingPreference': 'TRAFFIC_UNAWARE',
+            'routingPreference': 'TRAFFIC_AWARE',
             'polylineQuality': 'OVERVIEW',
           }),
         )

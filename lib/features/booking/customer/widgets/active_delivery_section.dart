@@ -8,7 +8,10 @@ class ActiveDeliverySection extends StatelessWidget {
   const ActiveDeliverySection({super.key});
 
   bool isCurrentOrder(String status) {
-    return status == 'pending' || status == 'accepted' || status == 'inTransit';
+    final normalized = status.toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '');
+    return normalized == 'pending' ||
+        normalized == 'accepted' ||
+        normalized == 'intransit';
   }
 
   @override
@@ -35,7 +38,6 @@ class ActiveDeliverySection extends StatelessWidget {
         }
 
         final latest = orders.first;
-        final previous = orders.skip(1).take(2).toList();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,27 +70,10 @@ class ActiveDeliverySection extends StatelessWidget {
                     ((latest.data() as Map<String, dynamic>)['status'] ?? '')
                         .toString(),
                   )
-                  ? 'Latest current order'
-                  : 'Latest order',
+                  ? 'Active delivery'
+                  : 'Most recent delivery',
               isPrimary: true,
             ),
-            if (previous.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              const Text(
-                'Previous orders',
-                style: TextStyle(
-                  color: Color(0xFF475569),
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...previous.map(
-                (order) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: OrderPreviewCard(order: order),
-                ),
-              ),
-            ],
           ],
         );
       },
@@ -148,7 +133,10 @@ class OrderPreviewCard extends StatelessWidget {
   }
 
   bool isCurrentOrder(String status) {
-    return status == 'pending' || status == 'accepted' || status == 'inTransit';
+    final normalized = status.toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '');
+    return normalized == 'pending' ||
+        normalized == 'accepted' ||
+        normalized == 'intransit';
   }
 
   @override
@@ -179,14 +167,51 @@ class OrderPreviewCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
             ],
-            Text(
-              '$pickup -> $dropoff',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF0F172A),
-                fontWeight: FontWeight.w900,
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFFDF6),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    current
+                        ? Icons.route_rounded
+                        : Icons.check_circle_outline_rounded,
+                    color: const Color(0xFF0F766E),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        dropoff,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'From $pickup',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 10),
             Wrap(

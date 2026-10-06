@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/app_bottom_navigation.dart';
 import 'widgets/active_delivery_section.dart';
 
 class OrderHistoryScreen extends StatelessWidget {
@@ -9,8 +10,10 @@ class OrderHistoryScreen extends StatelessWidget {
 
   bool isCurrentOrder(QueryDocumentSnapshot order) {
     final data = order.data() as Map<String, dynamic>;
-    final status = data['status']?.toString() ?? '';
-    return status == 'pending' || status == 'accepted' || status == 'inTransit';
+    final status = (data['status']?.toString() ?? '')
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\s_-]+'), '');
+    return status == 'pending' || status == 'accepted' || status == 'intransit';
   }
 
   @override
@@ -19,6 +22,10 @@ class OrderHistoryScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('My Orders')),
+      bottomNavigationBar: const AppBottomNavigation(
+        isDriver: false,
+        currentIndex: 2,
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('orders')

@@ -107,6 +107,16 @@ class DriverHistorySection extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                  if (maxItems != null && completed.length > maxItems!) ...[
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => Navigator.pushNamed(
+                        context,
+                        '/driverJobs',
+                      ),
+                      child: const Text('See more'),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 10),
@@ -163,58 +173,38 @@ class _RecentJobCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFFDF6),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.check_circle_outline_rounded,
-                    color: Color(0xFF0F766E),
-                  ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFFDF6),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        pickup,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontWeight: FontWeight.w800,
-                          height: 1.3,
-                        ),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 5),
-                        child: Icon(
-                          Icons.arrow_downward_rounded,
-                          color: Color(0xFF94A3B8),
-                          size: 17,
-                        ),
-                      ),
-                      Text(
-                        dropoff,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontWeight: FontWeight.w800,
-                          height: 1.3,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: const Icon(
+                  Icons.check_circle_outline_rounded,
+                  color: Color(0xFF0F766E),
                 ),
-              ],
+              ),
+              title: Text(
+                dropoff,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              subtitle: Text(
+                'From $pickup',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             Wrap(

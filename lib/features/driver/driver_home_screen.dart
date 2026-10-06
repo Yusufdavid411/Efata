@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
+import 'package:logistics_app/core/services/location_service.dart';
 
+import '../../shared/widgets/app_bottom_navigation.dart';
 import '../../shared/widgets/app_drawer.dart';
 import '../../shared/widgets/ai_floating_button.dart';
 import 'widgets/driver_status_toggle.dart';
@@ -27,6 +30,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   bool profileCompleted = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
   driverProfileSubscription;
+  StreamSubscription<Position>? driverLocationSubscription;
 
   @override
   void initState() {
@@ -61,6 +65,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               profileCompleted = data?['profileCompleted'] == true;
               isLoadingAvailability = false;
             });
+
+            _syncOnlineLocationTracking(savedStatus);
           },
           onError: (_) {
             if (mounted) setState(() => isLoadingAvailability = false);
@@ -105,6 +111,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       if (confirm != true) return;
     }
 
+    Position? currentPosition;
+    if (value) {
+      currentPosition = await _prepareDriverLocation();
+      if (currentPosition == null) return;
+    }
+
     try {
       await FirebaseFirestore.instance
           .collection('drivers')
@@ -114,9 +126,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             'isAvailable': value,
             'availabilityUpdatedAt': Timestamp.now(),
             'updatedAt': Timestamp.now(),
+            if (currentPosition != null) ...{
+              'driverLat': currentPosition.latitude,
+              'driverLng': currentPosition.longitude,
+              'lastLocationUpdate': Timestamp.now(),
+            },
           }, SetOptions(merge: true));
 
       setState(() => isOnline = value);
+      _syncOnlineLocationTracking(value);
       AppNotificationBannerService.success(
         value
             ? 'You are now receiving delivery requests.'
@@ -130,9 +148,77 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     }
   }
 
+  Future<Position?> _prepareDriverLocation() async {
+    final access = await LocationService.requestLocationAccess();
+
+    if (access == LocationAccessStatus.serviceDisabled) {
+      AppNotificationBannerService.error(
+        'Turn on location so customers can see where their driver is coming from.',
+        title: 'Location required',
+      );
+      await LocationService.openLocationSettings();
+      return null;
+    }
+
+    if (access == LocationAccessStatus.deniedForever) {
+      AppNotificationBannerService.error(
+        'Allow location permission from app settings before going online.',
+        title: 'Permission required',
+      );
+      await LocationService.openAppSettings();
+      return null;
+    }
+
+    if (access != LocationAccessStatus.granted) {
+      AppNotificationBannerService.error(
+        'Location permission is required before you can receive jobs.',
+        title: 'Location required',
+      );
+      return null;
+    }
+
+    final position = await LocationService.getCurrentPosition();
+    if (position == null) {
+      AppNotificationBannerService.error(
+        'EFATA could not read your current location. Please try again.',
+        title: 'Location unavailable',
+      );
+    }
+    return position;
+  }
+
+  Future<void> _syncOnlineLocationTracking(bool shouldTrack) async {
+    final driver = FirebaseAuth.instance.currentUser;
+    if (driver == null) return;
+
+    if (!shouldTrack) {
+      await driverLocationSubscription?.cancel();
+      driverLocationSubscription = null;
+      return;
+    }
+
+    if (driverLocationSubscription != null) return;
+
+    final access = await LocationService.requestLocationAccess();
+    if (access != LocationAccessStatus.granted) return;
+
+    driverLocationSubscription = LocationService.getLiveLocationStream().listen(
+      (position) {
+        FirebaseFirestore.instance.collection('drivers').doc(driver.uid).set({
+          'driverLat': position.latitude,
+          'driverLng': position.longitude,
+          'lastLocationUpdate': Timestamp.now(),
+          'isOnline': true,
+          'isAvailable': true,
+        }, SetOptions(merge: true));
+      },
+    );
+  }
+
   @override
   void dispose() {
     driverProfileSubscription?.cancel();
+    driverLocationSubscription?.cancel();
     super.dispose();
   }
 
@@ -249,6 +335,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     return Scaffold(
       drawer: const AppDrawer(isDriver: true),
       appBar: AppBar(title: const Text("Driver Dashboard")),
+      bottomNavigationBar: const AppBottomNavigation(
+        isDriver: true,
+        currentIndex: 0,
+      ),
       body: Stack(
         children: [
           Padding(
@@ -284,7 +374,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
                   const SizedBox(height: 30),
 
-                  const DriverHistorySection(maxItems: 5),
+                  const DriverHistorySection(maxItems: 2),
                 ],
               ],
             ),

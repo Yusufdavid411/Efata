@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../../core/services/google_route_service.dart';
 import '../../../core/services/app_notification_banner_service.dart';
+import '../../../shared/widgets/app_live_map.dart';
 import '../driver_active_jobs_screen.dart';
 
 class AvailableJobsSection extends StatefulWidget {
@@ -40,6 +43,19 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     }
 
     return "Price not available";
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  LatLng? _pointFromData(Map<String, dynamic> data, String prefix) {
+    final lat = _toDouble(data['${prefix}Lat']);
+    final lng = _toDouble(data['${prefix}Lng']);
+    if (lat == null || lng == null) return null;
+    return LatLng(lat, lng);
   }
 
   Future<void> acceptJob(String orderId, String driverId) async {
@@ -97,6 +113,12 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
         'status': 'accepted',
         'acceptedAt': Timestamp.now(),
         'notificationStatus': 'driverAccepted',
+        if (_toDouble(driverProfile.data()?['driverLat']) != null &&
+            _toDouble(driverProfile.data()?['driverLng']) != null) ...{
+          'driverLat': _toDouble(driverProfile.data()?['driverLat']),
+          'driverLng': _toDouble(driverProfile.data()?['driverLng']),
+          'lastLocationUpdate': Timestamp.now(),
+        },
       });
       accepted = true;
     });
@@ -211,6 +233,77 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     );
   }
 
+  void _showJobMapPreview({
+    required LatLng pickupPoint,
+    required LatLng dropoffPoint,
+    required LatLng? driverPoint,
+    required String pickup,
+    required String dropoff,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(sheetContext).size.height * 0.78,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Pickup preview',
+                          style: TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(18),
+                    ),
+                    child: AppLiveMap(
+                      pickupPoint: pickupPoint,
+                      dropoffPoint: dropoffPoint,
+                      driverPoint: driverPoint,
+                      activeTargetPoint: pickupPoint,
+                      activeTargetLabel: 'Pickup location',
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      _PreviewRouteRow(label: 'Pickup', value: pickup),
+                      const SizedBox(height: 8),
+                      _PreviewRouteRow(label: 'Drop-off', value: dropoff),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   List<QueryDocumentSnapshot> _prepareJobs(
     List<QueryDocumentSnapshot> docs,
     String driverId,
@@ -269,6 +362,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     BuildContext context,
     QueryDocumentSnapshot job,
     String driverId,
+    LatLng? driverPoint,
   ) {
     final data = job.data() as Map<String, dynamic>;
 
@@ -277,32 +371,115 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     final item = data['item']?.toString() ?? 'No item description';
     final vehicleType = data['vehicleType']?.toString();
     final price = data['price'];
+    final pickupPoint = _pointFromData(data, 'pickup');
+    final dropoffPoint = _pointFromData(data, 'dropoff');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(15),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              "$pickup -> $dropoff",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFFDF6),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.local_shipping_outlined,
+                    color: Color(0xFF0F766E),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        pickup,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 5),
+                        child: Icon(
+                          Icons.arrow_downward_rounded,
+                          color: Color(0xFF94A3B8),
+                          size: 17,
+                        ),
+                      ),
+                      Text(
+                        dropoff,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text("Item: $item"),
-            if (vehicleType != null && vehicleType.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text("Vehicle: $vehicleType"),
-            ],
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
-              formatPrice(price),
+              item,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.green,
+                color: Color(0xFF475569),
+                fontWeight: FontWeight.w700,
               ),
             ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _JobChip(
+                  icon: Icons.payments_outlined,
+                  label: formatPrice(price),
+                  tone: const Color(0xFF16A34A),
+                ),
+                if (vehicleType != null && vehicleType.isNotEmpty)
+                  _JobChip(
+                    icon: Icons.local_shipping_outlined,
+                    label: vehicleType,
+                    tone: const Color(0xFF475569),
+                  ),
+                if (pickupPoint != null && dropoffPoint != null)
+                  _RouteEtaChipGroup(
+                    driverPoint: driverPoint,
+                    pickupPoint: pickupPoint,
+                    dropoffPoint: dropoffPoint,
+                  ),
+              ],
+            ),
+            if (pickupPoint != null && dropoffPoint != null) ...[
+              const SizedBox(height: 10),
+              TextButton.icon(
+                onPressed: () => _showJobMapPreview(
+                  pickupPoint: pickupPoint,
+                  dropoffPoint: dropoffPoint,
+                  driverPoint: driverPoint,
+                  pickup: pickup,
+                  dropoff: dropoff,
+                ),
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('Preview pickup on map'),
+              ),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
@@ -338,7 +515,23 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
 
     return Column(
       children: _cachedJobs.map((job) {
-        return _buildJobCard(context, job, driverId);
+        return _buildJobCard(context, job, driverId, null);
+      }).toList(),
+    );
+  }
+
+  Widget _buildJobListWithDriverPoint(
+    BuildContext context,
+    String driverId,
+    LatLng? driverPoint,
+  ) {
+    if (_cachedJobs.isEmpty) {
+      return const Text("No available jobs");
+    }
+
+    return Column(
+      children: _cachedJobs.map((job) {
+        return _buildJobCard(context, job, driverId, driverPoint);
       }).toList(),
     );
   }
@@ -365,6 +558,11 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
           .snapshots(),
       builder: (context, driverSnapshot) {
         final driverData = driverSnapshot.data?.data() as Map<String, dynamic>?;
+        final driverLat = _toDouble(driverData?['driverLat']);
+        final driverLng = _toDouble(driverData?['driverLng']);
+        final driverPoint = driverLat != null && driverLng != null
+            ? LatLng(driverLat, driverLng)
+            : null;
 
         if (driverSnapshot.hasData && !_isApprovedDriver(driverData)) {
           return Container(
@@ -402,10 +600,167 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
               _cachedJobs = _prepareJobs(snapshot.data!.docs, driver.uid);
             }
 
-            return _buildJobList(context, driver.uid);
+            return _buildJobListWithDriverPoint(
+              context,
+              driver.uid,
+              driverPoint,
+            );
           },
         );
       },
+    );
+  }
+}
+
+class _RouteEtaChipGroup extends StatelessWidget {
+  const _RouteEtaChipGroup({
+    required this.driverPoint,
+    required this.pickupPoint,
+    required this.dropoffPoint,
+  });
+
+  final LatLng? driverPoint;
+  final LatLng pickupPoint;
+  final LatLng dropoffPoint;
+
+  String _formatDuration(int minutes) {
+    if (minutes <= 0) return 'Time unavailable';
+    if (minutes < 60) return '$minutes min';
+    final hours = minutes ~/ 60;
+    final remainder = minutes % 60;
+    return remainder == 0 ? '${hours}h' : '${hours}h ${remainder}m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<GoogleRouteResult?>>(
+      future: Future.wait([
+        if (driverPoint != null)
+          GoogleRouteService.routeBetween(
+            pickup: driverPoint!,
+            dropoff: pickupPoint,
+            cachePrecision: 4,
+          )
+        else
+          Future<GoogleRouteResult?>.value(null),
+        GoogleRouteService.routeBetween(
+          pickup: pickupPoint,
+          dropoff: dropoffPoint,
+          cachePrecision: 4,
+        ),
+      ]),
+      builder: (context, snapshot) {
+        final toPickup = snapshot.data?[0];
+        final toDropoff = snapshot.data?[1];
+
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _JobChip(
+              icon: Icons.near_me_outlined,
+              label: toPickup == null
+                  ? 'Pickup ETA pending'
+                  : 'Pickup ${_formatDuration(toPickup.durationMinutes)}',
+              tone: const Color(0xFF2563EB),
+            ),
+            _JobChip(
+              icon: Icons.route_outlined,
+              label: toDropoff == null
+                  ? 'Trip ETA pending'
+                  : 'Trip ${_formatDuration(toDropoff.durationMinutes)}',
+              tone: const Color(0xFF7C3AED),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _JobChip extends StatelessWidget {
+  const _JobChip({
+    required this.icon,
+    required this.label,
+    required this.tone,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: tone.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: tone),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: tone,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewRouteRow extends StatelessWidget {
+  const _PreviewRouteRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          label == 'Pickup'
+              ? Icons.inventory_2_outlined
+              : Icons.flag_outlined,
+          color: const Color(0xFF0F766E),
+          size: 19,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

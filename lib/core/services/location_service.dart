@@ -42,6 +42,14 @@ class LocationService {
     return await requestLocationAccess() == LocationAccessStatus.granted;
   }
 
+  static Future<bool> openLocationSettings() {
+    return Geolocator.openLocationSettings();
+  }
+
+  static Future<bool> openAppSettings() {
+    return Geolocator.openAppSettings();
+  }
+
   static Future<Position?> getCurrentPosition() async {
     final access = await requestLocationAccess();
     if (access != LocationAccessStatus.granted) return null;
