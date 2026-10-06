@@ -16,6 +16,12 @@ class AvailableJobsSection extends StatefulWidget {
 
 class _AvailableJobsSectionState extends State<AvailableJobsSection> {
   List<QueryDocumentSnapshot> _cachedJobs = [];
+
+  String _normalizeStatus(dynamic value) {
+    return value?.toString().toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '') ??
+        '';
+  }
+
   bool _isApprovedDriver(Map<String, dynamic>? data) {
     return data?['profileCompleted'] == true &&
         data?['verificationStatus']?.toString().toLowerCase() == 'approved';
@@ -57,8 +63,8 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
         .get();
 
     final hasActive = activeJobs.docs.any((doc) {
-      final status = doc['status'];
-      return status == 'accepted' || status == 'inTransit';
+      final status = _normalizeStatus(doc['status']);
+      return status == 'accepted' || status == 'intransit';
     });
 
     if (!mounted) return;

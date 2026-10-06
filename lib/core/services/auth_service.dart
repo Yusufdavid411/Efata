@@ -391,8 +391,13 @@ class AuthService {
 
   // Logout
   Future<void> logout() async {
-    await _ensureGoogleInitialized();
-    await _googleSignIn.signOut();
+    try {
+      await _ensureGoogleInitialized();
+      await _googleSignIn.signOut();
+    } catch (_) {
+      // Firebase sign-out must still happen even if Google Play Services
+      // or Google Sign-In configuration is temporarily unavailable.
+    }
     await _auth.signOut();
   }
 

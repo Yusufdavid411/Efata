@@ -103,28 +103,43 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     trackingOrderId = null;
     await VoiceNavigationControlService.stopActiveGuidance();
 
-    await FirebaseFirestore.instance.collection('orders').doc(id).update({
-      'status': 'completed',
-      'completedAt': Timestamp.now(),
-      'deliveryCompletedConfirmed': true,
-      'notificationStatus': 'completed',
-      'unreadForCustomer': 0,
-      'unreadForDriver': 0,
-      'chatClosedAt': Timestamp.now(),
-      'voiceNavigationStatus': 'stopped',
-      'voiceNavigationStoppedAt': Timestamp.now(),
-      'paymentStatus': paymentReceived
-          ? 'paid'
-          : data['paymentStatus'] ?? 'pending',
-      'paymentConfirmedAt': paymentReceived ? Timestamp.now() : null,
-      if (!paymentReceived) ...{
-        'paymentReviewRequired': true,
-        'paymentIssue': 'Delivery completed without confirmed payment',
-        'paymentIssueOpenedBy': 'driver',
-        'paymentIssueOpenedAt': Timestamp.now(),
-        'needsAdminReview': true,
-      },
-    });
+    try {
+      await FirebaseFirestore.instance.collection('orders').doc(id).update({
+        'status': 'completed',
+        'completedAt': Timestamp.now(),
+        'deliveryCompletedConfirmed': true,
+        'notificationStatus': 'completed',
+        'unreadForCustomer': 0,
+        'unreadForDriver': 0,
+        'chatClosedAt': Timestamp.now(),
+        'voiceNavigationStatus': 'stopped',
+        'voiceNavigationStoppedAt': Timestamp.now(),
+        'paymentStatus': paymentReceived
+            ? 'paid'
+            : data['paymentStatus'] ?? 'pending',
+        'paymentConfirmedAt': paymentReceived ? Timestamp.now() : null,
+        if (!paymentReceived) ...{
+          'paymentReviewRequired': true,
+          'paymentIssue': 'Delivery completed without confirmed payment',
+          'paymentIssueOpenedBy': 'driver',
+          'paymentIssueOpenedAt': Timestamp.now(),
+          'needsAdminReview': true,
+        },
+      });
+
+      if (!mounted) return;
+      AppNotificationBannerService.success(
+        'Delivery has been moved to recent jobs.',
+        title: 'Trip completed',
+      );
+      Navigator.pop(context);
+    } catch (_) {
+      if (!mounted) return;
+      AppNotificationBannerService.error(
+        'EFATA could not close this trip. Please check your connection and try again.',
+        title: 'Completion failed',
+      );
+    }
   }
 
   String formatPaymentStatus(String status) {
