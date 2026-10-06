@@ -30,21 +30,31 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     final allowed = await ensureLocationPermission();
     if (!allowed) return false;
 
-    final position = await LocationService.getCurrentPosition();
+    try {
+      final position = await LocationService.getCurrentPosition();
 
-    await FirebaseFirestore.instance.collection('orders').doc(id).update({
-      'status': 'inTransit',
-      'startedAt': Timestamp.now(),
-      'notificationStatus': 'inTransit',
-      if (position != null) ...{
-        'driverLat': position.latitude,
-        'driverLng': position.longitude,
-        'lastLocationUpdate': Timestamp.now(),
-      },
-    });
+      await FirebaseFirestore.instance.collection('orders').doc(id).update({
+        'status': 'inTransit',
+        'startedAt': Timestamp.now(),
+        'notificationStatus': 'inTransit',
+        if (position != null) ...{
+          'driverLat': position.latitude,
+          'driverLng': position.longitude,
+          'lastLocationUpdate': Timestamp.now(),
+        },
+      });
 
-    startLiveLocationTracking(id);
-    return true;
+      startLiveLocationTracking(id);
+      return true;
+    } catch (_) {
+      if (mounted) {
+        AppNotificationBannerService.error(
+          'EFATA could not start this trip. Check your internet connection and try again.',
+          title: 'Start transit failed',
+        );
+      }
+      return false;
+    }
   }
 
   Future<void> completeJob(String id, Map<String, dynamic> data) async {
@@ -400,13 +410,21 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                         voiceNavigationActive: voiceNavigationActive,
                         onVoiceNavigation: () {
                           () async {
-                            if (status == 'accepted') {
-                              final started = await startTransit(job.id);
-                              if (!started || !context.mounted) return;
-                              openVoiceNavigation(includePickupStop: true);
-                              return;
+                            try {
+                              if (status == 'accepted') {
+                                final started = await startTransit(job.id);
+                                if (!started || !context.mounted) return;
+                                openVoiceNavigation(includePickupStop: true);
+                                return;
+                              }
+                              openVoiceNavigation(includePickupStop: false);
+                            } catch (_) {
+                              if (!context.mounted) return;
+                              AppNotificationBannerService.error(
+                                'Voice navigation could not start. Please check your internet connection and map setup.',
+                                title: 'Navigation failed',
+                              );
                             }
-                            openVoiceNavigation(includePickupStop: false);
                           }();
                         },
                       )
@@ -452,7 +470,14 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                             onPressed: () async {
                               final started = await startTransit(job.id);
                               if (!started || !context.mounted) return;
-                              openVoiceNavigation(includePickupStop: true);
+                              try {
+                                openVoiceNavigation(includePickupStop: true);
+                              } catch (_) {
+                                AppNotificationBannerService.error(
+                                  'Voice navigation could not start. Please check your internet connection and map setup.',
+                                  title: 'Navigation failed',
+                                );
+                              }
                             },
                           )
                         : _DriverJobAction(
