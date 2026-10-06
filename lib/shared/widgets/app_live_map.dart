@@ -279,43 +279,56 @@ class _AppLiveMapState extends State<AppLiveMap> {
   Future<BitmapDescriptor> _buildPickupMarkerIcon() async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const markerSize = Size(74, 82);
+    const markerSize = Size(72, 72);
 
     final shadow = Paint()
-      ..color = Colors.black.withValues(alpha: 0.2)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7);
-    canvas.drawOval(const Rect.fromLTWH(18, 60, 38, 10), shadow);
+      ..color = Colors.black.withValues(alpha: 0.22)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    canvas.drawOval(const Rect.fromLTWH(17, 55, 38, 10), shadow);
 
     final top = Path()
-      ..moveTo(23, 24)
-      ..lineTo(38, 14)
-      ..lineTo(55, 24)
-      ..lineTo(39, 34)
+      ..moveTo(19, 25)
+      ..lineTo(36, 14)
+      ..lineTo(54, 25)
+      ..lineTo(37, 36)
       ..close();
-    canvas.drawPath(top, Paint()..color = const Color(0xFF6EE7B7));
+    canvas.drawPath(
+      top,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          const Offset(28, 14),
+          const Offset(48, 36),
+          const [Color(0xFFA7F3D0), Color(0xFF34D399)],
+        ),
+    );
 
     final left = Path()
-      ..moveTo(23, 24)
-      ..lineTo(39, 34)
-      ..lineTo(39, 55)
-      ..lineTo(23, 44)
+      ..moveTo(19, 25)
+      ..lineTo(37, 36)
+      ..lineTo(37, 57)
+      ..lineTo(19, 45)
       ..close();
     canvas.drawPath(left, Paint()..color = const Color(0xFF0F766E));
 
     final right = Path()
-      ..moveTo(55, 24)
-      ..lineTo(39, 34)
-      ..lineTo(39, 55)
-      ..lineTo(55, 44)
+      ..moveTo(54, 25)
+      ..lineTo(37, 36)
+      ..lineTo(37, 57)
+      ..lineTo(54, 45)
       ..close();
     canvas.drawPath(right, Paint()..color = const Color(0xFF14B8A6));
 
+    final tape = Paint()
+      ..color = Colors.white.withValues(alpha: 0.72)
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(const Offset(36, 14), const Offset(37, 36), tape);
     canvas.drawLine(
-      const Offset(38, 14),
-      const Offset(39, 34),
+      const Offset(27, 31),
+      const Offset(45, 20),
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.5)
-        ..strokeWidth = 2,
+        ..color = const Color(0xFF064E3B).withValues(alpha: 0.28)
+        ..strokeWidth = 1.5,
     );
 
     return _bitmapFromRecorder(recorder, markerSize);
@@ -324,32 +337,46 @@ class _AppLiveMapState extends State<AppLiveMap> {
   Future<BitmapDescriptor> _buildDropoffMarkerIcon() async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const markerSize = Size(66, 78);
+    const markerSize = Size(76, 88);
 
     final shadow = Paint()
-      ..color = Colors.black.withValues(alpha: 0.18)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7);
-    canvas.drawOval(const Rect.fromLTWH(20, 60, 28, 8), shadow);
+      ..color = Colors.black.withValues(alpha: 0.24)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9);
+    canvas.drawOval(const Rect.fromLTWH(24, 72, 30, 8), shadow);
 
-    final pole = Paint()
-      ..color = const Color(0xFF334155)
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(const Offset(28, 16), const Offset(28, 58), pole);
-
-    final flag = Path()
-      ..moveTo(30, 16)
-      ..cubicTo(42, 10, 47, 18, 57, 13)
-      ..lineTo(57, 38)
-      ..cubicTo(47, 43, 42, 35, 30, 41)
+    final pin = Path()
+      ..moveTo(38, 76)
+      ..cubicTo(35, 67, 18, 53, 18, 34)
+      ..cubicTo(18, 21, 27, 11, 38, 11)
+      ..cubicTo(49, 11, 58, 21, 58, 34)
+      ..cubicTo(58, 53, 41, 67, 38, 76)
       ..close();
-    canvas.drawPath(flag, Paint()..color = const Color(0xFFEF4444));
     canvas.drawPath(
-      flag,
+      pin,
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.24)
+        ..shader = ui.Gradient.linear(
+          const Offset(24, 12),
+          const Offset(52, 70),
+          const [Color(0xFFFF6B6B), Color(0xFFDC2626)],
+        ),
+    );
+    canvas.drawPath(
+      pin,
+      Paint()
+        ..color = const Color(0xFF7F1D1D).withValues(alpha: 0.22)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
+    );
+    canvas.drawCircle(const Offset(38, 34), 12, Paint()..color = Colors.white);
+    canvas.drawCircle(
+      const Offset(38, 34),
+      6,
+      Paint()..color = const Color(0xFFEF4444),
+    );
+    canvas.drawCircle(
+      const Offset(32, 24),
+      4,
+      Paint()..color = Colors.white.withValues(alpha: 0.38),
     );
 
     return _bitmapFromRecorder(recorder, markerSize);
@@ -358,43 +385,112 @@ class _AppLiveMapState extends State<AppLiveMap> {
   Future<BitmapDescriptor> _buildDriverMarkerIcon() async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const markerSize = Size(86, 86);
+    const markerSize = Size(92, 92);
+    const center = Offset(46, 46);
 
     final shadow = Paint()
-      ..color = Colors.black.withValues(alpha: 0.2)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawOval(const Rect.fromLTWH(19, 58, 48, 12), shadow);
+      ..color = Colors.black.withValues(alpha: 0.24)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9);
+    canvas.drawOval(const Rect.fromLTWH(21, 68, 50, 11), shadow);
 
-    final body = RRect.fromRectAndRadius(
-      const Rect.fromLTWH(21, 25, 44, 34),
-      const Radius.circular(12),
-    );
-    canvas.drawRRect(
-      body.shift(const Offset(0, 5)),
-      Paint()..color = const Color(0xFF047857),
-    );
-    canvas.drawRRect(body, Paint()..color = const Color(0xFF34D399));
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
 
-    final cabin = Path()
-      ..moveTo(30, 25)
-      ..lineTo(38, 14)
-      ..lineTo(53, 14)
-      ..lineTo(61, 25)
+    final body = Path()
+      ..moveTo(0, -34)
+      ..cubicTo(16, -30, 24, -14, 22, 8)
+      ..cubicTo(21, 25, 13, 34, 0, 37)
+      ..cubicTo(-13, 34, -21, 25, -22, 8)
+      ..cubicTo(-24, -14, -16, -30, 0, -34)
       ..close();
-    canvas.drawPath(cabin, Paint()..color = const Color(0xFF6EE7B7));
+    canvas.drawPath(
+      body.shift(const Offset(0, 4)),
+      Paint()..color = const Color(0xFF065F46),
+    );
+    canvas.drawPath(
+      body,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          const Offset(-18, -30),
+          const Offset(18, 34),
+          const [Color(0xFF9AF5D0), Color(0xFF0F766E)],
+        ),
+    );
+
+    final bonnet = Path()
+      ..moveTo(0, -31)
+      ..lineTo(14, -13)
+      ..lineTo(8, -4)
+      ..lineTo(-8, -4)
+      ..lineTo(-14, -13)
+      ..close();
+    canvas.drawPath(bonnet, Paint()..color = const Color(0xFF34D399));
+
+    final windshield = Path()
+      ..moveTo(-9, -2)
+      ..lineTo(9, -2)
+      ..lineTo(14, 13)
+      ..lineTo(-14, 13)
+      ..close();
+    canvas.drawPath(
+      windshield,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          const Offset(-12, -3),
+          const Offset(12, 14),
+          const [Color(0xFFE0F2FE), Color(0xFF7DD3FC)],
+        ),
+    );
+
+    final rearWindow = RRect.fromRectAndRadius(
+      const Rect.fromLTWH(-10, 19, 20, 9),
+      const Radius.circular(4),
+    );
+    canvas.drawRRect(rearWindow, Paint()..color = const Color(0xFFBAE6FD));
+
+    final sideWindowPaint = Paint()..color = const Color(0xFFCFFAFE);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        const Rect.fromLTWH(34, 18, 21, 12),
-        const Radius.circular(4),
+        const Rect.fromLTWH(-18, 4, 7, 18),
+        const Radius.circular(3),
       ),
-      Paint()..color = const Color(0xFFE0F2FE),
+      sideWindowPaint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(11, 4, 7, 18),
+        const Radius.circular(3),
+      ),
+      sideWindowPaint,
     );
 
-    final wheelPaint = Paint()..color = const Color(0xFF0F172A);
-    canvas.drawCircle(const Offset(29, 58), 5, wheelPaint);
-    canvas.drawCircle(const Offset(58, 58), 5, wheelPaint);
-    canvas.drawCircle(const Offset(29, 58), 2, Paint()..color = Colors.white);
-    canvas.drawCircle(const Offset(58, 58), 2, Paint()..color = Colors.white);
+    final wheelPaint = Paint()..color = const Color(0xFF111827);
+    for (final rect in const [
+      Rect.fromLTWH(-27, -13, 7, 17),
+      Rect.fromLTWH(20, -13, 7, 17),
+      Rect.fromLTWH(-26, 15, 7, 16),
+      Rect.fromLTWH(19, 15, 7, 16),
+    ]) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+        wheelPaint,
+      );
+    }
+
+    canvas.drawCircle(
+      const Offset(-9, -27),
+      2.6,
+      Paint()..color = Colors.white,
+    );
+    canvas.drawCircle(const Offset(9, -27), 2.6, Paint()..color = Colors.white);
+    canvas.drawPath(
+      body,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.35)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4,
+    );
+    canvas.restore();
 
     return _bitmapFromRecorder(recorder, markerSize);
   }
@@ -616,6 +712,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
         icon:
             pickupMarkerIcon ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        anchor: const Offset(0.5, 0.72),
       ),
       Marker(
         markerId: const MarkerId('dropoff'),
@@ -624,6 +721,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
         icon:
             dropoffMarkerIcon ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        anchor: const Offset(0.5, 0.86),
       ),
       if (widget.driverPoint != null)
         Marker(
