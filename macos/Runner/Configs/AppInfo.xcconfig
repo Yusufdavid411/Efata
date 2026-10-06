@@ -8,7 +8,7 @@
 PRODUCT_NAME = logistics_app
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.logisticsApp
+PRODUCT_BUNDLE_IDENTIFIER = com.efata.logistics
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2025 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright (C) 2025 EFATA. All rights reserved.
