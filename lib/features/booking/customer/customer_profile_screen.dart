@@ -12,14 +12,9 @@ import '../../../core/services/auth_service.dart';
 import '../../../shared/widgets/app_bottom_navigation.dart';
 
 class CustomerProfileScreen extends StatefulWidget {
-  const CustomerProfileScreen({
-    super.key,
-    this.embedded = false,
-    this.onOpenOrders,
-  });
+  const CustomerProfileScreen({super.key, this.embedded = false});
 
   final bool embedded;
-  final VoidCallback? onOpenOrders;
 
   @override
   State<CustomerProfileScreen> createState() => _CustomerProfileScreenState();
@@ -97,18 +92,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       text: savedName == 'Customer' ? '' : savedName,
     );
 
-    final phoneController = TextEditingController(
-      text: data['phone']?.toString() == 'Not added'
-          ? ''
-          : data['phone']?.toString() ?? '',
-    );
-
-    final addressController = TextEditingController(
-      text: data['address']?.toString() == 'Not added'
-          ? ''
-          : data['address']?.toString() ?? '',
-    );
-
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -128,6 +111,12 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                   "Edit Profile",
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Update your display name. Phone, email, and address can be edited directly from your profile details.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF64748B), height: 1.35),
+                ),
 
                 const SizedBox(height: 20),
 
@@ -141,40 +130,16 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
                 const SizedBox(height: 14),
 
-                TextField(
-                  controller: phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: "Phone Number",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-
-                const SizedBox(height: 14),
-
-                TextField(
-                  controller: addressController,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: "Address",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
                     onPressed: () async {
                       final name = nameController.text.trim();
-                      final phone = phoneController.text.trim();
-                      final address = addressController.text.trim();
 
-                      if (name.isEmpty || phone.isEmpty || address.isEmpty) {
+                      if (name.isEmpty) {
                         AppNotificationBannerService.error(
-                          'Please complete all profile fields.',
+                          'Please enter your full name.',
                           title: 'Missing details',
                         );
                         return;
@@ -192,8 +157,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                               'email': user.email,
                               'name': name,
                               'fullName': name,
-                              'phone': phone,
-                              'address': address,
                               'role': 'customer',
                               'profileCompleted': true,
                               'onboardingSkipped': false,
@@ -228,15 +191,220 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     );
   }
 
+  Future<void> showEditDetailSheet({
+    required String field,
+    required String title,
+    required String currentValue,
+    required TextInputType keyboardType,
+    int maxLines = 1,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final controller = TextEditingController(
+      text: currentValue == 'Not added' ? '' : currentValue,
+    );
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Edit $title',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                keyboardType: keyboardType,
+                maxLines: maxLines,
+                decoration: InputDecoration(
+                  labelText: title,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final value = controller.text.trim();
+                    if (value.isEmpty) {
+                      AppNotificationBannerService.error(
+                        '$title cannot be empty.',
+                        title: 'Missing detail',
+                      );
+                      return;
+                    }
+
+                    try {
+                      await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(user.uid)
+                          .set({
+                            field: value,
+                            'profileCompleted': true,
+                            'updatedAt': Timestamp.now(),
+                          }, SetOptions(merge: true));
+
+                      if (sheetContext.mounted) Navigator.pop(sheetContext);
+                      if (!mounted) return;
+                      AppNotificationBannerService.success(
+                        '$title updated successfully.',
+                        title: 'Profile updated',
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      AppNotificationBannerService.error(
+                        'Update failed: $e',
+                        title: 'Update failed',
+                      );
+                    }
+                  },
+                  child: const Text('Save Changes'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> showEditEmailSheet(String currentEmail) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final controller = TextEditingController(text: currentEmail);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Edit Email',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'EFATA will send a verification link to the new email before it becomes active.',
+                style: TextStyle(color: Color(0xFF64748B), height: 1.35),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final email = controller.text.trim();
+                    if (email.isEmpty || !email.contains('@')) {
+                      AppNotificationBannerService.error(
+                        'Enter a valid email address.',
+                        title: 'Invalid email',
+                      );
+                      return;
+                    }
+
+                    if (email.toLowerCase() == currentEmail.toLowerCase()) {
+                      Navigator.pop(sheetContext);
+                      return;
+                    }
+
+                    try {
+                      await user.verifyBeforeUpdateEmail(email);
+                      await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(user.uid)
+                          .set({
+                            'pendingEmail': email,
+                            'updatedAt': Timestamp.now(),
+                          }, SetOptions(merge: true));
+
+                      if (sheetContext.mounted) Navigator.pop(sheetContext);
+                      if (!mounted) return;
+                      AppNotificationBannerService.success(
+                        'Check $email to confirm your new email address.',
+                        title: 'Verification sent',
+                      );
+                    } on FirebaseAuthException catch (e) {
+                      if (!mounted) return;
+                      final message = e.code == 'requires-recent-login'
+                          ? 'Please log out and sign in again before changing your email.'
+                          : e.message ?? 'Email update failed.';
+                      AppNotificationBannerService.error(
+                        message,
+                        title: 'Email not updated',
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      AppNotificationBannerService.error(
+                        'Email update failed: $e',
+                        title: 'Email not updated',
+                      );
+                    }
+                  },
+                  child: const Text('Send Verification Link'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget infoTile({
     required IconData icon,
     required String title,
     required String value,
+    VoidCallback? onEdit,
   }) {
     return ListTile(
       leading: Icon(icon),
       title: Text(title),
       subtitle: Text(value),
+      trailing: onEdit == null
+          ? null
+          : IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: onEdit,
+              tooltip: 'Edit $title',
+            ),
     );
   }
 
@@ -405,16 +573,30 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     icon: Icons.phone_outlined,
                     title: "Phone",
                     value: phone,
+                    onEdit: () => showEditDetailSheet(
+                      field: 'phone',
+                      title: 'Phone',
+                      currentValue: phone,
+                      keyboardType: TextInputType.phone,
+                    ),
                   ),
                   infoTile(
                     icon: Icons.email_outlined,
                     title: "Email",
                     value: user.email ?? "No email",
+                    onEdit: () => showEditEmailSheet(user.email ?? ''),
                   ),
                   infoTile(
                     icon: Icons.location_on_outlined,
                     title: "Address",
                     value: address,
+                    onEdit: () => showEditDetailSheet(
+                      field: 'address',
+                      title: 'Address',
+                      currentValue: address,
+                      keyboardType: TextInputType.streetAddress,
+                      maxLines: 2,
+                    ),
                   ),
                 ],
               ),
@@ -425,17 +607,14 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                 _ProfileActionTile(
                   icon: Icons.edit_outlined,
                   title: 'Edit Profile',
-                  subtitle: 'Update name, phone, and pickup address',
+                  subtitle: 'Update your display name',
                   onTap: () => showEditProfileForm(data),
                 ),
-                _ProfileActionTile(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'My Orders',
-                  subtitle: 'Track active and previous deliveries',
-                  onTap:
-                      widget.onOpenOrders ??
-                      () => Navigator.pushNamed(context, '/orders'),
-                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _ProfileActionCard(
+              children: [
                 _ProfileActionTile(
                   icon: Icons.settings_outlined,
                   title: 'Settings',
