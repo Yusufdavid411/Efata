@@ -19,16 +19,25 @@ class DriverJobsScreen extends StatelessWidget {
         isDriver: true,
         currentIndex: 1,
       ),
-      body: const SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              DriverCurrentJobCard(showEmptyState: true),
-              DriverHistorySection(),
-            ],
-          ),
+      body: const DriverJobsContent(),
+    );
+  }
+}
+
+class DriverJobsContent extends StatelessWidget {
+  const DriverJobsContent({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DriverCurrentJobCard(showEmptyState: true),
+            DriverHistorySection(),
+          ],
         ),
       ),
     );

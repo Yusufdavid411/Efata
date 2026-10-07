@@ -5,13 +5,19 @@ class AppBottomNavigation extends StatelessWidget {
     super.key,
     required this.isDriver,
     required this.currentIndex,
+    this.onDestinationSelected,
   });
 
   final bool isDriver;
   final int currentIndex;
+  final ValueChanged<int>? onDestinationSelected;
 
   void _open(BuildContext context, int index) {
     if (index == currentIndex) return;
+    if (onDestinationSelected != null) {
+      onDestinationSelected!(index);
+      return;
+    }
 
     final route = isDriver
         ? switch (index) {
@@ -39,6 +45,7 @@ class AppBottomNavigation extends StatelessWidget {
       backgroundColor: Colors.white,
       surfaceTintColor: Colors.white,
       indicatorColor: const Color(0xFFE0F2F1),
+      elevation: 8,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       onDestinationSelected: (index) => _open(context, index),
       destinations: isDriver
@@ -46,7 +53,7 @@ class AppBottomNavigation extends StatelessWidget {
               NavigationDestination(
                 icon: Icon(Icons.dashboard_outlined),
                 selectedIcon: Icon(Icons.dashboard_rounded),
-                label: 'Home',
+                label: 'Dashboard',
               ),
               NavigationDestination(
                 icon: Icon(Icons.work_history_outlined),
@@ -63,7 +70,7 @@ class AppBottomNavigation extends StatelessWidget {
               NavigationDestination(
                 icon: Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home_rounded),
-                label: 'Home',
+                label: 'Dashboard',
               ),
               NavigationDestination(
                 icon: Icon(Icons.add_road_outlined),

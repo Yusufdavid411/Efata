@@ -10,10 +10,11 @@ import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/core/services/place_suggestion_service.dart';
 import 'package:logistics_app/features/map/map_picker_screen.dart';
 import 'package:logistics_app/features/tracking/track_delivery_screen.dart';
-import '../../../shared/widgets/app_bottom_navigation.dart';
 
 class SimpleOrderForm extends StatefulWidget {
-  const SimpleOrderForm({super.key});
+  const SimpleOrderForm({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   State<SimpleOrderForm> createState() => _SimpleOrderFormState();
@@ -464,150 +465,143 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
         : dropoffLat != null;
     final showLocationTools = isTypingLocation || !activeSelected;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Where's it going?"),
-        centerTitle: true,
-        automaticallyImplyLeading: false,
-      ),
-      bottomNavigationBar: const AppBottomNavigation(
-        isDriver: false,
-        currentIndex: 1,
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _RouteSearchHeader(
-              scheduleLabel: scheduleLabel,
-              pickupController: pickupController,
-              dropoffController: dropoffController,
-              pickupSelected: pickupLat != null,
-              dropoffSelected: dropoffLat != null,
-              onScheduleTap: openSchedulePicker,
-              onPickupFocus: () {
-                setState(() {
-                  activeSearch = 'pickup';
-                  pickupSuggestions = [];
-                  isTypingLocation = false;
-                });
-              },
-              onDropoffFocus: () {
-                setState(() {
-                  activeSearch = 'dropoff';
-                  dropoffSuggestions = [];
-                  isTypingLocation = false;
-                });
-              },
-              onPickupChanged: (value) =>
-                  onLocationTyped(value, isPickup: true),
-              onDropoffChanged: (value) =>
-                  onLocationTyped(value, isPickup: false),
-              onClearDropoff: () {
-                setState(() {
-                  dropoffController.clear();
-                  dropoffLat = null;
-                  dropoffLng = null;
-                  dropoffSuggestions = [];
-                  isTypingLocation = false;
-                  calculateDistanceAndPrice();
-                });
-              },
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                children: [
-                  if (showLocationTools)
-                    _SearchActionTile(
-                      icon: Icons.my_location_rounded,
-                      title: isLocatingCurrent
-                          ? 'Finding your location...'
-                          : 'Use my current location',
-                      subtitle: activeIsPickup
-                          ? 'Set pickup to exactly where you are standing.'
-                          : 'Set drop-off to exactly where you are standing.',
-                      onTap: isLocatingCurrent
-                          ? null
-                          : () => useCurrentLocation(isPickup: activeIsPickup),
-                    ),
-                  if (isTypingLocation &&
-                      suggestions.isEmpty &&
-                      query.isNotEmpty)
-                    _SearchActionTile(
-                      icon: Icons.search_rounded,
-                      title: 'Set "$query" on map',
-                      subtitle:
-                          'Drop the pin exactly where the driver should go.',
-                      onTap: () => openMapPicker(activeIsPickup),
-                    )
-                  else if (isTypingLocation)
-                    ...suggestions.map(
-                      (suggestion) => _PlaceSuggestionTile(
-                        suggestion: suggestion,
-                        onTap: () => selectSuggestion(
-                          suggestion,
-                          isPickup: activeIsPickup,
-                        ),
+    final content = SafeArea(
+      child: Column(
+        children: [
+          _RouteSearchHeader(
+            scheduleLabel: scheduleLabel,
+            pickupController: pickupController,
+            dropoffController: dropoffController,
+            pickupSelected: pickupLat != null,
+            dropoffSelected: dropoffLat != null,
+            onScheduleTap: openSchedulePicker,
+            onPickupFocus: () {
+              setState(() {
+                activeSearch = 'pickup';
+                pickupSuggestions = [];
+                isTypingLocation = false;
+              });
+            },
+            onDropoffFocus: () {
+              setState(() {
+                activeSearch = 'dropoff';
+                dropoffSuggestions = [];
+                isTypingLocation = false;
+              });
+            },
+            onPickupChanged: (value) => onLocationTyped(value, isPickup: true),
+            onDropoffChanged: (value) =>
+                onLocationTyped(value, isPickup: false),
+            onClearDropoff: () {
+              setState(() {
+                dropoffController.clear();
+                dropoffLat = null;
+                dropoffLng = null;
+                dropoffSuggestions = [];
+                isTypingLocation = false;
+                calculateDistanceAndPrice();
+              });
+            },
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+              children: [
+                if (showLocationTools)
+                  _SearchActionTile(
+                    icon: Icons.my_location_rounded,
+                    title: isLocatingCurrent
+                        ? 'Finding your location...'
+                        : 'Use my current location',
+                    subtitle: activeIsPickup
+                        ? 'Set pickup to exactly where you are standing.'
+                        : 'Set drop-off to exactly where you are standing.',
+                    onTap: isLocatingCurrent
+                        ? null
+                        : () => useCurrentLocation(isPickup: activeIsPickup),
+                  ),
+                if (isTypingLocation && suggestions.isEmpty && query.isNotEmpty)
+                  _SearchActionTile(
+                    icon: Icons.search_rounded,
+                    title: 'Set "$query" on map',
+                    subtitle:
+                        'Drop the pin exactly where the driver should go.',
+                    onTap: () => openMapPicker(activeIsPickup),
+                  )
+                else if (isTypingLocation)
+                  ...suggestions.map(
+                    (suggestion) => _PlaceSuggestionTile(
+                      suggestion: suggestion,
+                      onTap: () => selectSuggestion(
+                        suggestion,
+                        isPickup: activeIsPickup,
                       ),
                     ),
-                  if (isTypingLocation && query.isNotEmpty) ...[
-                    _SearchActionTile(
-                      icon: Icons.search_rounded,
-                      title: 'Get more results for $query',
-                      subtitle: 'Use the map to confirm the exact point.',
-                      onTap: () => openMapPicker(activeIsPickup),
-                    ),
-                  ],
-                  if (showLocationTools)
-                    _SearchActionTile(
-                      icon: Icons.add_location_alt_outlined,
-                      title: 'Set location on map',
-                      subtitle: activeIsPickup
-                          ? 'Choose the pickup point manually.'
-                          : 'Choose the drop-off point manually.',
-                      onTap: () => openMapPicker(activeIsPickup),
-                    ),
-                  const SizedBox(height: 12),
-                  _ShipmentDetailsSection(
-                    itemController: itemController,
-                    vehicleType: vehicleType,
-                    paymentMethod: paymentMethod,
-                    onVehicleChanged: (value) {
-                      if (value == null) return;
-                      setState(() => vehicleType = value);
-                    },
-                    onPaymentChanged: (value) {
-                      if (value == null) return;
-                      setState(() => paymentMethod = value);
-                    },
                   ),
-                  const SizedBox(height: 12),
-                  _EstimateCard(
-                    distanceKm: distanceKm,
-                    estimatedPrice: estimatedPrice,
-                    paymentMethod: paymentMethod,
-                    scheduleLabel: scheduleLabel,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: isSubmitting ? null : submitOrder,
-                    icon: isSubmitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.check_circle_outline_rounded),
-                    label: Text(
-                      isSubmitting ? 'Creating request...' : 'Request Delivery',
-                    ),
+                if (isTypingLocation && query.isNotEmpty) ...[
+                  _SearchActionTile(
+                    icon: Icons.search_rounded,
+                    title: 'Get more results for $query',
+                    subtitle: 'Use the map to confirm the exact point.',
+                    onTap: () => openMapPicker(activeIsPickup),
                   ),
                 ],
-              ),
+                if (showLocationTools)
+                  _SearchActionTile(
+                    icon: Icons.add_location_alt_outlined,
+                    title: 'Set location on map',
+                    subtitle: activeIsPickup
+                        ? 'Choose the pickup point manually.'
+                        : 'Choose the drop-off point manually.',
+                    onTap: () => openMapPicker(activeIsPickup),
+                  ),
+                const SizedBox(height: 12),
+                _ShipmentDetailsSection(
+                  itemController: itemController,
+                  vehicleType: vehicleType,
+                  paymentMethod: paymentMethod,
+                  onVehicleChanged: (value) {
+                    if (value == null) return;
+                    setState(() => vehicleType = value);
+                  },
+                  onPaymentChanged: (value) {
+                    if (value == null) return;
+                    setState(() => paymentMethod = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                _EstimateCard(
+                  distanceKm: distanceKm,
+                  estimatedPrice: estimatedPrice,
+                  paymentMethod: paymentMethod,
+                  scheduleLabel: scheduleLabel,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: isSubmitting ? null : submitOrder,
+                  icon: isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.check_circle_outline_rounded),
+                  label: Text(
+                    isSubmitting ? 'Creating request...' : 'Request Delivery',
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+
+    if (widget.embedded) return content;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text("Where's it going?"), centerTitle: true),
+      body: content,
     );
   }
 }

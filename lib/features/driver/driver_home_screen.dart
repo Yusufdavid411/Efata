@@ -8,8 +8,9 @@ import 'package:logistics_app/core/services/app_notification_banner_service.dart
 import 'package:logistics_app/core/services/location_service.dart';
 
 import '../../shared/widgets/app_bottom_navigation.dart';
-import '../../shared/widgets/app_drawer.dart';
 import '../../shared/widgets/ai_floating_button.dart';
+import 'driver_jobs_screen.dart';
+import 'driver_profile_screen.dart';
 import 'widgets/driver_status_toggle.dart';
 import 'widgets/available_jobs_section.dart';
 import 'widgets/driver_current_job_card.dart';
@@ -26,6 +27,7 @@ class DriverHomeScreen extends StatefulWidget {
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
   bool isOnline = false;
   bool isLoadingAvailability = true;
+  int currentIndex = 0;
   String verificationStatus = 'incomplete';
   bool profileCompleted = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
@@ -330,66 +332,75 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
+  String get title => switch (currentIndex) {
+    0 => 'Driver Dashboard',
+    1 => 'Jobs',
+    2 => 'Profile',
+    _ => 'Driver Dashboard',
+  };
+
+  Widget dashboardTab() {
+    return Stack(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: ListView(
+            children: [
+              const DriverEarningsSummary(),
+              const SizedBox(height: 20),
+
+              if (isLoadingAvailability)
+                const _DriverDashboardLoading()
+              else ...[
+                verificationCard(),
+
+                DriverStatusToggle(
+                  isOnline: isOnline,
+                  isLoading: isLoadingAvailability,
+                  onChanged: handleStatusChange,
+                ),
+
+                const SizedBox(height: 20),
+
+                const DriverCurrentJobCard(),
+
+                const Text(
+                  "Available Jobs",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+
+                const SizedBox(height: 10),
+
+                AvailableJobsSection(isOnline: isOnline),
+
+                const SizedBox(height: 30),
+
+                const DriverHistorySection(maxItems: 2),
+              ],
+            ],
+          ),
+        ),
+
+        const AIFloatingButton(),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const AppDrawer(isDriver: true),
-      appBar: AppBar(
-        title: const Text("Driver Dashboard"),
-        automaticallyImplyLeading: false,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu_rounded),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
-      ),
-      bottomNavigationBar: const AppBottomNavigation(
+      appBar: AppBar(title: Text(title), automaticallyImplyLeading: false),
+      bottomNavigationBar: AppBottomNavigation(
         isDriver: true,
-        currentIndex: 0,
+        currentIndex: currentIndex,
+        onDestinationSelected: (index) => setState(() => currentIndex = index),
       ),
-      body: Stack(
+      body: IndexedStack(
+        index: currentIndex,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: ListView(
-              children: [
-                const DriverEarningsSummary(),
-                const SizedBox(height: 20),
-
-                if (isLoadingAvailability)
-                  const _DriverDashboardLoading()
-                else ...[
-                  verificationCard(),
-
-                  DriverStatusToggle(
-                    isOnline: isOnline,
-                    isLoading: isLoadingAvailability,
-                    onChanged: handleStatusChange,
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  const DriverCurrentJobCard(),
-
-                  const Text(
-                    "Available Jobs",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  AvailableJobsSection(isOnline: isOnline),
-
-                  const SizedBox(height: 30),
-
-                  const DriverHistorySection(maxItems: 2),
-                ],
-              ],
-            ),
-          ),
-
-          const AIFloatingButton(),
+          dashboardTab(),
+          const DriverJobsContent(),
+          const DriverProfileScreen(embedded: true),
         ],
       ),
     );

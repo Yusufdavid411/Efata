@@ -8,10 +8,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/services/app_notification_banner_service.dart';
+import '../../../core/services/auth_service.dart';
 import '../../../shared/widgets/app_bottom_navigation.dart';
 
 class CustomerProfileScreen extends StatefulWidget {
-  const CustomerProfileScreen({super.key});
+  const CustomerProfileScreen({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   State<CustomerProfileScreen> createState() => _CustomerProfileScreenState();
@@ -242,6 +245,51 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     return 'Customer';
   }
 
+  Future<void> confirmLogout() async {
+    final shouldLogout = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.white,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Log out of EFATA?',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'You will need to sign in again before booking or tracking deliveries.',
+              style: TextStyle(color: Color(0xFF64748B), height: 1.35),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(sheetContext, true),
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Logout'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(
+              onPressed: () => Navigator.pop(sheetContext, false),
+              child: const Text('Stay Logged In'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (shouldLogout != true) return;
+    await AuthService().logout();
+    if (!mounted) return;
+    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -249,6 +297,167 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     if (user == null) {
       return const Scaffold(body: Center(child: Text("Not logged in")));
     }
+
+    final content = StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final data = snapshot.hasData && snapshot.data!.exists
+            ? snapshot.data!.data() as Map<String, dynamic>
+            : <String, dynamic>{};
+
+        final fullName = _customerNameFromData(data);
+
+        final phone = data['phone']?.toString() ?? 'Not added';
+        final address = data['address']?.toString() ?? 'Not added';
+        final photoUrl = data['photoUrl']?.toString();
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Center(
+              child: Column(
+                children: [
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 52,
+                        backgroundImage: photoUrl != null
+                            ? NetworkImage(photoUrl)
+                            : null,
+                        child: photoUrl == null
+                            ? const Icon(Icons.person, size: 52)
+                            : null,
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: CircleAvatar(
+                          backgroundColor: Colors.deepPurple,
+                          child: IconButton(
+                            icon: isUploading
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.camera_alt,
+                                    color: Colors.white,
+                                  ),
+                            onPressed: isUploading
+                                ? null
+                                : uploadProfilePicture,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    fullName,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'Passenger',
+                  style: TextStyle(
+                    color: Color(0xFF334155),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            Card(
+              child: Column(
+                children: [
+                  infoTile(
+                    icon: Icons.phone_outlined,
+                    title: "Phone",
+                    value: phone,
+                  ),
+                  infoTile(
+                    icon: Icons.email_outlined,
+                    title: "Email",
+                    value: user.email ?? "No email",
+                  ),
+                  infoTile(
+                    icon: Icons.location_on_outlined,
+                    title: "Address",
+                    value: address,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            _ProfileActionCard(
+              children: [
+                _ProfileActionTile(
+                  icon: Icons.edit_outlined,
+                  title: 'Edit Profile',
+                  subtitle: 'Update name, phone, and pickup address',
+                  onTap: () => showEditProfileForm(data),
+                ),
+                _ProfileActionTile(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'My Orders',
+                  subtitle: 'Track active and previous deliveries',
+                  onTap: () => Navigator.pushNamed(context, '/orders'),
+                ),
+                _ProfileActionTile(
+                  icon: Icons.settings_outlined,
+                  title: 'Settings',
+                  subtitle: 'Theme, notifications, and sign-in',
+                  onTap: () => Navigator.pushNamed(context, '/settings'),
+                ),
+                _ProfileActionTile(
+                  icon: Icons.support_agent_outlined,
+                  title: 'Help & Support',
+                  subtitle: 'Get help with booking and tracking',
+                  onTap: () => Navigator.pushNamed(context, '/settings'),
+                ),
+                _ProfileActionTile(
+                  icon: Icons.verified_user_outlined,
+                  title: 'Trust & Safety',
+                  subtitle: 'Account protection and delivery support',
+                  onTap: () => Navigator.pushNamed(context, '/settings'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _LogoutTile(onTap: confirmLogout),
+            const SizedBox(height: 20),
+          ],
+        );
+      },
+    );
+
+    if (widget.embedded) return content;
 
     return Scaffold(
       appBar: AppBar(
@@ -259,117 +468,89 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         isDriver: false,
         currentIndex: 3,
       ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .snapshots(),
-        builder: (context, snapshot) {
-          final data = snapshot.hasData && snapshot.data!.exists
-              ? snapshot.data!.data() as Map<String, dynamic>
-              : <String, dynamic>{};
+      body: content,
+    );
+  }
+}
 
-          final fullName = _customerNameFromData(data);
+class _ProfileActionCard extends StatelessWidget {
+  const _ProfileActionCard({required this.children});
 
-          final phone = data['phone']?.toString() ?? 'Not added';
-          final address = data['address']?.toString() ?? 'Not added';
-          final photoUrl = data['photoUrl']?.toString();
+  final List<Widget> children;
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
+  @override
+  Widget build(BuildContext context) {
+    return Card(child: Column(children: children));
+  }
+}
+
+class _ProfileActionTile extends StatelessWidget {
+  const _ProfileActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: const Color(0xFF0F766E)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
+    );
+  }
+}
+
+class _LogoutTile extends StatelessWidget {
+  const _LogoutTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFFFF1F2),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
             children: [
-              Center(
+              Icon(Icons.logout_rounded, color: Color(0xFFDC2626)),
+              SizedBox(width: 12),
+              Expanded(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 52,
-                          backgroundImage: photoUrl != null
-                              ? NetworkImage(photoUrl)
-                              : null,
-                          child: photoUrl == null
-                              ? const Icon(Icons.person, size: 52)
-                              : null,
-                        ),
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: CircleAvatar(
-                            backgroundColor: Colors.deepPurple,
-                            child: IconButton(
-                              icon: isUploading
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.camera_alt,
-                                      color: Colors.white,
-                                    ),
-                              onPressed: isUploading
-                                  ? null
-                                  : uploadProfilePicture,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
                     Text(
-                      fullName,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                      'Logout',
+                      style: TextStyle(
+                        color: Color(0xFFB91C1C),
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              Card(
-                child: Column(
-                  children: [
-                    infoTile(
-                      icon: Icons.phone_outlined,
-                      title: "Phone",
-                      value: phone,
-                    ),
-                    infoTile(
-                      icon: Icons.email_outlined,
-                      title: "Email",
-                      value: user.email ?? "No email",
-                    ),
-                    infoTile(
-                      icon: Icons.location_on_outlined,
-                      title: "Address",
-                      value: address,
+                    SizedBox(height: 3),
+                    Text(
+                      'Leave this device signed out',
+                      style: TextStyle(color: Color(0xFF64748B)),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text("Edit Profile"),
-                onPressed: () => showEditProfileForm(data),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.tune_outlined),
-                label: const Text("Open Settings"),
-                onPressed: () => Navigator.pushNamed(context, '/settings'),
-              ),
+              Icon(Icons.chevron_right_rounded, color: Color(0xFFDC2626)),
             ],
-          );
-        },
+          ),
+        ),
       ),
     );
   }
