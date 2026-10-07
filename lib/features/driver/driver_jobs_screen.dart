@@ -10,7 +10,11 @@ class DriverJobsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Job History'), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('Job History'),
+        centerTitle: true,
+        automaticallyImplyLeading: false,
+      ),
       bottomNavigationBar: const AppBottomNavigation(
         isDriver: true,
         currentIndex: 1,

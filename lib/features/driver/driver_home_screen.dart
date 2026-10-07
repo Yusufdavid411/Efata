@@ -334,7 +334,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: const AppDrawer(isDriver: true),
-      appBar: AppBar(title: const Text("Driver Dashboard")),
+      appBar: AppBar(
+        title: const Text("Driver Dashboard"),
+        automaticallyImplyLeading: false,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
+      ),
       bottomNavigationBar: const AppBottomNavigation(
         isDriver: true,
         currentIndex: 0,

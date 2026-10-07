@@ -251,7 +251,10 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Customer Profile")),
+      appBar: AppBar(
+        title: const Text("Customer Profile"),
+        automaticallyImplyLeading: false,
+      ),
       bottomNavigationBar: const AppBottomNavigation(
         isDriver: false,
         currentIndex: 3,

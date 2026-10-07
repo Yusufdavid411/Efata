@@ -283,7 +283,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Driver Profile")),
+      appBar: AppBar(
+        title: const Text("Driver Profile"),
+        automaticallyImplyLeading: false,
+      ),
       bottomNavigationBar: const AppBottomNavigation(
         isDriver: true,
         currentIndex: 2,

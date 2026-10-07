@@ -10,9 +10,10 @@ class OrderHistoryScreen extends StatelessWidget {
 
   bool isCurrentOrder(QueryDocumentSnapshot order) {
     final data = order.data() as Map<String, dynamic>;
-    final status = (data['status']?.toString() ?? '')
-        .toLowerCase()
-        .replaceAll(RegExp(r'[\s_-]+'), '');
+    final status = (data['status']?.toString() ?? '').toLowerCase().replaceAll(
+      RegExp(r'[\s_-]+'),
+      '',
+    );
     return status == 'pending' || status == 'accepted' || status == 'intransit';
   }
 
@@ -21,7 +22,10 @@ class OrderHistoryScreen extends StatelessWidget {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Orders')),
+      appBar: AppBar(
+        title: const Text('My Orders'),
+        automaticallyImplyLeading: false,
+      ),
       bottomNavigationBar: const AppBottomNavigation(
         isDriver: false,
         currentIndex: 2,

@@ -465,7 +465,11 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     final showLocationTools = isTypingLocation || !activeSelected;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Where's it going?"), centerTitle: true),
+      appBar: AppBar(
+        title: const Text("Where's it going?"),
+        centerTitle: true,
+        automaticallyImplyLeading: false,
+      ),
       bottomNavigationBar: const AppBottomNavigation(
         isDriver: false,
         currentIndex: 1,

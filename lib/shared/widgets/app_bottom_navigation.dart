@@ -28,7 +28,7 @@ class AppBottomNavigation extends StatelessWidget {
             _ => '/customerHome',
           };
 
-    Navigator.pushNamed(context, route);
+    Navigator.pushReplacementNamed(context, route);
   }
 
   @override

@@ -11,7 +11,7 @@ class AppDrawer extends StatelessWidget {
 
   void openProfile(BuildContext context) {
     Navigator.pop(context);
-    Navigator.pushNamed(
+    Navigator.pushReplacementNamed(
       context,
       isDriver ? '/driverProfile' : '/customerProfile',
     );
@@ -126,7 +126,7 @@ class AppDrawer extends StatelessWidget {
       child: Column(
         children: [
           if (user == null)
-            const _DrawerProfileHeader(name: 'EFATA', role: 'Account')
+            const _DrawerProfileHeader(name: 'EFATA')
           else
             StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
               stream: profileStream(user),
@@ -149,7 +149,7 @@ class AppDrawer extends StatelessWidget {
                     .toLowerCase();
                 final status = isDriver
                     ? verificationStatus == 'approved'
-                          ? 'Verified driver'
+                          ? 'Verified'
                           : profileCompleted
                           ? 'Approval in review'
                           : 'Profile incomplete'
@@ -157,11 +157,9 @@ class AppDrawer extends StatelessWidget {
 
                 return _DrawerProfileHeader(
                   name: name,
-                  role: isDriver ? 'Driver' : 'Customer',
                   status: status,
                   statusOk: isDriver ? verificationStatus == 'approved' : true,
                   photoUrl: photoUrl,
-                  onTap: () => openProfile(context),
                 );
               },
             ),
@@ -189,7 +187,7 @@ class AppDrawer extends StatelessWidget {
                       subtitle: 'Book a new pickup and delivery',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.pushNamed(context, '/createOrder');
+                        Navigator.pushReplacementNamed(context, '/createOrder');
                       },
                     ),
                     _DrawerTile(
@@ -198,7 +196,7 @@ class AppDrawer extends StatelessWidget {
                       subtitle: 'Track active and previous deliveries',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.pushNamed(context, '/orders');
+                        Navigator.pushReplacementNamed(context, '/orders');
                       },
                     ),
                   ],
@@ -209,7 +207,7 @@ class AppDrawer extends StatelessWidget {
                       subtitle: 'Completed delivery records',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.pushNamed(context, '/driverJobs');
+                        Navigator.pushReplacementNamed(context, '/driverJobs');
                       },
                     ),
                   const SizedBox(height: 10),
@@ -262,95 +260,81 @@ class AppDrawer extends StatelessWidget {
 class _DrawerProfileHeader extends StatelessWidget {
   const _DrawerProfileHeader({
     required this.name,
-    required this.role,
     this.status,
     this.statusOk = false,
     this.photoUrl,
-    this.onTap,
   });
 
   final String name;
-  final String role;
   final String? status;
   final bool statusOk;
   final String? photoUrl;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.fromLTRB(
-          18,
-          MediaQuery.of(context).padding.top + 18,
-          14,
-          18,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                CircleAvatar(
-                  radius: 34,
-                  backgroundColor: const Color(0xFFEFFAF7),
-                  backgroundImage:
-                      photoUrl != null && photoUrl!.trim().isNotEmpty
-                      ? NetworkImage(photoUrl!)
-                      : null,
-                  child: photoUrl == null || photoUrl!.trim().isEmpty
-                      ? const Icon(
-                          Icons.person_rounded,
-                          color: Color(0xFF0F766E),
-                          size: 36,
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                        ),
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(
+        18,
+        MediaQuery.of(context).padding.top + 18,
+        14,
+        18,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              CircleAvatar(
+                radius: 34,
+                backgroundColor: const Color(0xFFEFFAF7),
+                backgroundImage: photoUrl != null && photoUrl!.trim().isNotEmpty
+                    ? NetworkImage(photoUrl!)
+                    : null,
+                child: photoUrl == null || photoUrl!.trim().isEmpty
+                    ? const Icon(
+                        Icons.person_rounded,
+                        color: Color(0xFF0F766E),
+                        size: 36,
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
                       ),
+                    ),
+                    if (status != null) ...[
                       const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _HeaderPill(label: role),
-                          if (status != null)
-                            _HeaderPill(
-                              label: status!,
-                              icon: statusOk
-                                  ? Icons.verified_rounded
-                                  : Icons.error_outline_rounded,
-                              highlighted: statusOk,
-                            ),
-                        ],
+                      _HeaderPill(
+                        label: status!,
+                        icon: statusOk
+                            ? Icons.verified_rounded
+                            : Icons.error_outline_rounded,
+                        highlighted: statusOk,
                       ),
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

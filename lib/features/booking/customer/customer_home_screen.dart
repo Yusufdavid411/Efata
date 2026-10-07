@@ -14,7 +14,16 @@ class CustomerHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: const AppDrawer(isDriver: false),
-      appBar: AppBar(title: const Text("Customer Dashboard")),
+      appBar: AppBar(
+        title: const Text("Customer Dashboard"),
+        automaticallyImplyLeading: false,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
+      ),
       bottomNavigationBar: const AppBottomNavigation(
         isDriver: false,
         currentIndex: 0,
