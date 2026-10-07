@@ -400,7 +400,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         children: [
           dashboardTab(),
           const DriverJobsContent(),
-          const DriverProfileScreen(embedded: true),
+          DriverProfileScreen(
+            embedded: true,
+            onOpenJobs: () => setState(() => currentIndex = 1),
+          ),
         ],
       ),
     );

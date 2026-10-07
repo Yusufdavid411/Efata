@@ -12,9 +12,14 @@ import '../../../core/services/auth_service.dart';
 import '../../../shared/widgets/app_bottom_navigation.dart';
 
 class CustomerProfileScreen extends StatefulWidget {
-  const CustomerProfileScreen({super.key, this.embedded = false});
+  const CustomerProfileScreen({
+    super.key,
+    this.embedded = false,
+    this.onOpenOrders,
+  });
 
   final bool embedded;
+  final VoidCallback? onOpenOrders;
 
   @override
   State<CustomerProfileScreen> createState() => _CustomerProfileScreenState();
@@ -427,7 +432,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                   icon: Icons.receipt_long_outlined,
                   title: 'My Orders',
                   subtitle: 'Track active and previous deliveries',
-                  onTap: () => Navigator.pushNamed(context, '/orders'),
+                  onTap:
+                      widget.onOpenOrders ??
+                      () => Navigator.pushNamed(context, '/orders'),
                 ),
                 _ProfileActionTile(
                   icon: Icons.settings_outlined,

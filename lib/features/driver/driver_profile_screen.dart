@@ -12,9 +12,14 @@ import '../../core/services/auth_service.dart';
 import '../../shared/widgets/app_bottom_navigation.dart';
 
 class DriverProfileScreen extends StatefulWidget {
-  const DriverProfileScreen({super.key, this.embedded = false});
+  const DriverProfileScreen({
+    super.key,
+    this.embedded = false,
+    this.onOpenJobs,
+  });
 
   final bool embedded;
+  final VoidCallback? onOpenJobs;
 
   @override
   State<DriverProfileScreen> createState() => _DriverProfileScreenState();
@@ -600,7 +605,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   icon: Icons.work_history_outlined,
                   title: 'Job History',
                   subtitle: 'Completed delivery records',
-                  onTap: () => Navigator.pushNamed(context, '/driverJobs'),
+                  onTap:
+                      widget.onOpenJobs ??
+                      () => Navigator.pushNamed(context, '/driverJobs'),
                 ),
                 _ProfileActionTile(
                   icon: Icons.settings_outlined,

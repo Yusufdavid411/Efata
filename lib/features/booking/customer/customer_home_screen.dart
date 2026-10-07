@@ -64,7 +64,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           dashboardTab(),
           const SimpleOrderForm(embedded: true),
           const OrderHistoryContent(),
-          const CustomerProfileScreen(embedded: true),
+          CustomerProfileScreen(
+            embedded: true,
+            onOpenOrders: () => setState(() => currentIndex = 2),
+          ),
         ],
       ),
     );
