@@ -34,6 +34,9 @@ class ChatNotificationService {
   _orderSubscriptions = [];
 
   StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _profileSubscription;
+  String? _listeningRole;
   bool _initialized = false;
 
   Future<void> initialize() async {
@@ -62,28 +65,44 @@ class ChatNotificationService {
   }
 
   void _listenForOrderMessages(String userId) {
-    final session = _session;
-    _orderSubscriptions.add(
-      FirebaseFirestore.instance
-          .collection('orders')
-          .where('customerId', isEqualTo: userId)
-          .snapshots()
-          .listen(
-            (snapshot) => _processSnapshot(snapshot, userId, session),
-            onError: (Object error) => debugPrint('Chat listener: $error'),
-          ),
-    );
-
-    _orderSubscriptions.add(
-      FirebaseFirestore.instance
-          .collection('orders')
-          .where('driverId', isEqualTo: userId)
-          .snapshots()
-          .listen(
-            (snapshot) => _processSnapshot(snapshot, userId, session),
-            onError: (Object error) => debugPrint('Chat listener: $error'),
-          ),
-    );
+    final authSession = _session;
+    // Registration can publish the profile after the auth event, so wait for it.
+    _profileSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .snapshots()
+        .listen(
+          (profile) {
+            if (FirebaseAuth.instance.currentUser?.uid != userId ||
+                authSession != _session)
+              return;
+            final role = profile.data()?['role']?.toString();
+            if (role == _listeningRole) return;
+            _listeningRole = role;
+            for (final subscription in _orderSubscriptions) {
+              subscription.cancel();
+            }
+            _orderSubscriptions.clear();
+            if (role != 'customer' && role != 'driver') return;
+            _orderSubscriptions.add(
+              FirebaseFirestore.instance
+                  .collection('orders')
+                  .where(
+                    role == 'driver' ? 'driverId' : 'customerId',
+                    isEqualTo: userId,
+                  )
+                  .snapshots()
+                  .listen(
+                    (snapshot) =>
+                        _processSnapshot(snapshot, userId, authSession),
+                    onError: (Object error) =>
+                        debugPrint('Chat listener: $error'),
+                  ),
+            );
+          },
+          onError: (Object error) =>
+              debugPrint('Chat profile listener: $error'),
+        );
   }
 
   Future<void> _processSnapshot(
@@ -281,6 +300,9 @@ class ChatNotificationService {
 
   void _clearOrderListeners() {
     _session++;
+    _profileSubscription?.cancel();
+    _profileSubscription = null;
+    _listeningRole = null;
     for (final subscription in _orderSubscriptions) {
       subscription.cancel();
     }

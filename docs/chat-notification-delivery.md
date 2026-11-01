@@ -1,7 +1,9 @@
 # Chat notification delivery
 
-The auth stream is the only owner of chat order listeners. A session counter
-rejects callbacks from a previous login, and delivery checks run serially.
+The auth stream is the only owner of chat order listeners. The user profile
+selects the customer or driver query, including when registration publishes the
+profile after sign-in. A session counter rejects callbacks from a previous
+login, and delivery checks run serially.
 
 Each recipient has a receipt at
 `users/{uid}/chatNotificationReceipts/{orderId}` containing `messageTime` and
