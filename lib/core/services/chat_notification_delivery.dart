@@ -39,7 +39,10 @@ class ChatNotificationDelivery {
         await show();
       }
     });
-    _pending = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    _pending = result.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {},
+    );
     return result;
   }
 
