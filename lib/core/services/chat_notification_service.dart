@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/app_settings_controller.dart';
 import 'app_notification_banner_service.dart';
+import 'chat_notification_delivery.dart';
 
 class ChatNotificationService {
   ChatNotificationService._();
@@ -17,7 +18,18 @@ class ChatNotificationService {
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
-  final Map<String, int> _seenMessageTimes = {};
+  late final ChatNotificationDelivery _delivery = ChatNotificationDelivery(
+    readLocal: (userId, orderId) async {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getInt(_deliveredMessageKey(userId, orderId)) ?? 0;
+    },
+    saveLocal: (userId, orderId, time) async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_deliveredMessageKey(userId, orderId), time);
+    },
+    claimRemote: _claimNotification,
+  );
+  int _session = 0;
   final List<StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>
   _orderSubscriptions = [];
 
@@ -46,21 +58,20 @@ class ChatNotificationService {
       }
     });
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      _listenForOrderMessages(user.uid);
-    }
-
     _initialized = true;
   }
 
   void _listenForOrderMessages(String userId) {
+    final session = _session;
     _orderSubscriptions.add(
       FirebaseFirestore.instance
           .collection('orders')
           .where('customerId', isEqualTo: userId)
           .snapshots()
-          .listen((snapshot) => _handleOrderSnapshot(snapshot, userId)),
+          .listen(
+            (snapshot) => _processSnapshot(snapshot, userId, session),
+            onError: (Object error) => debugPrint('Chat listener: $error'),
+          ),
     );
 
     _orderSubscriptions.add(
@@ -68,17 +79,20 @@ class ChatNotificationService {
           .collection('orders')
           .where('driverId', isEqualTo: userId)
           .snapshots()
-          .listen((snapshot) => _handleOrderSnapshot(snapshot, userId)),
+          .listen(
+            (snapshot) => _processSnapshot(snapshot, userId, session),
+            onError: (Object error) => debugPrint('Chat listener: $error'),
+          ),
     );
   }
 
-  Future<void> _handleOrderSnapshot(
+  Future<void> _processSnapshot(
     QuerySnapshot<Map<String, dynamic>> snapshot,
     String userId,
+    int session,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
-
     for (final change in snapshot.docChanges) {
+      if (!_isCurrentSession(userId, session)) return;
       if (change.type == DocumentChangeType.removed) continue;
 
       final order = change.doc;
@@ -99,33 +113,63 @@ class ChatNotificationService {
         continue;
       }
 
-      final deliveredKey = _deliveredMessageKey(userId, order.id);
-      final deliveredTime = prefs.getInt(deliveredKey) ?? 0;
-      final previousTime = _seenMessageTimes[order.id];
-      _seenMessageTimes[order.id] = messageTime;
-
-      final isInitialLoad = previousTime == null;
       final isOwnMessage = senderId == userId;
-
       if (isOwnMessage) continue;
-      if (unreadCount <= 0) continue;
-      if (messageTime <= deliveredTime) {
-        if (isClosedOrder) {
-          await _notifications.cancel(id: _notificationId(order.id));
-        }
+      final closedTime =
+          _messageTime(data['chatClosedAt']) ??
+          _messageTime(data['completedAt']) ??
+          _messageTime(data['canceledAt']) ??
+          _messageTime(data['rejectedAt']);
+      if (unreadCount <= 0 ||
+          !ChatNotificationDelivery.isEligible(
+            now: DateTime.now(),
+            messageTime: messageTime,
+            isClosed: isClosedOrder,
+            closedTime: closedTime,
+          )) {
+        await _notifications.cancel(id: _notificationId(order.id));
         continue;
       }
-      if (!isInitialLoad && messageTime <= previousTime) continue;
       if (!appSettingsController.orderNotificationsEnabled) continue;
 
-      await showChatNotification(
-        orderId: order.id,
-        title: _senderTitle(data['lastMessageSenderRole']),
-        body: lastMessage,
-      );
-
-      await prefs.setInt(deliveredKey, messageTime);
+      try {
+        await _delivery.deliver(
+          userId: userId,
+          orderId: order.id,
+          messageTime: messageTime,
+          isCurrentSession: () => _isCurrentSession(userId, session),
+          show: () => showChatNotification(
+            orderId: order.id,
+            title: _senderTitle(data['lastMessageSenderRole']),
+            body: lastMessage,
+          ),
+        );
+      } catch (error) {
+        // Fail closed when a receipt cannot be checked (for example offline).
+        debugPrint('Chat notification receipt check failed: $error');
+      }
     }
+  }
+
+  bool _isCurrentSession(String userId, int session) =>
+      session == _session && FirebaseAuth.instance.currentUser?.uid == userId;
+
+  Future<bool> _claimNotification(String userId, String orderId, int time) {
+    final receipt = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('chatNotificationReceipts')
+        .doc(orderId);
+    return FirebaseFirestore.instance.runTransaction((transaction) async {
+      final existing = await transaction.get(receipt);
+      final delivered = (existing.data()?['messageTime'] as num?)?.toInt() ?? 0;
+      if (delivered >= time) return false;
+      transaction.set(receipt, {
+        'messageTime': time,
+        'deliveredAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    });
   }
 
   String _deliveredMessageKey(String userId, String orderId) {
@@ -236,11 +280,11 @@ class ChatNotificationService {
   }
 
   void _clearOrderListeners() {
+    _session++;
     for (final subscription in _orderSubscriptions) {
       subscription.cancel();
     }
     _orderSubscriptions.clear();
-    _seenMessageTimes.clear();
   }
 
   Future<void> dispose() async {
