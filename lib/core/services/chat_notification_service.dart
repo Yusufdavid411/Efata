@@ -74,8 +74,9 @@ class ChatNotificationService {
         .listen(
           (profile) {
             if (FirebaseAuth.instance.currentUser?.uid != userId ||
-                authSession != _session)
+                authSession != _session) {
               return;
+            }
             final role = profile.data()?['role']?.toString();
             if (role == _listeningRole) return;
             _listeningRole = role;
