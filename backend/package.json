@@ -1,0 +1,13 @@
+{
+  "name": "efata-backend",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "24.x" },
+  "scripts": {
+    "test": "node --test",
+    "snapshot": "node scripts/snapshot.mjs",
+    "import:snapshot": "node scripts/import.mjs",
+    "start": "node scripts/serve.mjs"
+  },
+  "dependencies": { "pg": "^8.16.3" }
+}
