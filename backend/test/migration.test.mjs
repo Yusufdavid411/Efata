@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 import { createHealthHandler } from '../api/health.mjs';
+import live from '../api/live.mjs';
 import { canonicalJson, seal, unseal } from '../scripts/archive.mjs';
 import { cloudinaryReferences, firebaseSource } from '../scripts/firebase-source.mjs';
 import { accountMetadata } from '../scripts/import.mjs';
@@ -73,4 +74,18 @@ test('health endpoint reports readiness without exposing a database error', asyn
   assert.equal(res.body.status, 'not_ready');
   await createHealthHandler(async () => true)({ method: 'POST' }, res);
   assert.equal(res.statusCode, 405);
+});
+
+test('liveness works independently of the database and only accepts GET', () => {
+  const res = {
+    headers: {}, setHeader(name, value) { this.headers[name] = value; },
+    end(body) { this.body = JSON.parse(body); },
+  };
+  live({ method: 'GET' }, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { service: 'efata-backend', status: 'live' });
+  assert.equal(res.headers['Cache-Control'], 'no-store');
+  live({ method: 'POST' }, res);
+  assert.equal(res.statusCode, 405);
+  assert.equal(res.headers.Allow, 'GET');
 });

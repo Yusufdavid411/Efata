@@ -53,8 +53,13 @@ not a substitute for a final reconciliation of writes during cutover.
 
 ## Backend hosting
 
-Use this directory as the Vercel project root, with Node 24. The only current
-route is `GET /api/health`. Configure `EFATA_READ_DATABASE_URL` on the server
+Use this directory as the Vercel project root, with Node 24.
+`GET /api/live` checks that the runtime starts without needing credentials.
+`GET /api/health` separately checks database readiness and returns 503 without
+a database connection. For an isolated hosting test, ship only `api/` and the
+package manifests, with no database credentials or backups.
+
+To enable database readiness, configure `EFATA_READ_DATABASE_URL` on the server
 with a restricted Postgres role and `EFATA_DB_CA_PEM` if needed; do not use the
 migration owner password. Omit SSL parameters in the URL so the explicit TLS
 settings are used. Run
