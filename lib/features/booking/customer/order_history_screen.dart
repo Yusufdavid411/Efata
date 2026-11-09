@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../shared/widgets/app_bottom_navigation.dart';
+import '../../../shared/widgets/order_history_preview.dart';
 import 'widgets/active_delivery_section.dart';
 
 class OrderHistoryScreen extends StatelessWidget {
@@ -38,6 +39,9 @@ class OrderHistoryContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (OrderHistoryPreview.enabled) {
+      return const OrderHistoryPreview(isDriver: false);
+    }
     final currentUser = FirebaseAuth.instance.currentUser;
 
     return StreamBuilder<QuerySnapshot>(
