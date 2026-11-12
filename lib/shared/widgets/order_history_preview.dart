@@ -5,13 +5,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-const _apiOrigin = String.fromEnvironment('EFATA_API_ORIGIN');
+const _apiOrigin = String.fromEnvironment(
+  'EFATA_API_ORIGIN',
+  defaultValue: 'https://api.efata.io',
+);
+const _newBackendEnabled = bool.fromEnvironment('EFATA_USE_NEW_BACKEND');
 
 class OrderHistoryPreview extends StatefulWidget {
   const OrderHistoryPreview({super.key, required this.isDriver});
 
   final bool isDriver;
-  static bool get enabled => _apiOrigin.isNotEmpty;
+  static bool get enabled => _newBackendEnabled && _apiOrigin.isNotEmpty;
 
   @override
   State<OrderHistoryPreview> createState() => _OrderHistoryPreviewState();

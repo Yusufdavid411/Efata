@@ -100,8 +100,9 @@ create orders, change delivery status, open live tracking, or modify Firestore.
 
 ## Backend hosting
 
-Use this directory as the Vercel project root, with Node 24.
-`GET /api/live` checks that the runtime starts without needing credentials.
+Use this directory as the Vercel project root, with Node 24. The live EFATA
+endpoint is `https://api.efata.io`; the root path and `GET /api/live` both
+return a credential-free liveness response.
 `GET /api/health` separately checks database readiness and returns 503 without
 a database connection. For an isolated hosting test, ship only `api/`,
 `lib/`, and the package manifests, with no database credentials or backups.
