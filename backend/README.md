@@ -121,3 +121,12 @@ feature endpoints through `EFATA_DATABASE_URL`. Neither login may be placed in
 Flutter, Vite variables, GitHub, or documentation. Run
 `scripts/provision-runtime.ps1` from a trusted Windows account to rotate both
 passwords and save them in ignored, DPAPI-protected files.
+
+## Materializing the Firebase archive
+
+`npm run audit:archive` reports collection shapes and enum frequencies without
+printing customer data. `npm run materialize:core` performs a read-only dry run.
+Run `node scripts/materialize-core.mjs --apply` only through the private owner
+password wrapper after reviewing that plan. The importer is transactional,
+records the snapshot in `efata.migration_runs`, preserves decoded source
+documents in `legacy_data`, and refuses to apply the same snapshot twice.

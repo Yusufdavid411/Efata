@@ -7,6 +7,9 @@
     "test": "node --test",
     "snapshot": "node scripts/snapshot.mjs",
     "import:snapshot": "node scripts/import.mjs",
+    "audit:archive": "node scripts/audit-archive.mjs",
+    "materialize:core": "node scripts/materialize-core.mjs",
+    "verify:core": "node scripts/verify-core.mjs",
     "start": "node scripts/serve.mjs"
   },
   "dependencies": { "pg": "^8.16.3" }
