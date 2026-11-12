@@ -136,6 +136,16 @@ an approved driver and a current GPS fix before going online. `POST
 customer, driver, or an admin. Location updates are client-paced and do not
 call Google Routes or Geocoding services.
 
+The admin dashboard reads private operational records through `GET
+/api/admin-data?resource=drivers|users|orders|payouts|logs`. `POST
+/api/admin-action` performs driver verification, account suspension, order
+dispute, and payout status changes inside database transactions. Every
+successful moderation action writes an immutable `admin_logs` entry. The API
+checks the caller's active `admin` role in EFATA's database; a token claim or
+request body cannot grant admin access. Migration `20261112000300` adds the
+structured dispute fields and the moderation statuses already used by the
+dashboard.
+
 Configure `EFATA_FIREBASE_LOOKUP_API_KEY` only on the server and keep
 `EFATA_ALLOWED_ORIGINS` restricted to `https://admin.efata.io`. The Flutter app
 sends no browser Origin header. Identity always comes from the verified token;

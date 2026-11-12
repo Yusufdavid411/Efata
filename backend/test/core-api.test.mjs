@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { test } from 'node:test';
+import { createAdminActionHandler } from '../api/admin-action.mjs';
+import { createAdminDataHandler } from '../api/admin-data.mjs';
 import { createDriverAvailabilityHandler } from '../api/driver-availability.mjs';
 import { createDriverLocationHandler } from '../api/driver-location.mjs';
 import { createMeHandler } from '../api/me.mjs';
@@ -231,6 +233,65 @@ test('driver location validates writes and restricts reads to authenticated iden
     const tracked = await fetch(`${url}/api/driver-location?orderId=${orderId}`, { headers: auth });
     assert.equal(tracked.status, 200);
     assert.deepEqual(calls[1], { uid: 'driver-id', orderId });
+  } finally {
+    await close(server);
+  }
+});
+
+test('admin data uses the verified identity and accepts only known resources', async () => {
+  const calls = [];
+  const handler = createAdminDataHandler({
+    origins,
+    verify: async () => ({ uid: 'admin-id' }),
+    listAdminResource: async (query) => { calls.push(query); return { rows: [] }; },
+  });
+  const { server, url } = await testServer({ '/api/admin-data': handler });
+  try {
+    assert.equal((await fetch(`${url}/api/admin-data?resource=secrets`, { headers: auth })).status, 400);
+    const result = await fetch(`${url}/api/admin-data?resource=drivers&page=2&uid=other`, {
+      headers: { ...auth, Origin: 'https://admin.efata.io' },
+    });
+    assert.equal(result.status, 200);
+    assert.deepEqual(calls[0], {
+      uid: 'admin-id', resource: 'drivers', page: 2, limit: 100,
+    });
+  } finally {
+    await close(server);
+  }
+});
+
+test('admin actions cannot override identity and preserve moderation errors', async () => {
+  const calls = [];
+  const handler = createAdminActionHandler({
+    origins,
+    verify: async () => ({ uid: 'admin-id' }),
+    performAdminAction: async (command) => {
+      calls.push(command);
+      if (command.action === 'user-status') throw new ApiError(409, 'cannot_suspend_self');
+      return { id: command.targetId, status: command.status };
+    },
+  });
+  const { server, url } = await testServer({ '/api/admin-action': handler });
+  const targetId = 'b917c25d-bbd4-4a58-8417-613e64c4ed76';
+  try {
+    const approved = await fetch(`${url}/api/admin-action`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'driver-status', targetId, status: 'approved', uid: 'other-admin', note: 'Checked',
+      }),
+    });
+    assert.equal(approved.status, 200);
+    assert.deepEqual(calls[0], {
+      uid: 'admin-id', action: 'driver-status', targetId, status: 'approved',
+      note: 'Checked', suspended: undefined,
+    });
+
+    const conflict = await fetch(`${url}/api/admin-action`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'user-status', targetId, suspended: true }),
+    });
+    assert.equal(conflict.status, 409);
+    assert.deepEqual(await conflict.json(), { error: 'cannot_suspend_self' });
   } finally {
     await close(server);
   }

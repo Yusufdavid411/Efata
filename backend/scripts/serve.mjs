@@ -1,4 +1,6 @@
 import { createServer } from 'node:http';
+import adminAction from '../api/admin-action.mjs';
+import adminData from '../api/admin-data.mjs';
 import health from '../api/health.mjs';
 import live from '../api/live.mjs';
 import driverAvailability from '../api/driver-availability.mjs';
@@ -13,6 +15,8 @@ const port = Number(process.env.PORT ?? 3000);
 createServer((req, res) => {
   const path = req.url.split('?', 1)[0];
   if (path === '/') return live(req, res);
+  if (path === '/api/admin-action') return adminAction(req, res);
+  if (path === '/api/admin-data') return adminData(req, res);
   if (path === '/api/health') return health(req, res);
   if (path === '/api/live') return live(req, res);
   if (path === '/api/driver-availability') return driverAvailability(req, res);

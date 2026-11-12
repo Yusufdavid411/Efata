@@ -288,10 +288,153 @@ export function createCoreRepository({ url, ca }) {
     return result.rows[0];
   };
 
+  const requireAdmin = async (uid, client = pool) => {
+    const actor = await account(uid, client);
+    if (!actor || actor.role !== 'admin' || actor.accountStatus !== 'active') {
+      throw new ApiError(403, 'admin_access_required');
+    }
+    return actor;
+  };
+
+  const listAdminResource = async ({ uid, resource, page = 1, limit = 100 }) => {
+    await requireAdmin(uid);
+    const offset = (page - 1) * limit;
+    let result;
+    if (resource === 'drivers') {
+      result = await pool.query(`
+        select a.id,a.firebase_uid as "legacyId",a.display_name as name,a.email,a.phone,
+          a.photo_url as "photoUrl",a.profile_completed as "profileCompleted",
+          a.account_status as "accountStatus",dp.vehicle_type as "vehicleType",
+          dp.plate_number as "plateNumber",dp.license_file_key as "licenseFileKey",
+          dp.verification_status as "verificationStatus",dp.verification_notes as "verificationNotes",
+          dp.is_online as "isOnline",dp.total_earnings as "totalEarnings",
+          a.created_at as "createdAt",a.updated_at as "updatedAt"
+        from efata.accounts a join efata.driver_profiles dp on dp.account_id=a.id
+        order by a.created_at desc,a.id desc limit $1 offset $2
+      `, [limit + 1, offset]);
+    } else if (resource === 'users') {
+      result = await pool.query(`
+        select a.id,a.firebase_uid as "legacyId",a.display_name as name,a.email,a.phone,
+          a.photo_url as "photoUrl",a.role,a.profile_completed as "profileCompleted",
+          a.account_status as "accountStatus",(a.account_status='disabled') as "isSuspended",
+          a.email_verified as "emailVerified",a.created_at as "createdAt",a.updated_at as "updatedAt"
+        from efata.accounts a order by a.created_at desc,a.id desc limit $1 offset $2
+      `, [limit + 1, offset]);
+    } else if (resource === 'orders') {
+      result = await pool.query(`
+        select ${orderFields()},ca.display_name as "customerName",ca.firebase_uid as "customerId",
+          da.display_name as "driverName",da.firebase_uid as "driverId",
+          o.needs_admin_review as "needsAdminReview",
+          o.payment_review_required as "paymentReviewRequired",
+          o.dispute_status as "disputeStatus",o.dispute_note as "disputeNote",
+          o.dispute_updated_at as "disputeUpdatedAt"
+        from efata.orders o
+        join efata.accounts ca on ca.id=o.customer_id
+        left join efata.accounts da on da.id=o.driver_id
+        order by o.created_at desc,o.id desc limit $1 offset $2
+      `, [limit + 1, offset]);
+    } else if (resource === 'payouts') {
+      result = await pool.query(`
+        select p.id,p.firebase_payout_id as "legacyId",p.driver_id as "driverAccountId",
+          a.firebase_uid as "driverId",a.display_name as "driverName",p.amount,p.status,
+          p.bank_reference as "bankReference",p.requested_at as "createdAt",
+          p.processed_at as "processedAt",p.metadata
+        from efata.payouts p join efata.accounts a on a.id=p.driver_id
+        order by p.requested_at desc,p.id desc limit $1 offset $2
+      `, [limit + 1, offset]);
+    } else if (resource === 'logs') {
+      result = await pool.query(`
+        select l.id,l.action,l.target_type as "targetType",l.target_id as "targetId",
+          l.metadata,l.created_at as "createdAt",a.display_name as "adminName",a.email as "adminEmail"
+        from efata.admin_logs l join efata.accounts a on a.id=l.admin_id
+        order by l.created_at desc,l.id desc limit $1 offset $2
+      `, [limit + 1, offset]);
+    } else {
+      throw new ApiError(400, 'invalid_resource');
+    }
+    return {
+      resource,
+      rows: result.rows.slice(0, limit),
+      nextPage: result.rows.length > limit ? page + 1 : null,
+    };
+  };
+
+  const performAdminAction = async ({ uid, action, targetId, status, note, suspended }) => {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const actor = await requireAdmin(uid, client);
+      let targetType;
+      let result;
+      let metadata;
+      if (action === 'driver-status') {
+        const allowed = new Set(['pending', 'incomplete', 'approved', 'rejected', 'suspended']);
+        if (!allowed.has(status)) throw new ApiError(400, 'invalid_driver_status');
+        result = await client.query(`
+          update efata.driver_profiles set verification_status=$2,
+            verification_notes=nullif($3,''),is_online=case when $2='approved' then is_online else false end
+          where account_id=$1 returning account_id as id,verification_status as status
+        `, [targetId, status, note.slice(0, 1000)]);
+        if (status === 'approved') {
+          await client.query('update efata.accounts set profile_completed=true where id=$1', [targetId]);
+        }
+        targetType = 'driver';
+        metadata = { status, note: note.slice(0, 1000) || null };
+      } else if (action === 'user-status') {
+        if (typeof suspended !== 'boolean') throw new ApiError(400, 'invalid_user_status');
+        if (targetId === actor.id) throw new ApiError(409, 'cannot_suspend_self');
+        const target = await client.query('select role from efata.accounts where id=$1 for update', [targetId]);
+        if (target.rows[0]?.role === 'admin') throw new ApiError(409, 'cannot_suspend_admin');
+        result = await client.query(`
+          update efata.accounts set account_status=$2 where id=$1
+          returning id,account_status as status
+        `, [targetId, suspended ? 'disabled' : 'active']);
+        targetType = 'account';
+        metadata = { suspended };
+      } else if (action === 'order-dispute') {
+        if (!['open', 'resolved'].includes(status)) throw new ApiError(400, 'invalid_dispute_status');
+        if (note.length > 1000) throw new ApiError(400, 'dispute_note_too_long');
+        result = await client.query(`
+          update efata.orders set dispute_status=$2,dispute_note=nullif($3,''),
+            dispute_updated_at=now(),needs_admin_review=($2='open'),
+            payment_review_required=($2='open') where id=$1
+          returning id,dispute_status as status
+        `, [targetId, status, note]);
+        targetType = 'order';
+        metadata = { status, note: note || null };
+      } else if (action === 'payout-status') {
+        const allowed = new Set(['pending', 'ready', 'review', 'approved', 'held', 'processing', 'paid', 'rejected']);
+        if (!allowed.has(status)) throw new ApiError(400, 'invalid_payout_status');
+        result = await client.query(`
+          update efata.payouts set status=$2,
+            processed_at=case when $2 in ('paid','rejected') then now() else processed_at end
+          where id=$1 returning id,status
+        `, [targetId, status]);
+        targetType = 'payout';
+        metadata = { status };
+      } else {
+        throw new ApiError(400, 'invalid_action');
+      }
+      if (!result.rowCount) throw new ApiError(404, 'target_not_found');
+      await client.query(`
+        insert into efata.admin_logs (admin_id,action,target_type,target_id,metadata)
+        values ($1,$2,$3,$4,$5::jsonb)
+      `, [actor.id, action, targetType, targetId, JSON.stringify(metadata)]);
+      await client.query('commit');
+      return result.rows[0];
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
   return {
     getMe: account, listOrders, createOrder, transitionOrder,
     listMessages, sendMessage, markMessagesRead,
     setDriverAvailability, updateDriverLocation, getDriverLocation,
+    listAdminResource, performAdminAction,
     close: () => pool.end(),
   };
 }
