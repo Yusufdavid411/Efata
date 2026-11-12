@@ -1,7 +1,10 @@
 import { createServer } from 'node:http';
 import health from '../api/health.mjs';
 import live from '../api/live.mjs';
+import driverAvailability from '../api/driver-availability.mjs';
+import driverLocation from '../api/driver-location.mjs';
 import me from '../api/me.mjs';
+import messages from '../api/messages.mjs';
 import orderAction from '../api/order-action.mjs';
 import orderHistory from '../api/order-history.mjs';
 import orders from '../api/orders.mjs';
@@ -12,7 +15,10 @@ createServer((req, res) => {
   if (path === '/') return live(req, res);
   if (path === '/api/health') return health(req, res);
   if (path === '/api/live') return live(req, res);
+  if (path === '/api/driver-availability') return driverAvailability(req, res);
+  if (path === '/api/driver-location') return driverLocation(req, res);
   if (path === '/api/me') return me(req, res);
+  if (path === '/api/messages') return messages(req, res);
   if (path === '/api/orders') return orders(req, res);
   if (path === '/api/order-action') return orderAction(req, res);
   if (path === '/api/order-history') return orderHistory(req, res);

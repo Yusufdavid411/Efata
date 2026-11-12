@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { test } from 'node:test';
+import { createDriverAvailabilityHandler } from '../api/driver-availability.mjs';
+import { createDriverLocationHandler } from '../api/driver-location.mjs';
 import { createMeHandler } from '../api/me.mjs';
+import { createMessagesHandler } from '../api/messages.mjs';
 import { createOrderActionHandler } from '../api/order-action.mjs';
 import { createOrdersHandler, validateOrder } from '../api/orders.mjs';
 import { ApiError } from '../lib/core-repository.mjs';
@@ -122,4 +125,113 @@ test('order validation enforces coordinates and bounded business fields', () => 
     pickup: { label: 'A', lat: 100, lng: 0 }, dropoff: { label: 'B', lat: 0, lng: 0 },
     item: 'Box', vehicleType: 'Van', paymentMethod: 'Cash', amount: 10,
   }), null);
+});
+
+test('messages use the authenticated participant and preserve closed-chat errors', async () => {
+  const calls = [];
+  const handler = createMessagesHandler({
+    origins,
+    verify: async () => ({ uid: 'customer-id' }),
+    listMessages: async (query) => ({ messages: [], query }),
+    markMessagesRead: async (command) => { calls.push({ kind: 'read', ...command }); },
+    sendMessage: async (command) => {
+      calls.push({ kind: 'send', ...command });
+      throw new ApiError(409, 'chat_closed');
+    },
+  });
+  const { server, url } = await testServer({ '/api/messages': handler });
+  const orderId = 'b917c25d-bbd4-4a58-8417-613e64c4ed76';
+  try {
+    const closed = await fetch(`${url}/api/messages`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, text: 'Delivered', uid: 'somebody-else' }),
+    });
+    assert.equal(closed.status, 409);
+    assert.deepEqual(await closed.json(), { error: 'chat_closed' });
+    assert.deepEqual(calls[0], {
+      kind: 'send', uid: 'customer-id', orderId, body: 'Delivered',
+    });
+
+    const read = await fetch(`${url}/api/messages`, {
+      method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, uid: 'somebody-else' }),
+    });
+    assert.equal(read.status, 200);
+    assert.deepEqual(calls[1], { kind: 'read', uid: 'customer-id', orderId });
+  } finally {
+    await close(server);
+  }
+});
+
+test('driver availability requires valid current coordinates when going online', async () => {
+  const calls = [];
+  const handler = createDriverAvailabilityHandler({
+    origins,
+    verify: async () => ({ uid: 'driver-id' }),
+    setDriverAvailability: async (command) => {
+      calls.push(command);
+      if (command.online && !command.location) throw new ApiError(400, 'location_required');
+      return { isOnline: command.online, ...command.location };
+    },
+  });
+  const { server, url } = await testServer({ '/api/driver-availability': handler });
+  try {
+    const missing = await fetch(`${url}/api/driver-availability`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ online: true }),
+    });
+    assert.equal(missing.status, 400);
+    assert.deepEqual(await missing.json(), { error: 'location_required' });
+
+    const invalid = await fetch(`${url}/api/driver-availability`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ online: true, location: { lat: 91, lng: 7 } }),
+    });
+    assert.equal(invalid.status, 400);
+
+    const online = await fetch(`${url}/api/driver-availability`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ online: true, location: { lat: 7.84, lng: 6.67, heading: 180 } }),
+    });
+    assert.equal(online.status, 200);
+    assert.deepEqual(calls.at(-1), {
+      uid: 'driver-id', online: true, location: { lat: 7.84, lng: 6.67, heading: 180 },
+    });
+  } finally {
+    await close(server);
+  }
+});
+
+test('driver location validates writes and restricts reads to authenticated identity', async () => {
+  const calls = [];
+  const handler = createDriverLocationHandler({
+    origins,
+    verify: async () => ({ uid: 'driver-id' }),
+    updateDriverLocation: async (command) => { calls.push(command); return command.location; },
+    getDriverLocation: async (command) => { calls.push(command); return { lat: 7.84, lng: 6.67 }; },
+  });
+  const { server, url } = await testServer({ '/api/driver-location': handler });
+  const orderId = 'b917c25d-bbd4-4a58-8417-613e64c4ed76';
+  try {
+    const invalid = await fetch(`${url}/api/driver-location`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat: 7.84, lng: 181 }),
+    });
+    assert.equal(invalid.status, 400);
+
+    const updated = await fetch(`${url}/api/driver-location`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat: 7.84, lng: 6.67, heading: 45, uid: 'somebody-else' }),
+    });
+    assert.equal(updated.status, 200);
+    assert.deepEqual(calls[0], {
+      uid: 'driver-id', location: { lat: 7.84, lng: 6.67, heading: 45 },
+    });
+
+    const tracked = await fetch(`${url}/api/driver-location?orderId=${orderId}`, { headers: auth });
+    assert.equal(tracked.status, 200);
+    assert.deepEqual(calls[1], { uid: 'driver-id', orderId });
+  } finally {
+    await close(server);
+  }
 });

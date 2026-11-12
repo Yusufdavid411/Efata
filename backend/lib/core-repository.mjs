@@ -169,5 +169,129 @@ export function createCoreRepository({ url, ca }) {
     }
   };
 
-  return { getMe: account, listOrders, createOrder, transitionOrder, close: () => pool.end() };
+  const listMessages = async ({ uid, orderId, page = 1, limit = 50 }) => {
+    const actor = await account(uid);
+    if (!actor || actor.accountStatus !== 'active') throw new ApiError(403, 'account_unavailable');
+    const access = await pool.query(`
+      select 1 from efata.orders
+      where id=$1 and ($2='admin' or customer_id=$3 or driver_id=$3)
+    `, [orderId, actor.role, actor.id]);
+    if (!access.rowCount) throw new ApiError(404, 'order_not_found');
+    const rows = await pool.query(`
+      select m.id, m.sender_role as "senderRole", m.body,
+        m.created_at as "createdAt", a.display_name as "senderName"
+      from efata.order_messages m
+      join efata.accounts a on a.id=m.sender_id
+      where m.order_id=$1 order by m.created_at desc, m.id desc
+      limit $2 offset $3
+    `, [orderId, limit + 1, (page - 1) * limit]);
+    return {
+      messages: rows.rows.slice(0, limit).reverse(),
+      nextPage: rows.rows.length > limit ? page + 1 : null,
+    };
+  };
+
+  const sendMessage = async ({ uid, orderId, body }) => {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const actor = await account(uid, client);
+      if (!actor || actor.accountStatus !== 'active') throw new ApiError(403, 'account_unavailable');
+      const locked = await client.query('select * from efata.orders where id=$1 for update', [orderId]);
+      if (!locked.rowCount) throw new ApiError(404, 'order_not_found');
+      const order = locked.rows[0];
+      if (actor.role !== 'admin' && actor.id !== order.customer_id && actor.id !== order.driver_id) {
+        throw new ApiError(404, 'order_not_found');
+      }
+      if (order.chat_closed_at || ['completed', 'canceled'].includes(order.status)) {
+        throw new ApiError(409, 'chat_closed');
+      }
+      const message = await client.query(`
+        insert into efata.order_messages (order_id,sender_id,sender_role,body)
+        values ($1,$2,$3,$4)
+        returning id,sender_role as "senderRole",body,created_at as "createdAt"
+      `, [orderId, actor.id, actor.role, body]);
+      const unread = actor.id === order.customer_id
+        ? 'unread_for_driver=unread_for_driver+1'
+        : actor.id === order.driver_id ? 'unread_for_customer=unread_for_customer+1' : '';
+      await client.query(`
+        update efata.orders set last_message=$2,last_message_at=now(),last_message_sender_id=$3
+          ${unread ? `,${unread}` : ''}
+        where id=$1
+      `, [orderId, body, actor.id]);
+      await client.query('commit');
+      return { ...message.rows[0], senderName: actor.displayName };
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
+  const markMessagesRead = async ({ uid, orderId }) => {
+    const actor = await account(uid);
+    if (!actor || !['customer', 'driver'].includes(actor.role)) {
+      throw new ApiError(403, 'account_unavailable');
+    }
+    const column = actor.role === 'customer' ? 'unread_for_customer' : 'unread_for_driver';
+    const participant = actor.role === 'customer' ? 'customer_id' : 'driver_id';
+    const result = await pool.query(`
+      update efata.orders set ${column}=0 where id=$1 and ${participant}=$2 returning id
+    `, [orderId, actor.id]);
+    if (!result.rowCount) throw new ApiError(404, 'order_not_found');
+  };
+
+  const setDriverAvailability = async ({ uid, online, location }) => {
+    const actor = await account(uid);
+    if (!actor || actor.role !== 'driver' || actor.accountStatus !== 'active' ||
+        actor.driverProfile?.verificationStatus !== 'approved') {
+      throw new ApiError(403, 'approved_driver_required');
+    }
+    if (online && !location) throw new ApiError(400, 'location_required');
+    const result = await pool.query(`
+      update efata.driver_profiles set is_online=$2,
+        current_lat=coalesce($3,current_lat),current_lng=coalesce($4,current_lng),
+        heading=coalesce($5,heading),location_updated_at=case when $3 is null then location_updated_at else now() end
+      where account_id=$1
+      returning is_online as "isOnline",current_lat as lat,current_lng as lng,
+        heading,location_updated_at as "updatedAt"
+    `, [actor.id, online, location?.lat ?? null, location?.lng ?? null, location?.heading ?? null]);
+    return result.rows[0];
+  };
+
+  const updateDriverLocation = async ({ uid, location }) => {
+    const actor = await account(uid);
+    if (!actor || actor.role !== 'driver' || actor.driverProfile?.isOnline !== true) {
+      throw new ApiError(409, 'driver_not_online');
+    }
+    const result = await pool.query(`
+      update efata.driver_profiles set current_lat=$2,current_lng=$3,heading=$4,
+        location_updated_at=now() where account_id=$1
+      returning current_lat as lat,current_lng as lng,heading,location_updated_at as "updatedAt"
+    `, [actor.id, location.lat, location.lng, location.heading]);
+    return result.rows[0];
+  };
+
+  const getDriverLocation = async ({ uid, orderId }) => {
+    const actor = await account(uid);
+    if (!actor) throw new ApiError(403, 'account_unavailable');
+    const result = await pool.query(`
+      select dp.current_lat as lat,dp.current_lng as lng,dp.heading,
+        dp.location_updated_at as "updatedAt",o.pickup_lat as "pickupLat",
+        o.pickup_lng as "pickupLng",o.status
+      from efata.orders o
+      join efata.driver_profiles dp on dp.account_id=o.driver_id
+      where o.id=$1 and ($2='admin' or o.customer_id=$3 or o.driver_id=$3)
+    `, [orderId, actor.role, actor.id]);
+    if (!result.rowCount) throw new ApiError(404, 'tracking_unavailable');
+    return result.rows[0];
+  };
+
+  return {
+    getMe: account, listOrders, createOrder, transitionOrder,
+    listMessages, sendMessage, markMessagesRead,
+    setDriverAvailability, updateDriverLocation, getDriverLocation,
+    close: () => pool.end(),
+  };
 }

@@ -126,10 +126,22 @@ Authenticated runtime endpoints temporarily accept the existing Firebase ID
 token while accounts move to EFATA. `GET /api/me` returns the mapped EFATA
 account and profile. `GET`/`POST /api/orders` lists or creates role-scoped
 orders, and `POST /api/order-action` performs atomic accept, start, complete,
-or cancel transitions. Configure `EFATA_FIREBASE_LOOKUP_API_KEY` only on the
-server and keep `EFATA_ALLOWED_ORIGINS` restricted to `https://admin.efata.io`.
-The Flutter app sends no browser Origin header. Identity always comes from the
-verified token; request bodies cannot choose another account.
+or cancel transitions. `GET`/`POST`/`PATCH /api/messages` lists, sends, and
+acknowledges delivery-chat messages. Completed or canceled orders close their
+chat and clear unread counters, so old messages cannot create a new unread
+notification after the delivery ends. `POST /api/driver-availability` requires
+an approved driver and a current GPS fix before going online. `POST
+/api/driver-location` updates an online driver's position, while `GET
+/api/driver-location?orderId=...` exposes that position only to the assigned
+customer, driver, or an admin. Location updates are client-paced and do not
+call Google Routes or Geocoding services.
+
+Configure `EFATA_FIREBASE_LOOKUP_API_KEY` only on the server and keep
+`EFATA_ALLOWED_ORIGINS` restricted to `https://admin.efata.io`. The Flutter app
+sends no browser Origin header. Identity always comes from the verified token;
+request bodies cannot choose another account. The Firebase token verifier is a
+temporary bridge only and must be removed after EFATA's replacement
+authentication is active and existing accounts have been reconciled.
 
 ## Materializing the Firebase archive
 
