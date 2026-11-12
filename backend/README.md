@@ -113,3 +113,11 @@ migration owner password. Omit SSL parameters in the URL so the explicit TLS
 settings are used. Run `npm start` for the local API. Client data is not
 available unless the order preview is explicitly enabled and authenticated.
 Deploy only under the new EFATA Vercel scope, not the existing personal scope.
+
+The production API uses two different database logins. `efata_health_reader`
+can connect and run the readiness probe but has no EFATA table privileges.
+`efata_api_runtime` can access only the private `efata` schema and is used by
+feature endpoints through `EFATA_DATABASE_URL`. Neither login may be placed in
+Flutter, Vite variables, GitHub, or documentation. Run
+`scripts/provision-runtime.ps1` from a trusted Windows account to rotate both
+passwords and save them in ignored, DPAPI-protected files.
