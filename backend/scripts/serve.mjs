@@ -1,7 +1,10 @@
 import { createServer } from 'node:http';
 import health from '../api/health.mjs';
 import live from '../api/live.mjs';
+import me from '../api/me.mjs';
+import orderAction from '../api/order-action.mjs';
 import orderHistory from '../api/order-history.mjs';
+import orders from '../api/orders.mjs';
 
 const port = Number(process.env.PORT ?? 3000);
 createServer((req, res) => {
@@ -9,6 +12,9 @@ createServer((req, res) => {
   if (path === '/') return live(req, res);
   if (path === '/api/health') return health(req, res);
   if (path === '/api/live') return live(req, res);
+  if (path === '/api/me') return me(req, res);
+  if (path === '/api/orders') return orders(req, res);
+  if (path === '/api/order-action') return orderAction(req, res);
   if (path === '/api/order-history') return orderHistory(req, res);
   res.statusCode = 404;
   res.end();

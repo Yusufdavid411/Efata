@@ -10,6 +10,7 @@
     "audit:archive": "node scripts/audit-archive.mjs",
     "materialize:core": "node scripts/materialize-core.mjs",
     "verify:core": "node scripts/verify-core.mjs",
+    "smoke:runtime": "node scripts/smoke-runtime.mjs",
     "start": "node scripts/serve.mjs"
   },
   "dependencies": { "pg": "^8.16.3" }

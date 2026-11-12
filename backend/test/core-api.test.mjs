@@ -1,0 +1,125 @@
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { test } from 'node:test';
+import { createMeHandler } from '../api/me.mjs';
+import { createOrderActionHandler } from '../api/order-action.mjs';
+import { createOrdersHandler, validateOrder } from '../api/orders.mjs';
+import { ApiError } from '../lib/core-repository.mjs';
+
+const auth = { Authorization: 'Bearer user.a.a' };
+const origins = new Set(['https://admin.efata.io']);
+
+function testServer(routes) {
+  const server = createServer((req, res) => routes[req.url.split('?')[0]](req, res));
+  server.listen(0, '127.0.0.1');
+  return once(server, 'listening').then(() => ({
+    server,
+    url: `http://127.0.0.1:${server.address().port}`,
+  }));
+}
+
+async function close(server) {
+  server.closeAllConnections();
+  await new Promise((resolve) => server.close(resolve));
+}
+
+test('me endpoint requires a verified session and exact admin origin', async () => {
+  const handler = createMeHandler({
+    origins,
+    verify: async (token) => token === 'user.a.a' ? { uid: 'customer-id' } : null,
+    getMe: async (uid) => ({ uid, role: 'customer' }),
+  });
+  const { server, url } = await testServer({ '/api/me': handler });
+  try {
+    assert.equal((await fetch(`${url}/api/me`)).status, 401);
+    assert.equal((await fetch(`${url}/api/me`, {
+      headers: { ...auth, Origin: 'https://evil.example' },
+    })).status, 403);
+    const result = await fetch(`${url}/api/me`, {
+      headers: { ...auth, Origin: 'https://admin.efata.io' },
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.headers.get('access-control-allow-origin'), 'https://admin.efata.io');
+    assert.deepEqual(await result.json(), { account: { uid: 'customer-id', role: 'customer' } });
+  } finally {
+    await close(server);
+  }
+});
+
+test('orders endpoint validates creation and never accepts a caller-selected account', async () => {
+  const calls = [];
+  const handler = createOrdersHandler({
+    origins,
+    verify: async () => ({ uid: 'customer-id' }),
+    listOrders: async (query) => ({ orders: [], query }),
+    createOrder: async (command) => { calls.push(command); return { id: 'new-order' }; },
+  });
+  const { server, url } = await testServer({ '/api/orders': handler });
+  try {
+    const invalid = await fetch(`${url}/api/orders`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerId: 'somebody-else' }),
+    });
+    assert.equal(invalid.status, 400);
+    const body = {
+      customerId: 'somebody-else',
+      pickup: { label: 'Pickup', lat: 7.8, lng: 6.7 },
+      dropoff: { label: 'Drop-off', lat: 8.1, lng: 7.1 },
+      item: 'Documents', vehicleType: 'Car', paymentMethod: 'Cash on Delivery', amount: 2500,
+    };
+    const created = await fetch(`${url}/api/orders`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    assert.equal(created.status, 201);
+    assert.equal(calls[0].uid, 'customer-id');
+    assert.equal(calls[0].order.customerId, undefined);
+    const listed = await fetch(`${url}/api/orders?scope=available&page=2`, { headers: auth });
+    assert.equal(listed.status, 200);
+    assert.deepEqual((await listed.json()).query, {
+      uid: 'customer-id', scope: 'available', page: 2, limit: 25, status: null,
+    });
+  } finally {
+    await close(server);
+  }
+});
+
+test('order actions use the authenticated uid and preserve domain errors', async () => {
+  const calls = [];
+  const handler = createOrderActionHandler({
+    origins,
+    verify: async () => ({ uid: 'driver-id' }),
+    transitionOrder: async (command) => {
+      calls.push(command);
+      if (command.action === 'complete') throw new ApiError(409, 'order_cannot_complete');
+      return { id: command.orderId, status: 'accepted' };
+    },
+  });
+  const { server, url } = await testServer({ '/api/order-action': handler });
+  const orderId = 'b917c25d-bbd4-4a58-8417-613e64c4ed76';
+  try {
+    const accepted = await fetch(`${url}/api/order-action`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, action: 'accept', uid: 'other-driver' }),
+    });
+    assert.equal(accepted.status, 200);
+    assert.deepEqual(calls[0], { uid: 'driver-id', orderId, action: 'accept' });
+    const conflict = await fetch(`${url}/api/order-action`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, action: 'complete' }),
+    });
+    assert.equal(conflict.status, 409);
+    assert.deepEqual(await conflict.json(), { error: 'order_cannot_complete' });
+  } finally {
+    await close(server);
+  }
+});
+
+test('order validation enforces coordinates and bounded business fields', () => {
+  assert.equal(validateOrder({}), null);
+  assert.equal(validateOrder({
+    pickup: { label: 'A', lat: 100, lng: 0 }, dropoff: { label: 'B', lat: 0, lng: 0 },
+    item: 'Box', vehicleType: 'Van', paymentMethod: 'Cash', amount: 10,
+  }), null);
+});

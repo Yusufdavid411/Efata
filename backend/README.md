@@ -122,6 +122,15 @@ Flutter, Vite variables, GitHub, or documentation. Run
 `scripts/provision-runtime.ps1` from a trusted Windows account to rotate both
 passwords and save them in ignored, DPAPI-protected files.
 
+Authenticated runtime endpoints temporarily accept the existing Firebase ID
+token while accounts move to EFATA. `GET /api/me` returns the mapped EFATA
+account and profile. `GET`/`POST /api/orders` lists or creates role-scoped
+orders, and `POST /api/order-action` performs atomic accept, start, complete,
+or cancel transitions. Configure `EFATA_FIREBASE_LOOKUP_API_KEY` only on the
+server and keep `EFATA_ALLOWED_ORIGINS` restricted to `https://admin.efata.io`.
+The Flutter app sends no browser Origin header. Identity always comes from the
+verified token; request bodies cannot choose another account.
+
 ## Materializing the Firebase archive
 
 `npm run audit:archive` reports collection shapes and enum frequencies without
