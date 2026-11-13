@@ -426,4 +426,3 @@ class AuthService {
     return doc.data();
   }
 }
-
