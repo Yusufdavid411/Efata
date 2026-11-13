@@ -42,6 +42,15 @@ class EfataApiClient {
     return EfataAccount.fromJson(_map(json['account']));
   }
 
+  Future<EfataAccount> bootstrapAccount({String? role}) async {
+    final json = await _request(
+      'POST',
+      '/api/account-bootstrap',
+      body: {if (role != null) 'role': role},
+    );
+    return EfataAccount.fromJson(_map(json['account']));
+  }
+
   Future<EfataOrderPage> listOrders({
     String scope = 'mine',
     String? status,

@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { test } from 'node:test';
 import { createAdminActionHandler } from '../api/admin-action.mjs';
 import { createAdminDataHandler } from '../api/admin-data.mjs';
+import { createAccountBootstrapHandler } from '../api/account-bootstrap.mjs';
 import { createDriverAvailabilityHandler } from '../api/driver-availability.mjs';
 import { createDriverLocationHandler } from '../api/driver-location.mjs';
 import { createMeHandler } from '../api/me.mjs';
@@ -47,6 +48,39 @@ test('me endpoint requires a verified session and exact admin origin', async () 
     assert.equal(result.status, 200);
     assert.equal(result.headers.get('access-control-allow-origin'), 'https://admin.efata.io');
     assert.deepEqual(await result.json(), { account: { uid: 'customer-id', role: 'customer' } });
+  } finally {
+    await close(server);
+  }
+});
+
+test('account bootstrap trusts verified identity and only accepts application roles', async () => {
+  const calls = [];
+  const identity = {
+    uid: 'customer-id', email: 'customer@efata.io', displayName: 'Customer',
+    emailVerified: true, provider: 'google.com',
+  };
+  const handler = createAccountBootstrapHandler({
+    origins,
+    verify: async () => identity,
+    bootstrapAccount: async (command) => {
+      calls.push(command);
+      return { uid: command.identity.uid, role: command.role };
+    },
+  });
+  const { server, url } = await testServer({ '/api/account-bootstrap': handler });
+  try {
+    const invalid = await fetch(`${url}/api/account-bootstrap`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'admin' }),
+    });
+    assert.equal(invalid.status, 400);
+    assert.equal(calls.length, 0);
+    const result = await fetch(`${url}/api/account-bootstrap`, {
+      method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'customer', uid: 'somebody-else' }),
+    });
+    assert.equal(result.status, 200);
+    assert.deepEqual(calls[0], { identity, role: 'customer' });
   } finally {
     await close(server);
   }

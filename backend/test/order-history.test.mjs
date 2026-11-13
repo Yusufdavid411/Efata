@@ -28,7 +28,10 @@ test('the preview checks the project, sends the signed token to Google, and enfo
   assert.equal(await verify(makeToken({ exp: now - 1 })), null);
   assert.equal(await verify(makeToken({ firebase: { tenant: 'other' } })), null);
   assert.equal(lookups, 0);
-  assert.deepEqual(await verify(makeToken()), { uid: 'customer-id' });
+  assert.deepEqual(await verify(makeToken()), {
+    uid: 'customer-id', email: null, displayName: null, photoUrl: null,
+    emailVerified: false, provider: null,
+  });
   account = { ...account, validSince: String(now - 1) };
   assert.equal(await verify(makeToken()), null);
   account = { localId: 'customer-id', validSince: String(now - 60), disabled: true };

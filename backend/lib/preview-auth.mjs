@@ -43,6 +43,16 @@ export function createPreviewVerifier({ apiKey, fetcher = fetch }) {
     if (account?.localId !== claims.sub || account.disabled === true ||
         !Number.isSafeInteger(validSince) || validSince < 0 ||
         claims.auth_time < validSince) return null;
-    return { uid: claims.sub };
+    const email = typeof account.email === 'string' ? account.email.trim().toLowerCase() : null;
+    const displayName = typeof account.displayName === 'string' ? account.displayName.trim() : null;
+    const photoUrl = typeof account.photoUrl === 'string' ? account.photoUrl.trim() : null;
+    return {
+      uid: claims.sub,
+      email: email || null,
+      displayName: displayName || null,
+      photoUrl: photoUrl || null,
+      emailVerified: account.emailVerified === true,
+      provider: claims.firebase?.sign_in_provider ?? null,
+    };
   };
 }

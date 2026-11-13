@@ -69,6 +69,36 @@ void main() {
     },
   );
 
+  test('bootstrap sends only the selected application role', () async {
+    late http.Request captured;
+    final client = EfataApiClient(
+      tokenProvider: ({required refresh}) async => 'token',
+      httpClient: MockClient((request) async {
+        captured = request;
+        return http.Response(
+          jsonEncode({
+            'account': {
+              'uid': 'new-user',
+              'email': 'new@efata.io',
+              'role': 'customer',
+              'displayName': 'New User',
+              'accountStatus': 'active',
+              'emailVerified': true,
+              'profileCompleted': false,
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    final account = await client.bootstrapAccount(role: 'customer');
+
+    expect(captured.url.path, '/api/account-bootstrap');
+    expect(jsonDecode(captured.body), {'role': 'customer'});
+    expect(account.role, 'customer');
+  });
+
   test('order responses accept PostgreSQL numeric strings', () async {
     final client = EfataApiClient(
       tokenProvider: ({required refresh}) async => 'token',

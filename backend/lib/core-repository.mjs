@@ -93,6 +93,81 @@ export function createCoreRepository({ url, ca }) {
     return { orders: result.rows.slice(0, limit), nextPage: result.rows.length > limit ? page + 1 : null };
   };
 
+  const bootstrapAccount = async ({ identity, role }) => {
+    if (!identity.email) throw new ApiError(400, 'identity_email_required');
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      let existing = await client.query(
+        'select id,firebase_uid,role from efata.accounts where firebase_uid=$1 for update',
+        [identity.uid],
+      );
+      if (!existing.rowCount) {
+        existing = await client.query(
+          'select id,firebase_uid,role from efata.accounts where lower(email)=lower($1) for update',
+          [identity.email],
+        );
+      }
+      let accountId;
+      let accountRole;
+      if (existing.rowCount) {
+        const current = existing.rows[0];
+        if (current.firebase_uid && current.firebase_uid !== identity.uid) {
+          throw new ApiError(409, 'account_identity_conflict');
+        }
+        if (role && current.role !== role) throw new ApiError(409, 'account_role_locked');
+        accountId = current.id;
+        accountRole = current.role;
+        await client.query(`
+          update efata.accounts set firebase_uid=$2,
+            email=coalesce(email,$3),
+            display_name=case when nullif(display_name,'') is null then $4 else display_name end,
+            photo_url=coalesce(photo_url,$5),
+            email_verified=email_verified or $6
+          where id=$1
+        `, [accountId, identity.uid, identity.email, identity.displayName,
+          identity.photoUrl, identity.emailVerified]);
+      } else {
+        if (!role) throw new ApiError(409, 'account_role_required');
+        const inserted = await client.query(`
+          insert into efata.accounts
+            (firebase_uid,email,role,display_name,photo_url,email_verified)
+          values ($1,$2,$3,$4,$5,$6) returning id,role
+        `, [identity.uid, identity.email, role, identity.displayName,
+          identity.photoUrl, identity.emailVerified]);
+        accountId = inserted.rows[0].id;
+        accountRole = inserted.rows[0].role;
+      }
+      if (identity.provider) {
+        await client.query(`
+          insert into efata.auth_identities
+            (account_id,provider,provider_subject,email,last_seen_at)
+          values ($1,$2,$3,$4,now())
+          on conflict (provider,provider_subject) do update
+          set account_id=excluded.account_id,email=excluded.email,last_seen_at=now()
+        `, [accountId, identity.provider, identity.uid, identity.email]);
+      }
+      if (accountRole === 'customer') {
+        await client.query(
+          'insert into efata.customer_profiles (account_id) values ($1) on conflict do nothing',
+          [accountId],
+        );
+      } else if (accountRole === 'driver') {
+        await client.query(
+          'insert into efata.driver_profiles (account_id) values ($1) on conflict do nothing',
+          [accountId],
+        );
+      }
+      await client.query('commit');
+      return account(identity.uid);
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
   const createOrder = async ({ uid, order }) => {
     const actor = await account(uid);
     if (!actor || actor.role !== 'customer' || actor.accountStatus !== 'active') {
@@ -431,7 +506,7 @@ export function createCoreRepository({ url, ca }) {
   };
 
   return {
-    getMe: account, listOrders, createOrder, transitionOrder,
+    getMe: account, bootstrapAccount, listOrders, createOrder, transitionOrder,
     listMessages, sendMessage, markMessagesRead,
     setDriverAvailability, updateDriverLocation, getDriverLocation,
     listAdminResource, performAdminAction,
