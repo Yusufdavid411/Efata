@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/efata_backend_config.dart';
@@ -25,20 +24,14 @@ class EfataApiClient {
     EfataTokenProvider? tokenProvider,
     String apiOrigin = EfataBackendConfig.apiOrigin,
   }) : _httpClient = httpClient ?? http.Client(),
-       _tokenProvider = tokenProvider ?? _firebaseToken,
+       _tokenProvider = tokenProvider ?? EfataSession.instance.token,
        _apiOrigin = Uri.parse(apiOrigin);
 
-  static final instance = EfataApiClient(
-    tokenProvider: EfataSession.enabled ? EfataSession.instance.token : null,
-  );
+  static final instance = EfataApiClient();
 
   final http.Client _httpClient;
   final EfataTokenProvider _tokenProvider;
   final Uri _apiOrigin;
-
-  static Future<String?> _firebaseToken({required bool refresh}) async {
-    return await FirebaseAuth.instance.currentUser?.getIdToken(refresh);
-  }
 
   Future<EfataAccount> getMe() async {
     final json = await _request('GET', '/api/me');

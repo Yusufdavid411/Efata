@@ -1,9 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../core/services/account_access_service.dart';
-import '../../core/services/auth_service.dart';
-import '../booking/customer/customer_home_screen.dart';
-import '../driver/driver_home_screen.dart';
 import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -22,46 +18,12 @@ class _SplashScreenState extends State<SplashScreen> {
     _loginTimer = Timer(const Duration(seconds: 2), checkLogin);
   }
 
-  Future<void> checkLogin() async {
-    final authService = AuthService();
-    final user = authService.currentUser;
-
+  void checkLogin() {
     if (!mounted) return;
-
-    if (user != null) {
-      final access = await AccountAccessService().loadCurrent();
-      if (access == null || access.isBlocked) {
-        await authService.logout();
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-        );
-        return;
-      }
-      if (!mounted) return;
-      if (access.role == 'customer') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
-        );
-      } else if (access.role == 'driver') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-        );
-      }
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
-    }
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
   }
 
   @override

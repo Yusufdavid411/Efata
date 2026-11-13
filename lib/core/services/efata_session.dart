@@ -6,7 +6,7 @@ import '../config/efata_backend_config.dart';
 import 'efata_api_client.dart';
 
 class EfataSession {
-  static const enabled = bool.fromEnvironment('EFATA_API_SIGN_IN');
+  static const enabled = true;
   static final instance = EfataSession();
 
   String? _access;
