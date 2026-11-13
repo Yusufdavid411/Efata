@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../../core/config/efata_backend_config.dart';
+import '../../../core/models/efata_api_models.dart';
+import '../../../core/services/efata_api_client.dart';
 import '../../../core/services/google_route_service.dart';
 import '../../../core/services/app_notification_banner_service.dart';
 import '../../../shared/widgets/app_live_map.dart';
@@ -19,6 +24,74 @@ class AvailableJobsSection extends StatefulWidget {
 
 class _AvailableJobsSectionState extends State<AvailableJobsSection> {
   List<QueryDocumentSnapshot> _cachedJobs = [];
+  List<EfataOrder> _cachedApiJobs = const [];
+  final Set<String> _hiddenApiJobs = <String>{};
+  LatLng? _apiDriverPoint;
+  Timer? _apiRefreshTimer;
+  bool _apiLoading = false;
+  Object? _apiError;
+
+  @override
+  void initState() {
+    super.initState();
+    if (EfataBackendConfig.useNewBackend) {
+      _syncApiRefresh();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant AvailableJobsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (EfataBackendConfig.useNewBackend &&
+        oldWidget.isOnline != widget.isOnline) {
+      _syncApiRefresh();
+    }
+  }
+
+  @override
+  void dispose() {
+    _apiRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  void _syncApiRefresh() {
+    _apiRefreshTimer?.cancel();
+    if (!widget.isOnline) return;
+    _loadApiJobs();
+    _apiRefreshTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _loadApiJobs(),
+    );
+  }
+
+  Future<void> _loadApiJobs() async {
+    if (_apiLoading || !widget.isOnline) return;
+    _apiLoading = true;
+    try {
+      final results = await Future.wait<Object>([
+        EfataApiClient.instance.getMe(),
+        EfataApiClient.instance.listOrders(scope: 'available'),
+      ]);
+      final account = results[0] as EfataAccount;
+      final page = results[1] as EfataOrderPage;
+      final profile = account.driverProfile;
+      final lat = _toDouble(profile?['currentLat']);
+      final lng = _toDouble(profile?['currentLng']);
+      if (!mounted) return;
+      setState(() {
+        _cachedApiJobs = page.orders
+            .where((order) => !_hiddenApiJobs.contains(order.id))
+            .toList(growable: false);
+        _apiDriverPoint = lat != null && lng != null ? LatLng(lat, lng) : null;
+        _apiError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _apiError = error);
+    } finally {
+      _apiLoading = false;
+    }
+  }
 
   String _normalizeStatus(dynamic value) {
     return value?.toString().toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '') ??
@@ -59,6 +132,40 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
   }
 
   Future<void> acceptJob(String orderId, String driverId) async {
+    if (EfataBackendConfig.useNewBackend) {
+      try {
+        await EfataApiClient.instance.transitionOrder(orderId, 'accept');
+        if (!mounted) return;
+        AppNotificationBannerService.success(
+          'Job accepted. Opening live map.',
+          title: 'Job accepted',
+        );
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DriverActiveJobsScreen(initialOrderId: orderId),
+          ),
+        );
+      } on EfataApiException catch (error) {
+        if (!mounted) return;
+        final message = switch (error.code) {
+          'current_order_active' => 'Complete your current job first.',
+          'approved_online_driver_required' =>
+            'Go online with an approved driver account before accepting jobs.',
+          'order_unavailable' => 'Another driver has accepted this job.',
+          _ => 'This job could not be accepted. Please try again.',
+        };
+        AppNotificationBannerService.error(
+          message,
+          title: error.code == 'current_order_active'
+              ? 'Current job active'
+              : 'Job unavailable',
+        );
+        await _loadApiJobs();
+      }
+      return;
+    }
+
     final driverProfile = await FirebaseFirestore.instance
         .collection('drivers')
         .doc(driverId)
@@ -221,6 +328,21 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
 
     if (shouldReject != true) return;
 
+    if (EfataBackendConfig.useNewBackend) {
+      setState(() {
+        _hiddenApiJobs.add(orderId);
+        _cachedApiJobs = _cachedApiJobs
+            .where((order) => order.id != orderId)
+            .toList(growable: false);
+      });
+      AppNotificationBannerService.info(
+        'This delivery has been removed from your available jobs.',
+        title: 'Delivery hidden',
+        icon: Icons.visibility_off_outlined,
+      );
+      return;
+    }
+
     await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
       'rejectedBy': FieldValue.arrayUnion([driverId]),
     });
@@ -365,12 +487,11 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
 
   Widget _buildJobCard(
     BuildContext context,
-    QueryDocumentSnapshot job,
+    String jobId,
+    Map<String, dynamic> data,
     String driverId,
     LatLng? driverPoint,
   ) {
-    final data = job.data() as Map<String, dynamic>;
-
     final pickup = data['pickup']?.toString() ?? 'No pickup location';
     final dropoff = data['dropoff']?.toString() ?? 'No drop-off location';
     final item = data['item']?.toString() ?? 'No item description';
@@ -491,7 +612,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
-                      await acceptJob(job.id, driverId);
+                      await acceptJob(jobId, driverId);
                     },
                     child: const Text("Accept"),
                   ),
@@ -500,7 +621,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () async {
-                      await hideJobForDriver(job.id, driverId);
+                      await hideJobForDriver(jobId, driverId);
                     },
                     child: const Text("Reject"),
                   ),
@@ -520,7 +641,13 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
 
     return Column(
       children: _cachedJobs.map((job) {
-        return _buildJobCard(context, job, driverId, null);
+        return _buildJobCard(
+          context,
+          job.id,
+          job.data() as Map<String, dynamic>,
+          driverId,
+          null,
+        );
       }).toList(),
     );
   }
@@ -536,8 +663,59 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
 
     return Column(
       children: _cachedJobs.map((job) {
-        return _buildJobCard(context, job, driverId, driverPoint);
+        return _buildJobCard(
+          context,
+          job.id,
+          job.data() as Map<String, dynamic>,
+          driverId,
+          driverPoint,
+        );
       }).toList(),
+    );
+  }
+
+  Widget _buildApiJobs(String driverId) {
+    if (!widget.isOnline) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildOfflineNotice(),
+          if (_cachedApiJobs.isEmpty)
+            const Text('Go online to load available jobs')
+          else
+            ..._cachedApiJobs.map(
+              (order) => _buildJobCard(
+                context,
+                order.id,
+                order.toLegacyMap(),
+                driverId,
+                _apiDriverPoint,
+              ),
+            ),
+        ],
+      );
+    }
+    if (_apiLoading && _cachedApiJobs.isEmpty && _apiError == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_apiError != null && _cachedApiJobs.isEmpty) {
+      return _AvailableJobsError(onRetry: _loadApiJobs);
+    }
+    if (_cachedApiJobs.isEmpty) {
+      return const Text('No available jobs');
+    }
+    return Column(
+      children: _cachedApiJobs
+          .map(
+            (order) => _buildJobCard(
+              context,
+              order.id,
+              order.toLegacyMap(),
+              driverId,
+              _apiDriverPoint,
+            ),
+          )
+          .toList(growable: false),
     );
   }
 
@@ -547,6 +725,10 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
 
     if (driver == null) {
       return const Text("Driver not logged in");
+    }
+
+    if (EfataBackendConfig.useNewBackend) {
+      return _buildApiJobs(driver.uid);
     }
 
     if (!widget.isOnline) {
@@ -613,6 +795,42 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
           },
         );
       },
+    );
+  }
+}
+
+class _AvailableJobsError extends StatelessWidget {
+  const _AvailableJobsError({required this.onRetry});
+
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFECACA)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: Color(0xFFDC2626)),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Available jobs could not load.',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+          IconButton(
+            onPressed: onRetry,
+            tooltip: 'Retry',
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
     );
   }
 }
