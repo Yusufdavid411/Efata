@@ -5,7 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:logistics_app/core/controllers/app_settings_controller.dart';
+import 'package:logistics_app/core/config/efata_backend_config.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
+import 'package:logistics_app/core/services/efata_api_client.dart';
 import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/core/services/place_suggestion_service.dart';
 import 'package:logistics_app/features/map/map_picker_screen.dart';
@@ -62,6 +64,36 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     if (currentUser == null) return;
 
     try {
+      if (EfataBackendConfig.useNewBackend) {
+        final orders = await EfataApiClient.instance.listAllOrders(maxPages: 4);
+        final pickupSeen = <String>{};
+        final dropoffSeen = <String>{};
+        final pickups = <PlaceSuggestion>[];
+        final dropoffs = <PlaceSuggestion>[];
+        for (final order in orders) {
+          _addRecentPlace(
+            target: pickups,
+            seen: pickupSeen,
+            address: order.pickup,
+            latitude: order.pickupLat,
+            longitude: order.pickupLng,
+          );
+          _addRecentPlace(
+            target: dropoffs,
+            seen: dropoffSeen,
+            address: order.dropoff,
+            latitude: order.dropoffLat,
+            longitude: order.dropoffLng,
+          );
+        }
+        if (!mounted) return;
+        setState(() {
+          recentPickupSuggestions = pickups.take(6).toList();
+          recentDropoffSuggestions = dropoffs.take(6).toList();
+        });
+        return;
+      }
+
       final snapshot = await FirebaseFirestore.instance
           .collection('orders')
           .where('customerId', isEqualTo: currentUser.uid)
@@ -344,6 +376,35 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     });
 
     try {
+      if (EfataBackendConfig.useNewBackend) {
+        final order = await EfataApiClient.instance.createOrder(
+          pickup: pickupController.text.trim(),
+          pickupLat: pickupLat!,
+          pickupLng: pickupLng!,
+          dropoff: dropoffController.text.trim(),
+          dropoffLat: dropoffLat!,
+          dropoffLng: dropoffLng!,
+          item: itemController.text.trim(),
+          vehicleType: vehicleType,
+          paymentMethod: paymentMethod,
+          amount: estimatedPrice,
+          scheduledFor: scheduledPickupAt,
+        );
+
+        if (!mounted) return;
+        AppNotificationBannerService.success(
+          'Your delivery request has been created.',
+          title: 'Request sent',
+        );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TrackDeliveryScreen(orderId: order.id),
+          ),
+        );
+        return;
+      }
+
       final docRef = await FirebaseFirestore.instance.collection('orders').add({
         'pickup': pickupController.text.trim(),
         'dropoff': dropoffController.text.trim(),
@@ -388,6 +449,11 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
           builder: (_) => TrackDeliveryScreen(orderId: docRef.id),
         ),
       );
+    } on EfataApiException catch (error) {
+      AppNotificationBannerService.error(
+        _apiOrderError(error.code),
+        title: 'Request not sent',
+      );
     } catch (_) {
       AppNotificationBannerService.error(
         'Network issue. Please try sending the delivery request again.',
@@ -398,6 +464,22 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
           isSubmitting = false;
         });
       }
+    }
+  }
+
+  String _apiOrderError(String code) {
+    switch (code) {
+      case 'account_not_found':
+        return 'Finish setting up your EFATA account before requesting delivery.';
+      case 'account_suspended':
+      case 'account_disabled':
+        return 'This account cannot create delivery requests right now.';
+      case 'invalid_order':
+        return 'Check the delivery details and try again.';
+      case 'session_invalid':
+        return 'Your session expired. Sign in again to continue.';
+      default:
+        return 'Network issue. Please try sending the delivery request again.';
     }
   }
 
