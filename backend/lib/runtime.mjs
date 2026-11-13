@@ -6,6 +6,9 @@ export function createRuntime(env = process.env) {
       !env.EFATA_SUPABASE_PUBLIC_KEY) return null;
   const repository = createCoreRepository({ url: env.EFATA_DATABASE_URL, ca: env.EFATA_DB_CA_PEM });
   return {
+    verifyRegistration: createSupabaseVerifier({
+      url: env.EFATA_SUPABASE_URL, key: env.EFATA_SUPABASE_PUBLIC_KEY,
+    }),
     verify: createSupabaseVerifier({
       url: env.EFATA_SUPABASE_URL,
       key: env.EFATA_SUPABASE_PUBLIC_KEY,

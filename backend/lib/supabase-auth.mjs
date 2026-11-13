@@ -12,6 +12,11 @@ export function createSupabaseVerifier({ url, key, findIdentity, fetcher = fetch
     if (user.is_anonymous === true || !user.email_confirmed_at ||
         typeof user.id !== 'string' ||
         !/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(user.id)) return null;
+    if (!findIdentity) {
+      if (typeof user.email !== 'string' || !user.email) return null;
+      return { uid: user.id, email: user.email.trim().toLowerCase(),
+        emailVerified: true, supabaseAuthId: user.id };
+    }
     return await findIdentity(user.id);
   };
 }

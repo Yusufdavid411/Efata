@@ -33,6 +33,6 @@ export function createAccountBootstrapHandler({
 
 const runtime = createRuntime();
 export default createAccountBootstrapHandler(runtime ? {
-  verify: runtime.verify,
+  verify: runtime.verifyRegistration,
   bootstrapAccount: runtime.repository.bootstrapAccount,
 } : undefined);

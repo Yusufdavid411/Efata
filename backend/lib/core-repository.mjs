@@ -109,10 +109,22 @@ export function createCoreRepository({ url, ca }) {
     const client = await pool.connect();
     try {
       await client.query('begin');
-      let existing = await client.query(
-        'select id,firebase_uid,role from efata.accounts where firebase_uid=$1 for update',
-        [identity.uid],
-      );
+      let existing = identity.supabaseAuthId
+        ? await client.query(
+          'select id,firebase_uid,role,account_status from efata.accounts where supabase_auth_id=$1 for update',
+          [identity.supabaseAuthId],
+        )
+        : await client.query(
+          'select id,firebase_uid,role from efata.accounts where firebase_uid=$1 for update',
+          [identity.uid],
+        );
+      if (identity.supabaseAuthId && existing.rowCount) {
+        const current = existing.rows[0];
+        if (current.account_status !== 'active') throw new ApiError(403, 'account_unavailable');
+        if (role && role !== current.role) throw new ApiError(409, 'account_role_locked');
+        await client.query('commit');
+        return account(current.firebase_uid);
+      }
       if (!existing.rowCount) {
         existing = await client.query(
           'select id,firebase_uid,role from efata.accounts where lower(email)=lower($1) for update',
@@ -122,6 +134,7 @@ export function createCoreRepository({ url, ca }) {
       let accountId;
       let accountRole;
       if (existing.rowCount) {
+        if (identity.supabaseAuthId) throw new ApiError(409, 'account_identity_conflict');
         const current = existing.rows[0];
         if (current.firebase_uid && current.firebase_uid !== identity.uid) {
           throw new ApiError(409, 'account_identity_conflict');
@@ -142,10 +155,10 @@ export function createCoreRepository({ url, ca }) {
         if (!role) throw new ApiError(409, 'account_role_required');
         const inserted = await client.query(`
           insert into efata.accounts
-            (firebase_uid,email,role,display_name,photo_url,email_verified)
-          values ($1,$2,$3,$4,$5,$6) returning id,role
+            (firebase_uid,email,role,display_name,photo_url,email_verified,supabase_auth_id)
+          values ($1,$2,$3,$4,$5,$6,$7) returning id,role
         `, [identity.uid, identity.email, role, identity.displayName,
-          identity.photoUrl, identity.emailVerified]);
+          identity.photoUrl, identity.emailVerified, identity.supabaseAuthId ?? null]);
         accountId = inserted.rows[0].id;
         accountRole = inserted.rows[0].role;
       }
