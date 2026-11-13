@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_navigation_flutter/google_navigation_flutter.dart';
+import 'package:logistics_app/core/config/efata_backend_config.dart';
+import 'package:logistics_app/core/services/efata_api_client.dart';
 import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/core/services/voice_navigation_control_service.dart';
 
@@ -217,6 +219,7 @@ class _DriverVoiceNavigationScreenState
   }
 
   Future<void> _markVoiceNavigationRunning() async {
+    if (EfataBackendConfig.useNewBackend) return;
     try {
       await FirebaseFirestore.instance
           .collection('orders')
@@ -360,26 +363,35 @@ class _DriverVoiceNavigationScreenState
     }
 
     _lastLocationWrite = now;
-    await FirebaseFirestore.instance
-        .collection('orders')
-        .doc(widget.orderId)
-        .update({
-          'driverLat': event.location.latitude,
-          'driverLng': event.location.longitude,
-          'lastLocationUpdate': Timestamp.now(),
-        });
+    if (EfataBackendConfig.useNewBackend) {
+      await EfataApiClient.instance.updateDriverLocation(
+        lat: event.location.latitude,
+        lng: event.location.longitude,
+      );
+    } else {
+      await FirebaseFirestore.instance
+          .collection('orders')
+          .doc(widget.orderId)
+          .update({
+            'driverLat': event.location.latitude,
+            'driverLng': event.location.longitude,
+            'lastLocationUpdate': Timestamp.now(),
+          });
+    }
   }
 
   Future<void> _handleArrival(OnArrivalEvent event) async {
     if (widget.includePickupStop && !_pickupReached) {
       _pickupReached = true;
-      await FirebaseFirestore.instance
-          .collection('orders')
-          .doc(widget.orderId)
-          .update({
-            'pickupReachedAt': Timestamp.now(),
-            'notificationStatus': 'pickupReached',
-          });
+      if (!EfataBackendConfig.useNewBackend) {
+        await FirebaseFirestore.instance
+            .collection('orders')
+            .doc(widget.orderId)
+            .update({
+              'pickupReachedAt': Timestamp.now(),
+              'notificationStatus': 'pickupReached',
+            });
+      }
       final response = await GoogleMapsNavigator.continueToNextDestination();
       if (!mounted) return;
       setState(() {
@@ -390,13 +402,15 @@ class _DriverVoiceNavigationScreenState
       return;
     }
 
-    await FirebaseFirestore.instance
-        .collection('orders')
-        .doc(widget.orderId)
-        .update({
-          'arrivedAtDropoff': Timestamp.now(),
-          'notificationStatus': 'driverArrived',
-        });
+    if (!EfataBackendConfig.useNewBackend) {
+      await FirebaseFirestore.instance
+          .collection('orders')
+          .doc(widget.orderId)
+          .update({
+            'arrivedAtDropoff': Timestamp.now(),
+            'notificationStatus': 'driverArrived',
+          });
+    }
     if (!mounted) return;
     setState(() => _message = 'You have arrived at the drop-off');
   }
@@ -421,15 +435,17 @@ class _DriverVoiceNavigationScreenState
       const Duration(seconds: 12),
       onTimeout: () => false,
     );
-    await FirebaseFirestore.instance
-        .collection('orders')
-        .doc(widget.orderId)
-        .set({
-          'voiceNavigationStatus': 'stopped',
-          'voiceNavigationStoppedAt': Timestamp.now(),
-        }, SetOptions(merge: true))
-        .timeout(const Duration(seconds: 5), onTimeout: () {})
-        .catchError((_) {});
+    if (!EfataBackendConfig.useNewBackend) {
+      await FirebaseFirestore.instance
+          .collection('orders')
+          .doc(widget.orderId)
+          .set({
+            'voiceNavigationStatus': 'stopped',
+            'voiceNavigationStoppedAt': Timestamp.now(),
+          }, SetOptions(merge: true))
+          .timeout(const Duration(seconds: 5), onTimeout: () {})
+          .catchError((_) {});
+    }
     _guidanceRunning = false;
     _sessionReady = false;
     if (mounted) Navigator.pop(context);
@@ -437,13 +453,15 @@ class _DriverVoiceNavigationScreenState
 
   Future<void> _keepRunningInBackground() async {
     _keepRunningAfterClose = true;
-    await FirebaseFirestore.instance
-        .collection('orders')
-        .doc(widget.orderId)
-        .set({
-          'voiceNavigationStatus': 'background',
-          'voiceNavigationBackgroundAt': Timestamp.now(),
-        }, SetOptions(merge: true));
+    if (!EfataBackendConfig.useNewBackend) {
+      await FirebaseFirestore.instance
+          .collection('orders')
+          .doc(widget.orderId)
+          .set({
+            'voiceNavigationStatus': 'background',
+            'voiceNavigationBackgroundAt': Timestamp.now(),
+          }, SetOptions(merge: true));
+    }
     if (mounted) Navigator.pop(context);
   }
 

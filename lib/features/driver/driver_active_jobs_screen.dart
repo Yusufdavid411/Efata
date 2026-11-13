@@ -5,7 +5,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:logistics_app/core/config/efata_backend_config.dart';
+import 'package:logistics_app/core/models/efata_api_models.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
+import 'package:logistics_app/core/services/efata_api_client.dart';
 import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/core/services/voice_navigation_control_service.dart';
 import 'package:logistics_app/shared/widgets/app_live_map.dart';
@@ -25,6 +28,7 @@ class DriverActiveJobsScreen extends StatefulWidget {
 class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
   StreamSubscription<Position>? locationSubscription;
   String? trackingOrderId;
+  DateTime? _lastApiLocationPushAt;
 
   Future<bool> startTransit(String id) async {
     final allowed = await ensureLocationPermission();
@@ -33,16 +37,27 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     try {
       final position = await LocationService.getCurrentPosition();
 
-      await FirebaseFirestore.instance.collection('orders').doc(id).update({
-        'status': 'inTransit',
-        'startedAt': Timestamp.now(),
-        'notificationStatus': 'inTransit',
-        if (position != null) ...{
-          'driverLat': position.latitude,
-          'driverLng': position.longitude,
-          'lastLocationUpdate': Timestamp.now(),
-        },
-      });
+      if (EfataBackendConfig.useNewBackend) {
+        if (position != null) {
+          await EfataApiClient.instance.updateDriverLocation(
+            lat: position.latitude,
+            lng: position.longitude,
+            heading: position.heading,
+          );
+        }
+        await EfataApiClient.instance.transitionOrder(id, 'start');
+      } else {
+        await FirebaseFirestore.instance.collection('orders').doc(id).update({
+          'status': 'inTransit',
+          'startedAt': Timestamp.now(),
+          'notificationStatus': 'inTransit',
+          if (position != null) ...{
+            'driverLat': position.latitude,
+            'driverLng': position.longitude,
+            'lastLocationUpdate': Timestamp.now(),
+          },
+        });
+      }
 
       startLiveLocationTracking(id);
       return true;
@@ -114,28 +129,32 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     await VoiceNavigationControlService.stopActiveGuidance();
 
     try {
-      await FirebaseFirestore.instance.collection('orders').doc(id).update({
-        'status': 'completed',
-        'completedAt': Timestamp.now(),
-        'deliveryCompletedConfirmed': true,
-        'notificationStatus': 'completed',
-        'unreadForCustomer': 0,
-        'unreadForDriver': 0,
-        'chatClosedAt': Timestamp.now(),
-        'voiceNavigationStatus': 'stopped',
-        'voiceNavigationStoppedAt': Timestamp.now(),
-        'paymentStatus': paymentReceived
-            ? 'paid'
-            : data['paymentStatus'] ?? 'pending',
-        'paymentConfirmedAt': paymentReceived ? Timestamp.now() : null,
-        if (!paymentReceived) ...{
-          'paymentReviewRequired': true,
-          'paymentIssue': 'Delivery completed without confirmed payment',
-          'paymentIssueOpenedBy': 'driver',
-          'paymentIssueOpenedAt': Timestamp.now(),
-          'needsAdminReview': true,
-        },
-      });
+      if (EfataBackendConfig.useNewBackend) {
+        await EfataApiClient.instance.transitionOrder(id, 'complete');
+      } else {
+        await FirebaseFirestore.instance.collection('orders').doc(id).update({
+          'status': 'completed',
+          'completedAt': Timestamp.now(),
+          'deliveryCompletedConfirmed': true,
+          'notificationStatus': 'completed',
+          'unreadForCustomer': 0,
+          'unreadForDriver': 0,
+          'chatClosedAt': Timestamp.now(),
+          'voiceNavigationStatus': 'stopped',
+          'voiceNavigationStoppedAt': Timestamp.now(),
+          'paymentStatus': paymentReceived
+              ? 'paid'
+              : data['paymentStatus'] ?? 'pending',
+          'paymentConfirmedAt': paymentReceived ? Timestamp.now() : null,
+          if (!paymentReceived) ...{
+            'paymentReviewRequired': true,
+            'paymentIssue': 'Delivery completed without confirmed payment',
+            'paymentIssueOpenedBy': 'driver',
+            'paymentIssueOpenedAt': Timestamp.now(),
+            'needsAdminReview': true,
+          },
+        });
+      }
 
       if (!mounted) return;
       AppNotificationBannerService.success(
@@ -222,26 +241,57 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
             distanceFilter: 10,
           ),
         ).listen((position) {
-          FirebaseFirestore.instance.collection('orders').doc(orderId).update({
-            'driverLat': position.latitude,
-            'driverLng': position.longitude,
-            'lastLocationUpdate': Timestamp.now(),
-          });
-          final driver = FirebaseAuth.instance.currentUser;
-          if (driver != null) {
-            FirebaseFirestore.instance.collection('drivers').doc(driver.uid).set({
-              'driverLat': position.latitude,
-              'driverLng': position.longitude,
-              'lastLocationUpdate': Timestamp.now(),
-            }, SetOptions(merge: true));
+          if (EfataBackendConfig.useNewBackend) {
+            final now = DateTime.now();
+            final lastPush = _lastApiLocationPushAt;
+            if (lastPush != null && now.difference(lastPush).inSeconds < 5) {
+              return;
+            }
+            _lastApiLocationPushAt = now;
+            unawaited(_pushApiLocation(position));
+          } else {
+            FirebaseFirestore.instance
+                .collection('orders')
+                .doc(orderId)
+                .update({
+                  'driverLat': position.latitude,
+                  'driverLng': position.longitude,
+                  'lastLocationUpdate': Timestamp.now(),
+                });
+            final driver = FirebaseAuth.instance.currentUser;
+            if (driver != null) {
+              FirebaseFirestore.instance
+                  .collection('drivers')
+                  .doc(driver.uid)
+                  .set({
+                    'driverLat': position.latitude,
+                    'driverLng': position.longitude,
+                    'lastLocationUpdate': Timestamp.now(),
+                  }, SetOptions(merge: true));
+            }
           }
         });
   }
 
-  String formatTime(dynamic ts) {
-    if (ts == null || ts is! Timestamp) return 'Not available';
+  Future<void> _pushApiLocation(Position position) async {
+    try {
+      await EfataApiClient.instance.updateDriverLocation(
+        lat: position.latitude,
+        lng: position.longitude,
+        heading: position.heading,
+      );
+    } catch (_) {
+      _lastApiLocationPushAt = null;
+    }
+  }
 
-    final d = ts.toDate();
+  String formatTime(dynamic ts) {
+    final DateTime? d = ts is Timestamp
+        ? ts.toDate()
+        : ts is DateTime
+        ? ts
+        : null;
+    if (d == null) return 'Not available';
     final hour = d.hour.toString().padLeft(2, '0');
     final minute = d.minute.toString().padLeft(2, '0');
 
@@ -273,240 +323,356 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Current Job"), centerTitle: true),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('orders')
-            .where('driverId', isEqualTo: driver.uid)
-            .limit(25)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: EfataBackendConfig.useNewBackend
+          ? _ApiDriverActiveJobBody(
+              initialOrderId: widget.initialOrderId,
+              builder: _buildActiveJob,
+            )
+          : StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('orders')
+                  .where('driverId', isEqualTo: driver.uid)
+                  .limit(25)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          final docs = snapshot.data!.docs;
+                final docs = snapshot.data!.docs;
 
-          final active = docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final status = _normalizeStatus(data['status']);
-            return status == 'accepted' || status == 'intransit';
-          }).toList();
+                final active = docs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final status = _normalizeStatus(data['status']);
+                  return status == 'accepted' || status == 'intransit';
+                }).toList();
 
-          if (active.isEmpty) {
-            return const Center(child: Text("No active job"));
-          }
+                if (active.isEmpty) {
+                  return const Center(child: Text("No active job"));
+                }
 
-          active.sort((a, b) {
-            final aData = a.data() as Map<String, dynamic>;
-            final bData = b.data() as Map<String, dynamic>;
-            final aTime =
-                (aData['startedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
-                (aData['acceptedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
-                (aData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ??
-                0;
-            final bTime =
-                (bData['startedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
-                (bData['acceptedAt'] as Timestamp?)?.millisecondsSinceEpoch ??
-                (bData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ??
-                0;
-            return bTime.compareTo(aTime);
-          });
+                active.sort((a, b) {
+                  final aData = a.data() as Map<String, dynamic>;
+                  final bData = b.data() as Map<String, dynamic>;
+                  final aTime =
+                      (aData['startedAt'] as Timestamp?)
+                          ?.millisecondsSinceEpoch ??
+                      (aData['acceptedAt'] as Timestamp?)
+                          ?.millisecondsSinceEpoch ??
+                      (aData['createdAt'] as Timestamp?)
+                          ?.millisecondsSinceEpoch ??
+                      0;
+                  final bTime =
+                      (bData['startedAt'] as Timestamp?)
+                          ?.millisecondsSinceEpoch ??
+                      (bData['acceptedAt'] as Timestamp?)
+                          ?.millisecondsSinceEpoch ??
+                      (bData['createdAt'] as Timestamp?)
+                          ?.millisecondsSinceEpoch ??
+                      0;
+                  return bTime.compareTo(aTime);
+                });
 
-          final preferredJob = widget.initialOrderId == null
-              ? null
-              : active.cast<QueryDocumentSnapshot?>().firstWhere(
-                  (doc) => doc?.id == widget.initialOrderId,
-                  orElse: () => null,
-                );
-          final job = preferredJob ?? active.first;
-          final data = job.data() as Map<String, dynamic>;
-
-          final pickup = data['pickup']?.toString() ?? 'No pickup';
-          final dropoff = data['dropoff']?.toString() ?? 'No drop-off';
-          final item = data['item']?.toString() ?? 'No item';
-          final status = _normalizeStatus(data['status']);
-          final statusLabel = _statusLabel(status);
-          final vehicleType = data['vehicleType']?.toString();
-          final price = data['price'];
-          final paymentMethod =
-              data['paymentMethod']?.toString() ?? 'Cash on Delivery';
-          final paymentStatus = data['paymentStatus']?.toString() ?? 'pending';
-          final unreadMessages =
-              (data['unreadForDriver'] as num?)?.toInt() ?? 0;
-          final lastMessageSenderRole =
-              data['lastMessageSenderRole']?.toString() ?? '';
-          final chatLabel = _chatButtonLabel(
-            unreadMessages,
-            lastMessageSenderRole,
-            'driver',
-          );
-          final createdAt = data['createdAt'];
-          final scheduleLabel =
-              data['pickupScheduleLabel']?.toString() ?? 'Pickup now';
-          final pickupLat = _toDouble(data['pickupLat']);
-          final pickupLng = _toDouble(data['pickupLng']);
-          final dropoffLat = _toDouble(data['dropoffLat']);
-          final dropoffLng = _toDouble(data['dropoffLng']);
-          final driverLat = _toDouble(data['driverLat']);
-          final driverLng = _toDouble(data['driverLng']);
-          final hasRoute =
-              pickupLat != null &&
-              pickupLng != null &&
-              dropoffLat != null &&
-              dropoffLng != null;
-
-          if (status == 'accepted' || status == 'intransit') {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              startLiveLocationTracking(job.id);
-            });
-          }
-
-          final pickupPoint = hasRoute ? LatLng(pickupLat, pickupLng) : null;
-          final dropoffPoint = hasRoute ? LatLng(dropoffLat, dropoffLng) : null;
-          final driverPoint = driverLat != null && driverLng != null
-              ? LatLng(driverLat, driverLng)
-              : null;
-          final activeTargetPoint = status == 'accepted'
-              ? pickupPoint
-              : dropoffPoint;
-          final activeTargetLabel = status == 'accepted'
-              ? 'Go to pickup'
-              : 'Go to drop-off';
-          final canUseVoiceNavigation =
-              pickupLat != null &&
-              pickupLng != null &&
-              dropoffLat != null &&
-              dropoffLng != null;
-          final voiceNavigationStatus =
-              data['voiceNavigationStatus']?.toString().toLowerCase() ?? '';
-          final voiceNavigationActive =
-              voiceNavigationStatus == 'running' ||
-              voiceNavigationStatus == 'background';
-
-          void openVoiceNavigation({required bool includePickupStop}) {
-            if (!canUseVoiceNavigation) {
-              AppNotificationBannerService.error(
-                'Voice navigation needs pickup and drop-off coordinates.',
-                title: 'Route unavailable',
-              );
-              return;
-            }
-
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => DriverVoiceNavigationScreen(
-                  orderId: job.id,
-                  pickupLabel: pickup,
-                  dropoffLabel: dropoff,
-                  pickupLat: pickupLat,
-                  pickupLng: pickupLng,
-                  dropoffLat: dropoffLat,
-                  dropoffLng: dropoffLng,
-                  includePickupStop: includePickupStop,
-                ),
-              ),
-            );
-          }
-
-          return Stack(
-            children: [
-              Positioned.fill(
-                child: hasRoute
-                    ? AppLiveMap(
-                        pickupPoint: pickupPoint!,
-                        dropoffPoint: dropoffPoint!,
-                        driverPoint: driverPoint,
-                        followDriver: status == 'intransit',
-                        activeTargetPoint: activeTargetPoint,
-                        activeTargetLabel: activeTargetLabel,
-                        voiceNavigationActive: voiceNavigationActive,
-                        onVoiceNavigation: () {
-                          () async {
-                            try {
-                              if (status == 'accepted') {
-                                final started = await startTransit(job.id);
-                                if (!started || !context.mounted) return;
-                                openVoiceNavigation(includePickupStop: true);
-                                return;
-                              }
-                              openVoiceNavigation(includePickupStop: false);
-                            } catch (_) {
-                              if (!context.mounted) return;
-                              AppNotificationBannerService.error(
-                                'Voice navigation could not start. Please check your internet connection and map setup.',
-                                title: 'Navigation failed',
-                              );
-                            }
-                          }();
-                        },
-                      )
-                    : const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: _RouteMissingCard(),
-                      ),
-              ),
-              DraggableScrollableSheet(
-                initialChildSize: 0.38,
-                minChildSize: 0.2,
-                maxChildSize: 0.78,
-                builder: (context, scrollController) {
-                  return _DriverJobSheet(
-                    scrollController: scrollController,
-                    statusLabel: statusLabel,
-                    pickup: pickup,
-                    dropoff: dropoff,
-                    item: item,
-                    vehicleType: vehicleType,
-                    scheduleLabel: scheduleLabel,
-                    createdAtLabel: "Created: ${formatTime(createdAt)}",
-                    priceLabel: price == null ? null : _formatPrice(price),
-                    paymentLabel:
-                        "$paymentMethod (${formatPaymentStatus(paymentStatus)})",
-                    chatLabel: chatLabel,
-                    unreadMessages: unreadMessages,
-                    onChat: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ChatScreen(
-                            orderId: job.id,
-                            participantRole: 'driver',
-                          ),
-                        ),
+                final preferredJob = widget.initialOrderId == null
+                    ? null
+                    : active.cast<QueryDocumentSnapshot?>().firstWhere(
+                        (doc) => doc?.id == widget.initialOrderId,
+                        orElse: () => null,
                       );
-                    },
-                    primaryAction: status == 'accepted'
-                        ? _DriverJobAction(
-                            label: 'Start Transit',
-                            icon: Icons.play_arrow_rounded,
-                            onPressed: () async {
-                              final started = await startTransit(job.id);
-                              if (!started || !context.mounted) return;
-                              try {
-                                openVoiceNavigation(includePickupStop: true);
-                              } catch (_) {
-                                AppNotificationBannerService.error(
-                                  'Voice navigation could not start. Please check your internet connection and map setup.',
-                                  title: 'Navigation failed',
-                                );
-                              }
-                            },
-                          )
-                        : _DriverJobAction(
-                            label: 'Mark Completed',
-                            icon: Icons.check_circle_outline,
-                            onPressed: () => completeJob(job.id, data),
-                          ),
-                    secondaryAction: null,
-                  );
-                },
-              ),
-            ],
-          );
-        },
-      ),
+                final job = preferredJob ?? active.first;
+                final data = job.data() as Map<String, dynamic>;
+                return _buildActiveJob(context, job.id, data);
+              },
+            ),
     );
+  }
+
+  Widget _buildActiveJob(
+    BuildContext context,
+    String orderId,
+    Map<String, dynamic> data,
+  ) {
+    final pickup = data['pickup']?.toString() ?? 'No pickup';
+    final dropoff = data['dropoff']?.toString() ?? 'No drop-off';
+    final item = data['item']?.toString() ?? 'No item';
+    final status = _normalizeStatus(data['status']);
+    final statusLabel = _statusLabel(status);
+    final vehicleType = data['vehicleType']?.toString();
+    final price = data['price'];
+    final paymentMethod =
+        data['paymentMethod']?.toString() ?? 'Cash on Delivery';
+    final paymentStatus = data['paymentStatus']?.toString() ?? 'pending';
+    final unreadMessages = (data['unreadForDriver'] as num?)?.toInt() ?? 0;
+    final lastMessageSenderRole =
+        data['lastMessageSenderRole']?.toString() ?? '';
+    final chatLabel = _chatButtonLabel(
+      unreadMessages,
+      lastMessageSenderRole,
+      'driver',
+    );
+    final createdAt = data['createdAt'];
+    final scheduleLabel =
+        data['pickupScheduleLabel']?.toString() ?? 'Pickup now';
+    final pickupLat = _toDouble(data['pickupLat']);
+    final pickupLng = _toDouble(data['pickupLng']);
+    final dropoffLat = _toDouble(data['dropoffLat']);
+    final dropoffLng = _toDouble(data['dropoffLng']);
+    final driverLat = _toDouble(data['driverLat']);
+    final driverLng = _toDouble(data['driverLng']);
+    final hasRoute =
+        pickupLat != null &&
+        pickupLng != null &&
+        dropoffLat != null &&
+        dropoffLng != null;
+
+    if (status == 'accepted' || status == 'intransit') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        startLiveLocationTracking(orderId);
+      });
+    }
+
+    final pickupPoint = hasRoute ? LatLng(pickupLat, pickupLng) : null;
+    final dropoffPoint = hasRoute ? LatLng(dropoffLat, dropoffLng) : null;
+    final driverPoint = driverLat != null && driverLng != null
+        ? LatLng(driverLat, driverLng)
+        : null;
+    final activeTargetPoint = status == 'accepted' ? pickupPoint : dropoffPoint;
+    final activeTargetLabel = status == 'accepted'
+        ? 'Go to pickup'
+        : 'Go to drop-off';
+    final voiceNavigationStatus =
+        data['voiceNavigationStatus']?.toString().toLowerCase() ?? '';
+    final voiceNavigationActive =
+        voiceNavigationStatus == 'running' ||
+        voiceNavigationStatus == 'background';
+
+    void openVoiceNavigation({required bool includePickupStop}) {
+      if (!hasRoute) {
+        AppNotificationBannerService.error(
+          'Voice navigation needs pickup and drop-off coordinates.',
+          title: 'Route unavailable',
+        );
+        return;
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DriverVoiceNavigationScreen(
+            orderId: orderId,
+            pickupLabel: pickup,
+            dropoffLabel: dropoff,
+            pickupLat: pickupLat,
+            pickupLng: pickupLng,
+            dropoffLat: dropoffLat,
+            dropoffLng: dropoffLng,
+            includePickupStop: includePickupStop,
+          ),
+        ),
+      );
+    }
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: hasRoute
+              ? AppLiveMap(
+                  pickupPoint: pickupPoint!,
+                  dropoffPoint: dropoffPoint!,
+                  driverPoint: driverPoint,
+                  followDriver: status == 'intransit',
+                  activeTargetPoint: activeTargetPoint,
+                  activeTargetLabel: activeTargetLabel,
+                  voiceNavigationActive: voiceNavigationActive,
+                  onVoiceNavigation: () {
+                    () async {
+                      try {
+                        if (status == 'accepted') {
+                          final started = await startTransit(orderId);
+                          if (!started || !context.mounted) return;
+                          openVoiceNavigation(includePickupStop: true);
+                          return;
+                        }
+                        openVoiceNavigation(includePickupStop: false);
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        AppNotificationBannerService.error(
+                          'Voice navigation could not start. Please check your internet connection and map setup.',
+                          title: 'Navigation failed',
+                        );
+                      }
+                    }();
+                  },
+                )
+              : const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: _RouteMissingCard(),
+                ),
+        ),
+        DraggableScrollableSheet(
+          initialChildSize: 0.38,
+          minChildSize: 0.2,
+          maxChildSize: 0.78,
+          builder: (context, scrollController) {
+            return _DriverJobSheet(
+              scrollController: scrollController,
+              statusLabel: statusLabel,
+              pickup: pickup,
+              dropoff: dropoff,
+              item: item,
+              vehicleType: vehicleType,
+              scheduleLabel: scheduleLabel,
+              createdAtLabel: 'Created: ${formatTime(createdAt)}',
+              priceLabel: price == null ? null : _formatPrice(price),
+              paymentLabel:
+                  '$paymentMethod (${formatPaymentStatus(paymentStatus)})',
+              chatLabel: chatLabel,
+              unreadMessages: unreadMessages,
+              onChat: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ChatScreen(orderId: orderId, participantRole: 'driver'),
+                  ),
+                );
+              },
+              primaryAction: status == 'accepted'
+                  ? _DriverJobAction(
+                      label: 'Start Transit',
+                      icon: Icons.play_arrow_rounded,
+                      onPressed: () async {
+                        final started = await startTransit(orderId);
+                        if (!started || !context.mounted) return;
+                        try {
+                          openVoiceNavigation(includePickupStop: true);
+                        } catch (_) {
+                          AppNotificationBannerService.error(
+                            'Voice navigation could not start. Please check your internet connection and map setup.',
+                            title: 'Navigation failed',
+                          );
+                        }
+                      },
+                    )
+                  : _DriverJobAction(
+                      label: 'Mark Completed',
+                      icon: Icons.check_circle_outline,
+                      onPressed: () => completeJob(orderId, data),
+                    ),
+              secondaryAction: null,
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+typedef _ActiveJobBuilder =
+    Widget Function(
+      BuildContext context,
+      String orderId,
+      Map<String, dynamic> data,
+    );
+
+class _ApiDriverActiveJobBody extends StatefulWidget {
+  const _ApiDriverActiveJobBody({
+    required this.initialOrderId,
+    required this.builder,
+  });
+
+  final String? initialOrderId;
+  final _ActiveJobBuilder builder;
+
+  @override
+  State<_ApiDriverActiveJobBody> createState() =>
+      _ApiDriverActiveJobBodyState();
+}
+
+class _ApiDriverActiveJobBodyState extends State<_ApiDriverActiveJobBody> {
+  Timer? _timer;
+  EfataOrder? _order;
+  EfataDriverTracking? _tracking;
+  Object? _error;
+  bool _loading = false;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _load());
+  }
+
+  Future<void> _load() async {
+    if (_loading) return;
+    _loading = true;
+    try {
+      final page = await EfataApiClient.instance.listOrders();
+      final active = page.orders.where((order) {
+        final status = _normalizeStatus(order.status);
+        return status == 'accepted' || status == 'intransit';
+      }).toList();
+      EfataOrder? selected;
+      if (widget.initialOrderId != null) {
+        for (final order in active) {
+          if (order.id == widget.initialOrderId) {
+            selected = order;
+            break;
+          }
+        }
+      }
+      selected ??= active.isEmpty ? null : active.first;
+      final tracking = selected == null
+          ? null
+          : await EfataApiClient.instance.getDriverLocation(selected.id);
+      if (!mounted) return;
+      setState(() {
+        _order = selected;
+        _tracking = tracking;
+        _error = null;
+        _loaded = true;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _loaded = true;
+      });
+    } finally {
+      _loading = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_order == null && _error != null) {
+      return Center(
+        child: FilledButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Reload current job'),
+        ),
+      );
+    }
+    final order = _order;
+    if (order == null) return const Center(child: Text('No active job'));
+    final data = order.toLegacyMap();
+    final tracking = _tracking;
+    if (tracking != null) {
+      data['driverLat'] = tracking.lat;
+      data['driverLng'] = tracking.lng;
+      data['driverHeading'] = tracking.heading;
+    }
+    return widget.builder(context, order.id, data);
   }
 }
 
