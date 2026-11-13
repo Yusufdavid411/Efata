@@ -2,6 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/config/efata_backend_config.dart';
+import '../../../core/models/efata_api_models.dart';
+import '../../../core/services/efata_api_client.dart';
+
 class DriverEarningsSummary extends StatelessWidget {
   const DriverEarningsSummary({super.key});
 
@@ -80,6 +84,12 @@ class DriverEarningsSummary extends StatelessWidget {
     final driver = FirebaseAuth.instance.currentUser;
     if (driver == null) return const SizedBox();
 
+    if (EfataBackendConfig.useNewBackend) {
+      return _ApiDriverEarningsSummary(
+        onWithdraw: (amount) => showWithdrawalProcess(context, amount),
+      );
+    }
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('orders')
@@ -114,139 +124,220 @@ class DriverEarningsSummary extends StatelessWidget {
           }
         }
 
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0D0F172A),
-                blurRadius: 18,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Color(0xFFF0FDFA),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: const Icon(
-                      Icons.account_balance_wallet_outlined,
-                      color: Color(0xFF0F766E),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Earnings Wallet',
-                          style: TextStyle(
-                            color: Color(0xFF0F172A),
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        SizedBox(height: 3),
-                        Text(
-                          'Payouts, completed trips, and monthly earnings',
-                          style: TextStyle(color: Color(0xFF64748B)),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Color(0xFFF0FDFA),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.fromBorderSide(
-                        BorderSide(color: Color(0xFFCCFBF1)),
-                      ),
-                    ),
-                    child: const Text(
-                      'Live',
-                      style: TextStyle(
-                        color: Color(0xFF0F766E),
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 22),
-              const Text(
-                'Available balance',
-                style: TextStyle(
-                  color: Color(0xFF64748B),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              FittedBox(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'NGN ${totalEarnings.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    color: Color(0xFF0F172A),
-                    fontSize: 34,
-                    height: 1,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: _WalletMetric(
-                      label: 'This month',
-                      value: 'NGN ${monthEarnings.toStringAsFixed(0)}',
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _WalletMetric(
-                      label: 'Completed',
-                      value: '${jobs.length}',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () =>
-                      showWithdrawalProcess(context, totalEarnings),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F766E),
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: const Icon(Icons.call_made_rounded),
-                  label: const Text('Withdraw to Bank Account'),
-                ),
-              ),
-            ],
-          ),
+        return _EarningsWalletContent(
+          totalEarnings: totalEarnings,
+          monthEarnings: monthEarnings,
+          completedCount: jobs.length,
+          onWithdraw: () => showWithdrawalProcess(context, totalEarnings),
         );
       },
+    );
+  }
+}
+
+class _ApiDriverEarningsSummary extends StatefulWidget {
+  const _ApiDriverEarningsSummary({required this.onWithdraw});
+
+  final ValueChanged<double> onWithdraw;
+
+  @override
+  State<_ApiDriverEarningsSummary> createState() =>
+      _ApiDriverEarningsSummaryState();
+}
+
+class _ApiDriverEarningsSummaryState extends State<_ApiDriverEarningsSummary> {
+  late Future<List<EfataOrder>> _orders;
+
+  @override
+  void initState() {
+    super.initState();
+    _orders = EfataApiClient.instance.listAllOrders(status: 'completed');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<EfataOrder>>(
+      future: _orders,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const _EarningsSkeleton();
+        }
+        if (snapshot.hasError) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(18),
+              child: Text('Earnings could not load. Please try again.'),
+            ),
+          );
+        }
+        final jobs = snapshot.data ?? const <EfataOrder>[];
+        final now = DateTime.now();
+        var total = 0.0;
+        var month = 0.0;
+        for (final job in jobs) {
+          total += job.amount;
+          final completedAt = job.completedAt?.toLocal();
+          if (completedAt != null &&
+              completedAt.year == now.year &&
+              completedAt.month == now.month) {
+            month += job.amount;
+          }
+        }
+        return _EarningsWalletContent(
+          totalEarnings: total,
+          monthEarnings: month,
+          completedCount: jobs.length,
+          onWithdraw: () => widget.onWithdraw(total),
+        );
+      },
+    );
+  }
+}
+
+class _EarningsWalletContent extends StatelessWidget {
+  const _EarningsWalletContent({
+    required this.totalEarnings,
+    required this.monthEarnings,
+    required this.completedCount,
+    required this.onWithdraw,
+  });
+
+  final double totalEarnings;
+  final double monthEarnings;
+  final int completedCount;
+  final VoidCallback onWithdraw;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D0F172A),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDFA),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: Color(0xFF0F766E),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Earnings Wallet',
+                      style: TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'Payouts, completed trips, and monthly earnings',
+                      style: TextStyle(color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDFA),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: const Color(0xFFCCFBF1)),
+                ),
+                child: const Text(
+                  'Live',
+                  style: TextStyle(
+                    color: Color(0xFF0F766E),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Available balance',
+            style: TextStyle(
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'NGN ${totalEarnings.toStringAsFixed(0)}',
+              style: const TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 34,
+                height: 1,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: _WalletMetric(
+                  label: 'This month',
+                  value: 'NGN ${monthEarnings.toStringAsFixed(0)}',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _WalletMetric(
+                  label: 'Completed',
+                  value: '$completedCount',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: onWithdraw,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F766E),
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.call_made_rounded),
+              label: const Text('Withdraw to Bank Account'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

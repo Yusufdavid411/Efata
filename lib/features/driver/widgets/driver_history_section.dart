@@ -2,6 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/config/efata_backend_config.dart';
+import '../../../core/models/efata_api_models.dart';
+import '../../../core/services/efata_api_client.dart';
+
 class DriverHistorySection extends StatelessWidget {
   const DriverHistorySection({
     super.key,
@@ -45,6 +49,13 @@ class DriverHistorySection extends StatelessWidget {
     final driver = FirebaseAuth.instance.currentUser;
 
     if (driver == null) return const SizedBox.shrink();
+
+    if (EfataBackendConfig.useNewBackend) {
+      return _ApiDriverHistorySection(
+        showHeader: showHeader,
+        maxItems: maxItems,
+      );
+    }
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -136,6 +147,130 @@ class DriverHistorySection extends StatelessWidget {
                   vehicleType: data['vehicleType']?.toString(),
                 );
               }),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ApiDriverHistorySection extends StatefulWidget {
+  const _ApiDriverHistorySection({
+    required this.showHeader,
+    required this.maxItems,
+  });
+
+  final bool showHeader;
+  final int? maxItems;
+
+  @override
+  State<_ApiDriverHistorySection> createState() =>
+      _ApiDriverHistorySectionState();
+}
+
+class _ApiDriverHistorySectionState extends State<_ApiDriverHistorySection> {
+  late Future<List<EfataOrder>> _orders;
+
+  @override
+  void initState() {
+    super.initState();
+    _orders = EfataApiClient.instance.listAllOrders(status: 'completed');
+  }
+
+  String _formatDate(DateTime? value) {
+    if (value == null) return 'Date not available';
+    final date = value.toLocal();
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '${date.day}/${date.month}/${date.year}  $hour:$minute';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<EfataOrder>>(
+      future: _orders,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const _HistoryStateCard(
+            icon: Icons.sync_rounded,
+            title: 'Loading recent jobs',
+            message: 'Checking completed deliveries for this driver account.',
+            isLoading: true,
+          );
+        }
+        if (snapshot.hasError) {
+          return _HistoryStateCard(
+            icon: Icons.error_outline_rounded,
+            title: 'Recent jobs could not load',
+            message: 'Check your connection and try again.',
+            tone: Colors.red,
+          );
+        }
+
+        final completed = [...snapshot.data ?? const <EfataOrder>[]]
+          ..sort((a, b) {
+            final aTime = a.completedAt ?? a.updatedAt ?? a.createdAt;
+            final bTime = b.completedAt ?? b.updatedAt ?? b.createdAt;
+            return (bTime ?? DateTime(1970)).compareTo(aTime ?? DateTime(1970));
+          });
+        final visible = widget.maxItems == null
+            ? completed
+            : completed.take(widget.maxItems!).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.showHeader) ...[
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Recent Jobs',
+                      style: TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  if (completed.isNotEmpty)
+                    Text(
+                      '${completed.length} completed',
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  if (widget.maxItems != null &&
+                      completed.length > widget.maxItems!) ...[
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/driverJobs'),
+                      child: const Text('See more'),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (visible.isEmpty)
+              const _HistoryStateCard(
+                icon: Icons.work_history_outlined,
+                title: 'No recent jobs yet',
+                message: 'Completed deliveries will appear here.',
+              )
+            else
+              ...visible.map(
+                (order) => _RecentJobCard(
+                  pickup: order.pickup,
+                  dropoff: order.dropoff,
+                  completedAt: _formatDate(order.completedAt),
+                  price: 'NGN ${order.amount.toStringAsFixed(0)}',
+                  vehicleType: order.vehicleType,
+                ),
+              ),
           ],
         );
       },
