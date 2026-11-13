@@ -1,4 +1,4 @@
-import { allowedOrigins, handleOptions, prepareApi, readJson, sendJson } from '../lib/api-http.mjs';
+import { allowedOrigins, bearerToken, handleOptions, prepareApi, readJson, sendJson } from '../lib/api-http.mjs';
 
 export function createAuthHandler({
   url, key, fetcher = fetch, origins = allowedOrigins(),
@@ -16,6 +16,23 @@ export function createAuthHandler({
       const input = await readJson(req, 8192);
       const { action, password, role, refreshToken } = input ?? {};
       const email = typeof input?.email === 'string' ? input.email.trim().toLowerCase() : '';
+      if (action === 'change_password') {
+        const token = bearerToken(req);
+        if (!token) return send(401, { error: 'session_required' });
+        if (typeof password !== 'string' || password.length < 12 || password.length > 72 ||
+            /^(.)\1+$/.test(password)) return send(400, { error: 'invalid_password' });
+        const changed = await fetcher(new URL('/auth/v1/user', url), {
+          method: 'PUT',
+          headers: { apikey: key, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+          signal: AbortSignal.timeout(7000),
+          redirect: 'error',
+        });
+        await changed.body?.cancel();
+        return changed.ok ? send(200, { changed: true })
+          : send(changed.status === 401 ? 401 : changed.status === 429 ? 429 : 400,
+            { error: 'password_change_failed' });
+      }
       let path, body;
       if (action === 'refresh') {
         if (typeof refreshToken !== 'string' || !refreshToken || refreshToken.length > 4096) {
