@@ -1,11 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/config/efata_backend_config.dart';
 import '../../../core/models/efata_api_models.dart';
 import '../../../core/services/efata_api_client.dart';
-import 'package:logistics_app/core/services/efata_session.dart';
 
 class DriverHistorySection extends StatelessWidget {
   const DriverHistorySection({
@@ -17,143 +13,9 @@ class DriverHistorySection extends StatelessWidget {
   final bool showHeader;
   final int? maxItems;
 
-  String _formatTime(Timestamp? timestamp) {
-    if (timestamp == null) return 'Date not available';
-
-    final date = timestamp.toDate();
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-
-    return '${date.day}/${date.month}/${date.year}  $hour:$minute';
-  }
-
-  String _formatPrice(dynamic price) {
-    if (price is num) return 'NGN ${price.toStringAsFixed(0)}';
-
-    final parsed = double.tryParse(price?.toString() ?? '');
-    if (parsed != null) return 'NGN ${parsed.toStringAsFixed(0)}';
-
-    return 'Price not set';
-  }
-
-  int _sortTime(QueryDocumentSnapshot job) {
-    final data = job.data() as Map<String, dynamic>;
-    for (final key in ['completedAt', 'updatedAt', 'createdAt']) {
-      final value = data[key];
-      if (value is Timestamp) return value.millisecondsSinceEpoch;
-    }
-    return 0;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final driver = EfataSession.enabled
-        ? EfataSession.instance.accountUid
-        : FirebaseAuth.instance.currentUser?.uid;
-
-    if (driver == null) return const SizedBox.shrink();
-
-    if (EfataBackendConfig.useNewBackend) {
-      return _ApiDriverHistorySection(
-        showHeader: showHeader,
-        maxItems: maxItems,
-      );
-    }
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('driverId', isEqualTo: driver)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const _HistoryStateCard(
-            icon: Icons.sync_rounded,
-            title: 'Loading recent jobs',
-            message: 'Checking completed deliveries for this driver account.',
-            isLoading: true,
-          );
-        }
-
-        if (snapshot.hasError) {
-          return _HistoryStateCard(
-            icon: Icons.error_outline_rounded,
-            title: 'Recent jobs could not load',
-            message: snapshot.error.toString(),
-            tone: Colors.red,
-          );
-        }
-
-        final docs = snapshot.data?.docs ?? [];
-        final completed = docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          return data['status']?.toString().toLowerCase() == 'completed';
-        }).toList();
-
-        completed.sort((a, b) => _sortTime(b).compareTo(_sortTime(a)));
-
-        final visibleJobs = maxItems == null
-            ? completed
-            : completed.take(maxItems!).toList();
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (showHeader) ...[
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Recent Jobs',
-                      style: TextStyle(
-                        color: Color(0xFF0F172A),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  if (completed.isNotEmpty)
-                    Text(
-                      '${completed.length} completed',
-                      style: const TextStyle(
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  if (maxItems != null && completed.length > maxItems!) ...[
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/driverJobs'),
-                      child: const Text('See more'),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 10),
-            ],
-            if (visibleJobs.isEmpty)
-              const _HistoryStateCard(
-                icon: Icons.work_history_outlined,
-                title: 'No recent jobs yet',
-                message: 'Completed deliveries will appear here.',
-              )
-            else
-              ...visibleJobs.map((job) {
-                final data = job.data() as Map<String, dynamic>;
-                return _RecentJobCard(
-                  pickup: data['pickup']?.toString() ?? 'Pickup location',
-                  dropoff: data['dropoff']?.toString() ?? 'Drop-off location',
-                  completedAt: _formatTime(data['completedAt'] as Timestamp?),
-                  price: _formatPrice(data['price']),
-                  vehicleType: data['vehicleType']?.toString(),
-                );
-              }),
-          ],
-        );
-      },
-    );
+    return _ApiDriverHistorySection(showHeader: showHeader, maxItems: maxItems);
   }
 }
 

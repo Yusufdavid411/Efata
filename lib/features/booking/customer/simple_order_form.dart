@@ -1,11 +1,7 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:logistics_app/core/controllers/app_settings_controller.dart';
-import 'package:logistics_app/core/config/efata_backend_config.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/efata_api_client.dart';
 import 'package:logistics_app/core/services/efata_session.dart';
@@ -61,86 +57,37 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   }
 
   Future<void> loadRecentPlaces() async {
-    final currentUser = EfataSession.enabled
-        ? EfataSession.instance.accountUid
-        : FirebaseAuth.instance.currentUser?.uid;
+    final currentUser = EfataSession.instance.accountUid;
     if (currentUser == null) return;
 
     try {
-      if (EfataBackendConfig.useNewBackend) {
-        final orders = await EfataApiClient.instance.listAllOrders(maxPages: 4);
-        final pickupSeen = <String>{};
-        final dropoffSeen = <String>{};
-        final pickups = <PlaceSuggestion>[];
-        final dropoffs = <PlaceSuggestion>[];
-        for (final order in orders) {
-          _addRecentPlace(
-            target: pickups,
-            seen: pickupSeen,
-            address: order.pickup,
-            latitude: order.pickupLat,
-            longitude: order.pickupLng,
-          );
-          _addRecentPlace(
-            target: dropoffs,
-            seen: dropoffSeen,
-            address: order.dropoff,
-            latitude: order.dropoffLat,
-            longitude: order.dropoffLng,
-          );
-        }
-        if (!mounted) return;
-        setState(() {
-          recentPickupSuggestions = pickups.take(6).toList();
-          recentDropoffSuggestions = dropoffs.take(6).toList();
-        });
-        return;
-      }
-
-      final snapshot = await FirebaseFirestore.instance
-          .collection('orders')
-          .where('customerId', isEqualTo: currentUser)
-          .limit(40)
-          .get();
-
-      final docs = snapshot.docs.toList()
-        ..sort((a, b) {
-          final aTime = a.data()['createdAt'];
-          final bTime = b.data()['createdAt'];
-          final aMillis = aTime is Timestamp ? aTime.millisecondsSinceEpoch : 0;
-          final bMillis = bTime is Timestamp ? bTime.millisecondsSinceEpoch : 0;
-          return bMillis.compareTo(aMillis);
-        });
-
+      final orders = await EfataApiClient.instance.listAllOrders(maxPages: 4);
       final pickupSeen = <String>{};
       final dropoffSeen = <String>{};
       final pickups = <PlaceSuggestion>[];
       final dropoffs = <PlaceSuggestion>[];
-
-      for (final doc in docs) {
-        final data = doc.data();
+      for (final order in orders) {
         _addRecentPlace(
           target: pickups,
           seen: pickupSeen,
-          address: data['pickup'],
-          latitude: data['pickupLat'],
-          longitude: data['pickupLng'],
+          address: order.pickup,
+          latitude: order.pickupLat,
+          longitude: order.pickupLng,
         );
         _addRecentPlace(
           target: dropoffs,
           seen: dropoffSeen,
-          address: data['dropoff'],
-          latitude: data['dropoffLat'],
-          longitude: data['dropoffLng'],
+          address: order.dropoff,
+          latitude: order.dropoffLat,
+          longitude: order.dropoffLng,
         );
       }
-
       if (!mounted) return;
-
       setState(() {
         recentPickupSuggestions = pickups.take(6).toList();
         recentDropoffSuggestions = dropoffs.take(6).toList();
       });
+      return;
     } catch (_) {
       // Saved places are a convenience feature; booking still works with map pick.
     }
@@ -355,9 +302,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   }
 
   Future<void> submitOrder() async {
-    final currentUser = EfataSession.enabled
-        ? EfataSession.instance.accountUid
-        : FirebaseAuth.instance.currentUser?.uid;
+    final currentUser = EfataSession.instance.accountUid;
 
     if (currentUser == null) {
       AppNotificationBannerService.error(
@@ -381,79 +326,32 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
     });
 
     try {
-      if (EfataBackendConfig.useNewBackend) {
-        final order = await EfataApiClient.instance.createOrder(
-          pickup: pickupController.text.trim(),
-          pickupLat: pickupLat!,
-          pickupLng: pickupLng!,
-          dropoff: dropoffController.text.trim(),
-          dropoffLat: dropoffLat!,
-          dropoffLng: dropoffLng!,
-          item: itemController.text.trim(),
-          vehicleType: vehicleType,
-          paymentMethod: paymentMethod,
-          amount: estimatedPrice,
-          scheduledFor: scheduledPickupAt,
-        );
-
-        if (!mounted) return;
-        AppNotificationBannerService.success(
-          'Your delivery request has been created.',
-          title: 'Request sent',
-        );
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => TrackDeliveryScreen(orderId: order.id),
-          ),
-        );
-        return;
-      }
-
-      final docRef = await FirebaseFirestore.instance.collection('orders').add({
-        'pickup': pickupController.text.trim(),
-        'dropoff': dropoffController.text.trim(),
-        'item': itemController.text.trim(),
-        'vehicleType': vehicleType,
-        'paymentMethod': paymentMethod,
-        'paymentStatus': 'pending',
-        'customerId': currentUser,
-        'driverId': null,
-        'status': 'pending',
-        'createdAt': Timestamp.now(),
-        'pickupScheduleType': scheduledPickupAt == null ? 'now' : 'scheduled',
-        'pickupScheduleLabel': scheduleLabel,
-        'scheduledPickupAt': scheduledPickupAt == null
-            ? null
-            : Timestamp.fromDate(scheduledPickupAt!),
-        'pickupLat': pickupLat,
-        'pickupLng': pickupLng,
-        'dropoffLat': dropoffLat,
-        'dropoffLng': dropoffLng,
-        'driverLat': null,
-        'driverLng': null,
-        'distanceKm': distanceKm,
-        'price': estimatedPrice,
-        'unreadForCustomer': 0,
-        'unreadForDriver': 0,
-        'notificationStatus': 'created',
-        'customerNotificationsEnabled':
-            appSettingsController.orderNotificationsEnabled,
-      });
+      final order = await EfataApiClient.instance.createOrder(
+        pickup: pickupController.text.trim(),
+        pickupLat: pickupLat!,
+        pickupLng: pickupLng!,
+        dropoff: dropoffController.text.trim(),
+        dropoffLat: dropoffLat!,
+        dropoffLng: dropoffLng!,
+        item: itemController.text.trim(),
+        vehicleType: vehicleType,
+        paymentMethod: paymentMethod,
+        amount: estimatedPrice,
+        scheduledFor: scheduledPickupAt,
+      );
 
       if (!mounted) return;
-
       AppNotificationBannerService.success(
         'Your delivery request has been created.',
         title: 'Request sent',
       );
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => TrackDeliveryScreen(orderId: docRef.id),
+          builder: (_) => TrackDeliveryScreen(orderId: order.id),
         ),
       );
+      return;
     } on EfataApiException catch (error) {
       AppNotificationBannerService.error(
         _apiOrderError(error.code),

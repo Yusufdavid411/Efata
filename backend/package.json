@@ -5,11 +5,6 @@
   "engines": { "node": "24.x" },
   "scripts": {
     "test": "node --test",
-    "snapshot": "node scripts/snapshot.mjs",
-    "import:snapshot": "node scripts/import.mjs",
-    "audit:archive": "node scripts/audit-archive.mjs",
-    "materialize:core": "node scripts/materialize-core.mjs",
-    "verify:core": "node scripts/verify-core.mjs",
     "smoke:runtime": "node scripts/smoke-runtime.mjs",
     "start": "node scripts/serve.mjs"
   },

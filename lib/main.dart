@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:logistics_app/features/booking/customer/customer_home_screen.dart';
 import 'package:logistics_app/features/booking/customer/customer_onboarding_screen.dart';
 import 'package:logistics_app/features/booking/customer/customer_profile_screen.dart';
@@ -19,7 +18,6 @@ import 'package:logistics_app/core/services/voice_navigation_control_service.dar
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
   await VoiceNavigationControlService.stopStaleGuidanceOnFreshLaunch();
   await appSettingsController.loadSettings();
   await ChatNotificationService.instance.initialize();

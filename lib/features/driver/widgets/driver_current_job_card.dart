@@ -1,13 +1,9 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/config/efata_backend_config.dart';
 import '../../../core/models/efata_api_models.dart';
 import '../../../core/services/efata_api_client.dart';
-import 'package:logistics_app/core/services/efata_session.dart';
 import '../driver_active_jobs_screen.dart';
 
 class DriverCurrentJobCard extends StatelessWidget {
@@ -15,88 +11,9 @@ class DriverCurrentJobCard extends StatelessWidget {
 
   final bool showEmptyState;
 
-  String _formatStatus(dynamic status) {
-    switch (status?.toString().toLowerCase()) {
-      case 'accepted':
-        return 'Accepted';
-      case 'intransit':
-      case 'in_transit':
-      case 'in transit':
-        return 'In Transit';
-      default:
-        return status?.toString() ?? 'Active';
-    }
-  }
-
-  int _sortTime(QueryDocumentSnapshot job) {
-    final data = job.data() as Map<String, dynamic>;
-    for (final key in ['startedAt', 'acceptedAt', 'updatedAt', 'createdAt']) {
-      final value = data[key];
-      if (value is Timestamp) return value.millisecondsSinceEpoch;
-    }
-    return 0;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final driver = EfataSession.enabled
-        ? EfataSession.instance.accountUid
-        : FirebaseAuth.instance.currentUser?.uid;
-
-    if (driver == null) return const SizedBox.shrink();
-
-    if (EfataBackendConfig.useNewBackend) {
-      return _ApiCurrentJobCard(showEmptyState: showEmptyState);
-    }
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('driverId', isEqualTo: driver)
-          .limit(25)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return showEmptyState
-              ? const _CurrentJobStateCard(
-                  icon: Icons.sync_rounded,
-                  title: 'Checking current job',
-                  message: 'Your active delivery will appear here.',
-                  isLoading: true,
-                )
-              : const SizedBox.shrink();
-        }
-
-        final activeJobs = snapshot.data!.docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final status = data['status']?.toString().toLowerCase();
-          return status == 'accepted' ||
-              status == 'intransit' ||
-              status == 'in_transit' ||
-              status == 'in transit';
-        }).toList();
-
-        activeJobs.sort((a, b) => _sortTime(b).compareTo(_sortTime(a)));
-
-        if (activeJobs.isEmpty) {
-          return showEmptyState
-              ? const _CurrentJobStateCard(
-                  icon: Icons.local_shipping_outlined,
-                  title: 'No current job',
-                  message:
-                      'Accepted and in-transit deliveries will show here when assigned.',
-                )
-              : const SizedBox.shrink();
-        }
-
-        final data = activeJobs.first.data() as Map<String, dynamic>;
-        return _CurrentJobDetailsCard(
-          orderId: activeJobs.first.id,
-          data: data,
-          status: _formatStatus(data['status']),
-        );
-      },
-    );
+    return _ApiCurrentJobCard(showEmptyState: showEmptyState);
   }
 }
 

@@ -1,26 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/config/efata_backend_config.dart';
 import '../../../core/models/efata_api_models.dart';
 import '../../../core/services/efata_api_client.dart';
-import 'package:logistics_app/core/services/efata_session.dart';
 
 class DriverEarningsSummary extends StatelessWidget {
   const DriverEarningsSummary({super.key});
-
-  double _parsePrice(dynamic price) {
-    if (price is num) return price.toDouble();
-    return double.tryParse(price?.toString() ?? '') ?? 0;
-  }
-
-  bool _isThisMonth(Timestamp? timestamp) {
-    if (timestamp == null) return false;
-    final date = timestamp.toDate();
-    final now = DateTime.now();
-    return date.year == now.year && date.month == now.month;
-  }
 
   void showWithdrawalProcess(BuildContext context, double amount) {
     showModalBottomSheet<void>(
@@ -82,58 +66,8 @@ class DriverEarningsSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final driver = EfataSession.enabled
-        ? EfataSession.instance.accountUid
-        : FirebaseAuth.instance.currentUser?.uid;
-    if (driver == null) return const SizedBox();
-
-    if (EfataBackendConfig.useNewBackend) {
-      return _ApiDriverEarningsSummary(
-        onWithdraw: (amount) => showWithdrawalProcess(context, amount),
-      );
-    }
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('driverId', isEqualTo: driver)
-          .where('status', isEqualTo: 'completed')
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const _EarningsSkeleton();
-        }
-
-        if (snapshot.hasError) {
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Text('Earnings could not load: ${snapshot.error}'),
-            ),
-          );
-        }
-
-        final jobs = snapshot.data?.docs ?? [];
-        double totalEarnings = 0;
-        double monthEarnings = 0;
-
-        for (final job in jobs) {
-          final data = job.data() as Map<String, dynamic>;
-          final price = _parsePrice(data['price']);
-          totalEarnings += price;
-          if (_isThisMonth(data['completedAt'] as Timestamp?)) {
-            monthEarnings += price;
-          }
-        }
-
-        return _EarningsWalletContent(
-          totalEarnings: totalEarnings,
-          monthEarnings: monthEarnings,
-          completedCount: jobs.length,
-          onWithdraw: () => showWithdrawalProcess(context, totalEarnings),
-        );
-      },
+    return _ApiDriverEarningsSummary(
+      onWithdraw: (amount) => showWithdrawalProcess(context, amount),
     );
   }
 }

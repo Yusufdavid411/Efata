@@ -15,7 +15,6 @@ $$;
 
 create table if not exists efata.accounts (
   id uuid primary key default gen_random_uuid(),
-  firebase_uid text unique,
   email text,
   role text not null check (role in ('customer', 'driver', 'admin')),
   display_name text,
@@ -76,7 +75,6 @@ create index if not exists driver_profiles_online_idx
 
 create table if not exists efata.orders (
   id uuid primary key default gen_random_uuid(),
-  firebase_order_id text unique,
   customer_id uuid not null references efata.accounts(id),
   driver_id uuid references efata.accounts(id),
   status text not null default 'pending'
@@ -125,13 +123,11 @@ create unique index if not exists orders_one_active_per_driver
 
 create table if not exists efata.order_messages (
   id uuid primary key default gen_random_uuid(),
-  firebase_message_id text,
   order_id uuid not null references efata.orders(id) on delete cascade,
   sender_id uuid not null references efata.accounts(id),
   sender_role text not null check (sender_role in ('customer', 'driver', 'admin')),
   body text not null check (length(body) between 1 and 4000),
-  created_at timestamptz not null default now(),
-  unique (order_id, firebase_message_id)
+  created_at timestamptz not null default now()
 );
 
 create index if not exists order_messages_order_created_idx
@@ -147,7 +143,6 @@ create table if not exists efata.chat_notification_receipts (
 
 create table if not exists efata.payouts (
   id uuid primary key default gen_random_uuid(),
-  firebase_payout_id text unique,
   driver_id uuid not null references efata.accounts(id),
   amount numeric(14,2) not null check (amount > 0),
   status text not null default 'pending'

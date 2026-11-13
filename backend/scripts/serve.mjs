@@ -9,14 +9,13 @@ import driverLocation from '../api/driver-location.mjs';
 import me from '../api/me.mjs';
 import messages from '../api/messages.mjs';
 import orderAction from '../api/order-action.mjs';
-import orderHistory from '../api/order-history.mjs';
 import orders from '../api/orders.mjs';
 
 const port = Number(process.env.PORT ?? 3000);
 createServer((req, res) => {
   const path = req.url.split('?', 1)[0];
   if (path === '/') return live(req, res);
-  if (path === '/api/account-bootstrap') return accountBootstrap(req, res);
+  if (path === '/api/account-bootstrap' || path === '/api/auth') return accountBootstrap(req, res);
   if (path === '/api/admin-action') return adminAction(req, res);
   if (path === '/api/admin-data') return adminData(req, res);
   if (path === '/api/health') return health(req, res);
@@ -27,7 +26,6 @@ createServer((req, res) => {
   if (path === '/api/messages') return messages(req, res);
   if (path === '/api/orders') return orders(req, res);
   if (path === '/api/order-action') return orderAction(req, res);
-  if (path === '/api/order-history') return orderHistory(req, res);
   res.statusCode = 404;
   res.end();
 }).listen(port, '127.0.0.1', () => console.log('EFATA health check: http://127.0.0.1:' + port + '/api/health'));

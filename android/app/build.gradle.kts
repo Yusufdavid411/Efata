@@ -6,7 +6,6 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    id("com.google.gms.google-services")
 }
 
 val localProperties = Properties()
@@ -25,12 +24,6 @@ val googleRoutesApiKey =
     localProperties.getProperty("GOOGLE_ROUTES_API_KEY")
         ?: (project.findProperty("GOOGLE_ROUTES_API_KEY") as String?)
         ?: System.getenv("GOOGLE_ROUTES_API_KEY")
-        ?: ""
-
-val googleWebClientId =
-    localProperties.getProperty("GOOGLE_WEB_CLIENT_ID")
-        ?: (project.findProperty("GOOGLE_WEB_CLIENT_ID") as String?)
-        ?: System.getenv("GOOGLE_WEB_CLIENT_ID")
         ?: ""
 
 configurations.configureEach {
@@ -62,7 +55,6 @@ android {
         versionName = flutter.versionName
         manifestPlaceholders["GOOGLE_MAPS_ANDROID_API_KEY"] = googleMapsAndroidApiKey
         manifestPlaceholders["GOOGLE_ROUTES_API_KEY"] = googleRoutesApiKey
-        manifestPlaceholders["GOOGLE_WEB_CLIENT_ID"] = googleWebClientId
     }
 
     buildTypes {

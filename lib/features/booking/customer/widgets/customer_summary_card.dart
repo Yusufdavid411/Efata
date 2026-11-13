@@ -1,8 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../core/config/efata_backend_config.dart';
 import '../../../../core/models/efata_api_models.dart';
 import '../../../../core/services/efata_api_client.dart';
 
@@ -11,41 +8,7 @@ class CustomerSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (EfataBackendConfig.useNewBackend) {
-      return const _ApiCustomerSummaryCard();
-    }
-    final user = FirebaseAuth.instance.currentUser;
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('customerId', isEqualTo: user?.uid)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const _CustomerSummaryLoading();
-        }
-
-        final orders = snapshot.data!.docs;
-        int active = 0;
-        int completed = 0;
-        int pending = 0;
-
-        for (final order in orders) {
-          final data = order.data() as Map<String, dynamic>;
-          final status = data['status']?.toString();
-          if (status == 'completed') completed++;
-          if (status == 'pending') pending++;
-          if (status == 'accepted' || status == 'inTransit') active++;
-        }
-
-        return _SummaryContent(
-          active: active,
-          pending: pending,
-          completed: completed,
-        );
-      },
-    );
+    return const _ApiCustomerSummaryCard();
   }
 }
 

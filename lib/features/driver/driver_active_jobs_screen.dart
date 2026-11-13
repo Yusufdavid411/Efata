@@ -1,11 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:logistics_app/core/config/efata_backend_config.dart';
 import 'package:logistics_app/core/models/efata_api_models.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/efata_api_client.dart';
@@ -38,27 +35,14 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     try {
       final position = await LocationService.getCurrentPosition();
 
-      if (EfataBackendConfig.useNewBackend) {
-        if (position != null) {
-          await EfataApiClient.instance.updateDriverLocation(
-            lat: position.latitude,
-            lng: position.longitude,
-            heading: position.heading,
-          );
-        }
-        await EfataApiClient.instance.transitionOrder(id, 'start');
-      } else {
-        await FirebaseFirestore.instance.collection('orders').doc(id).update({
-          'status': 'inTransit',
-          'startedAt': Timestamp.now(),
-          'notificationStatus': 'inTransit',
-          if (position != null) ...{
-            'driverLat': position.latitude,
-            'driverLng': position.longitude,
-            'lastLocationUpdate': Timestamp.now(),
-          },
-        });
+      if (position != null) {
+        await EfataApiClient.instance.updateDriverLocation(
+          lat: position.latitude,
+          lng: position.longitude,
+          heading: position.heading,
+        );
       }
+      await EfataApiClient.instance.transitionOrder(id, 'start');
 
       startLiveLocationTracking(id);
       return true;
@@ -130,32 +114,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     await VoiceNavigationControlService.stopActiveGuidance();
 
     try {
-      if (EfataBackendConfig.useNewBackend) {
-        await EfataApiClient.instance.transitionOrder(id, 'complete');
-      } else {
-        await FirebaseFirestore.instance.collection('orders').doc(id).update({
-          'status': 'completed',
-          'completedAt': Timestamp.now(),
-          'deliveryCompletedConfirmed': true,
-          'notificationStatus': 'completed',
-          'unreadForCustomer': 0,
-          'unreadForDriver': 0,
-          'chatClosedAt': Timestamp.now(),
-          'voiceNavigationStatus': 'stopped',
-          'voiceNavigationStoppedAt': Timestamp.now(),
-          'paymentStatus': paymentReceived
-              ? 'paid'
-              : data['paymentStatus'] ?? 'pending',
-          'paymentConfirmedAt': paymentReceived ? Timestamp.now() : null,
-          if (!paymentReceived) ...{
-            'paymentReviewRequired': true,
-            'paymentIssue': 'Delivery completed without confirmed payment',
-            'paymentIssueOpenedBy': 'driver',
-            'paymentIssueOpenedAt': Timestamp.now(),
-            'needsAdminReview': true,
-          },
-        });
-      }
+      await EfataApiClient.instance.transitionOrder(id, 'complete');
 
       if (!mounted) return;
       AppNotificationBannerService.success(
@@ -242,34 +201,13 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
             distanceFilter: 10,
           ),
         ).listen((position) {
-          if (EfataBackendConfig.useNewBackend) {
-            final now = DateTime.now();
-            final lastPush = _lastApiLocationPushAt;
-            if (lastPush != null && now.difference(lastPush).inSeconds < 5) {
-              return;
-            }
-            _lastApiLocationPushAt = now;
-            unawaited(_pushApiLocation(position));
-          } else {
-            FirebaseFirestore.instance
-                .collection('orders')
-                .doc(orderId)
-                .update({
-                  'driverLat': position.latitude,
-                  'driverLng': position.longitude,
-                  'lastLocationUpdate': Timestamp.now(),
-                });
-            final driver = EfataSession.enabled
-                ? EfataSession.instance.accountUid
-                : FirebaseAuth.instance.currentUser?.uid;
-            if (driver != null) {
-              FirebaseFirestore.instance.collection('drivers').doc(driver).set({
-                'driverLat': position.latitude,
-                'driverLng': position.longitude,
-                'lastLocationUpdate': Timestamp.now(),
-              }, SetOptions(merge: true));
-            }
+          final now = DateTime.now();
+          final lastPush = _lastApiLocationPushAt;
+          if (lastPush != null && now.difference(lastPush).inSeconds < 5) {
+            return;
           }
+          _lastApiLocationPushAt = now;
+          unawaited(_pushApiLocation(position));
         });
   }
 
@@ -286,11 +224,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
   }
 
   String formatTime(dynamic ts) {
-    final DateTime? d = ts is Timestamp
-        ? ts.toDate()
-        : ts is DateTime
-        ? ts
-        : null;
+    final DateTime? d = ts is DateTime ? ts : null;
     if (d == null) return 'Not available';
     final hour = d.hour.toString().padLeft(2, '0');
     final minute = d.minute.toString().padLeft(2, '0');
@@ -312,9 +246,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final driver = EfataSession.enabled
-        ? EfataSession.instance.accountUid
-        : FirebaseAuth.instance.currentUser?.uid;
+    final driver = EfataSession.instance.accountUid;
 
     if (driver == null) {
       return Scaffold(
@@ -325,67 +257,10 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Current Job"), centerTitle: true),
-      body: EfataBackendConfig.useNewBackend
-          ? _ApiDriverActiveJobBody(
-              initialOrderId: widget.initialOrderId,
-              builder: _buildActiveJob,
-            )
-          : StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('orders')
-                  .where('driverId', isEqualTo: driver)
-                  .limit(25)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final docs = snapshot.data!.docs;
-
-                final active = docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final status = _normalizeStatus(data['status']);
-                  return status == 'accepted' || status == 'intransit';
-                }).toList();
-
-                if (active.isEmpty) {
-                  return const Center(child: Text("No active job"));
-                }
-
-                active.sort((a, b) {
-                  final aData = a.data() as Map<String, dynamic>;
-                  final bData = b.data() as Map<String, dynamic>;
-                  final aTime =
-                      (aData['startedAt'] as Timestamp?)
-                          ?.millisecondsSinceEpoch ??
-                      (aData['acceptedAt'] as Timestamp?)
-                          ?.millisecondsSinceEpoch ??
-                      (aData['createdAt'] as Timestamp?)
-                          ?.millisecondsSinceEpoch ??
-                      0;
-                  final bTime =
-                      (bData['startedAt'] as Timestamp?)
-                          ?.millisecondsSinceEpoch ??
-                      (bData['acceptedAt'] as Timestamp?)
-                          ?.millisecondsSinceEpoch ??
-                      (bData['createdAt'] as Timestamp?)
-                          ?.millisecondsSinceEpoch ??
-                      0;
-                  return bTime.compareTo(aTime);
-                });
-
-                final preferredJob = widget.initialOrderId == null
-                    ? null
-                    : active.cast<QueryDocumentSnapshot?>().firstWhere(
-                        (doc) => doc?.id == widget.initialOrderId,
-                        orElse: () => null,
-                      );
-                final job = preferredJob ?? active.first;
-                final data = job.data() as Map<String, dynamic>;
-                return _buildActiveJob(context, job.id, data);
-              },
-            ),
+      body: _ApiDriverActiveJobBody(
+        initialOrderId: widget.initialOrderId,
+        builder: _buildActiveJob,
+      ),
     );
   }
 

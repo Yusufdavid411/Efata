@@ -1,10 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-import '../../core/config/efata_backend_config.dart';
 import '../../core/models/efata_api_models.dart';
 import '../../core/services/app_notification_banner_service.dart';
 import '../../core/services/efata_api_client.dart';
@@ -69,132 +67,8 @@ class TrackDeliveryScreen extends StatelessWidget {
     }
   }
 
-  bool _canMarkPaymentSent(String status, String paymentStatus) {
-    if (EfataBackendConfig.useNewBackend) return false;
-    final orderActive = [
-      'accepted',
-      'intransit',
-      'completed',
-    ].contains(status.toLowerCase());
-    final paymentOpen = [
-      'pending',
-      'cashdue',
-    ].contains(paymentStatus.toLowerCase());
-
-    return orderActive && paymentOpen;
-  }
-
-  bool _canReportPaymentIssue(String status, String paymentStatus) {
-    if (EfataBackendConfig.useNewBackend) return false;
-    final closed = [
-      'rejected',
-      'canceled',
-      'cancelled',
-    ].contains(status.toLowerCase());
-    return !closed && paymentStatus.toLowerCase() != 'paid';
-  }
-
   bool _canCancelOrder(String status) {
     return status.toLowerCase() == 'pending';
-  }
-
-  Future<void> _markPaymentSent(
-    BuildContext context,
-    String paymentMethod,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Confirm Payment'),
-        content: Text(
-          paymentMethod == 'Cash on Delivery'
-              ? 'Confirm that you will pay the driver directly when the delivery is completed.'
-              : 'Confirm that you have sent or started this payment outside the app.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    final status = paymentMethod == 'Cash on Delivery'
-        ? 'cashDue'
-        : 'customerSent';
-
-    await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
-      'paymentStatus': status,
-      'paymentCustomerConfirmedAt': FieldValue.serverTimestamp(),
-      'notificationStatus': 'paymentUpdated',
-    }, SetOptions(merge: true));
-
-    if (!context.mounted) return;
-    AppNotificationBannerService.success(
-      'Payment status updated.',
-      title: 'Payment updated',
-    );
-  }
-
-  Future<void> _reportPaymentIssue(BuildContext context) async {
-    final controller = TextEditingController();
-
-    final issue = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Report Payment Issue'),
-        content: TextField(
-          controller: controller,
-          minLines: 3,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            labelText: 'What went wrong?',
-            hintText: 'Example: transfer failed or driver did not receive cash',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final text = controller.text.trim();
-              if (text.isEmpty) return;
-              Navigator.pop(dialogContext, text);
-            },
-            child: const Text('Submit'),
-          ),
-        ],
-      ),
-    );
-
-    controller.dispose();
-
-    if (issue == null || issue.isEmpty) return;
-
-    await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
-      'paymentStatus': 'failed',
-      'disputeStatus': 'open',
-      'disputeReason': issue,
-      'disputeOpenedBy': 'customer',
-      'disputeOpenedAt': FieldValue.serverTimestamp(),
-      'needsAdminReview': true,
-      'notificationStatus': 'paymentIssue',
-    }, SetOptions(merge: true));
-
-    if (!context.mounted) return;
-    AppNotificationBannerService.success(
-      'Payment issue sent to admin.',
-      title: 'Issue reported',
-    );
   }
 
   Future<void> _cancelPendingOrder(BuildContext context) async {
@@ -221,19 +95,7 @@ class TrackDeliveryScreen extends StatelessWidget {
     if (confirmed != true) return;
 
     try {
-      if (EfataBackendConfig.useNewBackend) {
-        await EfataApiClient.instance.transitionOrder(orderId, 'cancel');
-      } else {
-        await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
-          'status': 'canceled',
-          'canceledAt': FieldValue.serverTimestamp(),
-          'canceledBy': 'customer',
-          'notificationStatus': 'canceled',
-          'unreadForCustomer': 0,
-          'unreadForDriver': 0,
-          'chatClosedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
+      await EfataApiClient.instance.transitionOrder(orderId, 'cancel');
     } on EfataApiException catch (error) {
       if (!context.mounted) return;
       AppNotificationBannerService.error(
@@ -295,33 +157,7 @@ class TrackDeliveryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Track Delivery'), centerTitle: true),
-      body: EfataBackendConfig.useNewBackend
-          ? _ApiTrackingBody(orderId: orderId, builder: _buildTrackingBody)
-          : StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('orders')
-                  .doc(orderId)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting &&
-                    !snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (snapshot.hasError) {
-                  return const Center(child: Text('Something went wrong'));
-                }
-
-                if (!snapshot.hasData || !snapshot.data!.exists) {
-                  return const Center(child: Text('Order not found'));
-                }
-
-                return _buildTrackingBody(
-                  context,
-                  snapshot.data!.data() as Map<String, dynamic>,
-                );
-              },
-            ),
+      body: _ApiTrackingBody(orderId: orderId, builder: _buildTrackingBody),
     );
   }
 
@@ -365,12 +201,8 @@ class TrackDeliveryScreen extends StatelessWidget {
           ),
         );
       },
-      onPaymentTap: _canMarkPaymentSent(status, paymentStatus)
-          ? () => _markPaymentSent(context, paymentMethod)
-          : null,
-      onPaymentIssueTap: _canReportPaymentIssue(status, paymentStatus)
-          ? () => _reportPaymentIssue(context)
-          : null,
+      onPaymentTap: null,
+      onPaymentIssueTap: null,
       onCancelTap: _canCancelOrder(status)
           ? () => _cancelPendingOrder(context)
           : null,

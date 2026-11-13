@@ -1,9 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-import '../../../../core/config/efata_backend_config.dart';
 import '../../../../core/models/efata_api_models.dart';
 import '../../../../core/services/efata_api_client.dart';
 import '../../../../core/services/google_route_service.dart';
@@ -16,69 +13,7 @@ class ActiveDeliverySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (EfataBackendConfig.useNewBackend) {
-      return const _ApiActiveDeliverySection();
-    }
-    final user = FirebaseAuth.instance.currentUser;
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('customerId', isEqualTo: user?.uid)
-          .orderBy('createdAt', descending: true)
-          .limit(20)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final orders = snapshot.data?.docs ?? [];
-
-        if (orders.isEmpty) {
-          return const _EmptyOrdersCard();
-        }
-
-        final latest = orders.first;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Your orders',
-                    style: TextStyle(
-                      color: Color(0xFF0F172A),
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pushNamed(context, '/orders'),
-                  child: const Text('See more'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            OrderPreviewCard(
-              order: latest,
-              title:
-                  isCurrentOrder(
-                    ((latest.data() as Map<String, dynamic>)['status'] ?? '')
-                        .toString(),
-                  )
-                  ? 'Active delivery'
-                  : 'Most recent delivery',
-              isPrimary: true,
-            ),
-          ],
-        );
-      },
-    );
+    return const _ApiActiveDeliverySection();
   }
 }
 
@@ -162,14 +97,6 @@ class _ApiActiveDeliverySectionState extends State<_ApiActiveDeliverySection> {
 }
 
 class OrderPreviewCard extends StatelessWidget {
-  OrderPreviewCard({
-    super.key,
-    required QueryDocumentSnapshot order,
-    this.title,
-    this.isPrimary = false,
-  }) : orderId = order.id,
-       data = (order.data() as Map<String, dynamic>);
-
   OrderPreviewCard.api({
     super.key,
     required EfataOrder order,

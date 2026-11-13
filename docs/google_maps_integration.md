@@ -98,7 +98,6 @@ Do not enable other Maps Platform APIs unless a future feature genuinely require
 
 - The map display uses Maps SDK only.
 - The app does not call Places or Geocoding while typing.
-- Saved pickup/drop-off suggestions come from existing Firestore orders.
 - Routes API calls are cached by pickup/drop-off coordinate pair.
 - Driver rerouting calls are cached by rounded driver/target coordinate pair.
 - Driver rerouting is debounced and only recalculates after the target changes, or after the driver moves about 90 meters and at least 25 seconds have passed.
@@ -107,7 +106,6 @@ Do not enable other Maps Platform APIs unless a future feature genuinely require
 - If the pickup/drop-off coordinates do not change, no new route request is made.
 - If Routes API fails or the key is missing, the app falls back to a direct line.
 - Voice navigation only starts when the driver taps Start Voice Navigation or Voice Navigation on the current-job screen.
-- Navigation SDK location writes back to Firestore are throttled to about once every 5 seconds so the customer map can update without excessive writes.
 
 ## Testing
 
@@ -141,4 +139,3 @@ Enable these only if a future feature needs them:
 - Places API or Places Autocomplete: typed address search and autocomplete.
 - Geocoding API: converting map coordinates into human-readable addresses.
 - Distance Matrix API: comparing travel distance/time across many drivers or many destinations.
-- Places API or Places Autocomplete should be considered later if the app needs Google-powered typed address suggestions instead of the current Firestore history and map-pick flow.

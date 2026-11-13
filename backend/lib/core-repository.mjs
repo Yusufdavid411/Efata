@@ -9,7 +9,7 @@ export class ApiError extends Error {
 }
 
 function orderFields() {
-  return `o.id, o.firebase_order_id as "legacyId", o.status,
+  return `o.id, o.status,
     o.pickup_label as pickup, o.pickup_lat as "pickupLat", o.pickup_lng as "pickupLng",
     o.dropoff_label as "dropoff", o.dropoff_lat as "dropoffLat", o.dropoff_lng as "dropoffLng",
     o.item_description as item, o.vehicle_type as "vehicleType",
@@ -36,7 +36,7 @@ export function createCoreRepository({ url, ca }) {
 
   const account = async (uid, client = pool) => {
     const result = await client.query(`
-      select a.id, a.firebase_uid as uid, a.email, a.role,
+      select a.id, a.supabase_auth_id as uid, a.email, a.role,
         a.display_name as "displayName", a.phone, a.photo_url as "photoUrl",
         a.email_verified as "emailVerified", a.profile_completed as "profileCompleted",
         a.account_status as "accountStatus",
@@ -54,7 +54,7 @@ export function createCoreRepository({ url, ca }) {
       from efata.accounts a
       left join efata.customer_profiles cp on cp.account_id = a.id
       left join efata.driver_profiles dp on dp.account_id = a.id
-      where a.firebase_uid = $1
+      where a.supabase_auth_id = $1
     `, [uid]);
     return result.rows[0] ?? null;
   };
@@ -110,68 +110,23 @@ export function createCoreRepository({ url, ca }) {
     const client = await pool.connect();
     try {
       await client.query('begin');
-      let existing = identity.supabaseAuthId
-        ? await client.query(
-          'select id,firebase_uid,role,account_status from efata.accounts where supabase_auth_id=$1 for update',
-          [identity.supabaseAuthId],
-        )
-        : await client.query(
-          'select id,firebase_uid,role from efata.accounts where firebase_uid=$1 for update',
-          [identity.uid],
-        );
-      if (identity.supabaseAuthId && existing.rowCount) {
-        const current = existing.rows[0];
-        if (current.account_status !== 'active') throw new ApiError(403, 'account_unavailable');
-        if (role && role !== current.role) throw new ApiError(409, 'account_role_locked');
+      if (!identity.supabaseAuthId) throw new ApiError(401, 'session_invalid');
+      await client.query('select pg_advisory_xact_lock(hashtext($1))', [identity.supabaseAuthId]);
+      const existing = await account(identity.supabaseAuthId, client);
+      if (existing) {
+        if (existing.accountStatus !== 'active') throw new ApiError(403, 'account_unavailable');
+        if (role && existing.role !== role) throw new ApiError(409, 'account_role_locked');
         await client.query('commit');
-        return account(current.firebase_uid);
+        return existing;
       }
-      if (!existing.rowCount) {
-        existing = await client.query(
-          'select id,firebase_uid,role from efata.accounts where lower(email)=lower($1) for update',
-          [identity.email],
-        );
-      }
-      let accountId;
-      let accountRole;
-      if (existing.rowCount) {
-        if (identity.supabaseAuthId) throw new ApiError(409, 'account_identity_conflict');
-        const current = existing.rows[0];
-        if (current.firebase_uid && current.firebase_uid !== identity.uid) {
-          throw new ApiError(409, 'account_identity_conflict');
-        }
-        if (role && current.role !== role) throw new ApiError(409, 'account_role_locked');
-        accountId = current.id;
-        accountRole = current.role;
-        await client.query(`
-          update efata.accounts set firebase_uid=$2,
-            email=coalesce(email,$3),
-            display_name=case when nullif(display_name,'') is null then $4 else display_name end,
-            photo_url=coalesce(photo_url,$5),
-            email_verified=email_verified or $6
-          where id=$1
-        `, [accountId, identity.uid, identity.email, identity.displayName,
-          identity.photoUrl, identity.emailVerified]);
-      } else {
-        if (!role) throw new ApiError(409, 'account_role_required');
-        const inserted = await client.query(`
-          insert into efata.accounts
-            (firebase_uid,email,role,display_name,photo_url,email_verified,supabase_auth_id)
-          values ($1,$2,$3,$4,$5,$6,$7) returning id,role
-        `, [identity.uid, identity.email, role, identity.displayName,
-          identity.photoUrl, identity.emailVerified, identity.supabaseAuthId ?? null]);
-        accountId = inserted.rows[0].id;
-        accountRole = inserted.rows[0].role;
-      }
-      if (identity.provider) {
-        await client.query(`
-          insert into efata.auth_identities
-            (account_id,provider,provider_subject,email,last_seen_at)
-          values ($1,$2,$3,$4,now())
-          on conflict (provider,provider_subject) do update
-          set account_id=excluded.account_id,email=excluded.email,last_seen_at=now()
-        `, [accountId, identity.provider, identity.uid, identity.email]);
-      }
+      if (!['customer', 'driver'].includes(role)) throw new ApiError(409, 'account_role_required');
+      const inserted = await client.query(`
+        insert into efata.accounts (supabase_auth_id,email,role,email_verified)
+        values ($1,$2,$3,true) on conflict do nothing returning id
+      `, [identity.supabaseAuthId, identity.email, role]);
+      if (!inserted.rowCount) throw new ApiError(409, 'account_identity_conflict');
+      const accountId = inserted.rows[0].id;
+      const accountRole = role;
       if (accountRole === 'customer') {
         await client.query(
           'insert into efata.customer_profiles (account_id) values ($1) on conflict do nothing',
@@ -184,7 +139,7 @@ export function createCoreRepository({ url, ca }) {
         );
       }
       await client.query('commit');
-      return account(identity.uid);
+      return account(identity.supabaseAuthId);
     } catch (error) {
       await client.query('rollback');
       throw error;
@@ -402,7 +357,7 @@ export function createCoreRepository({ url, ca }) {
     let result;
     if (resource === 'drivers') {
       result = await pool.query(`
-        select a.id,a.firebase_uid as "legacyId",a.display_name as name,a.email,a.phone,
+        select a.id,a.supabase_auth_id as "legacyId",a.display_name as name,a.email,a.phone,
           a.photo_url as "photoUrl",a.profile_completed as "profileCompleted",
           a.account_status as "accountStatus",dp.vehicle_type as "vehicleType",
           dp.plate_number as "plateNumber",dp.license_file_key as "licenseFileKey",
@@ -416,7 +371,7 @@ export function createCoreRepository({ url, ca }) {
       `, [limit + 1, offset]);
     } else if (resource === 'users') {
       result = await pool.query(`
-        select a.id,a.firebase_uid as "legacyId",a.display_name as name,a.email,a.phone,
+        select a.id,a.supabase_auth_id as "legacyId",a.display_name as name,a.email,a.phone,
           a.photo_url as "photoUrl",a.role,a.profile_completed as "profileCompleted",
           a.account_status as "accountStatus",(a.account_status='disabled') as "isSuspended",
           a.email_verified as "emailVerified",a.created_at as "createdAt",a.updated_at as "updatedAt"
@@ -424,8 +379,8 @@ export function createCoreRepository({ url, ca }) {
       `, [limit + 1, offset]);
     } else if (resource === 'orders') {
       result = await pool.query(`
-        select ${orderFields()},ca.display_name as "customerName",ca.firebase_uid as "customerId",
-          da.display_name as "driverName",da.firebase_uid as "driverId",
+        select ${orderFields()},ca.display_name as "customerName",ca.supabase_auth_id as "customerId",
+          da.display_name as "driverName",da.supabase_auth_id as "driverId",
           o.needs_admin_review as "needsAdminReview",
           o.payment_review_required as "paymentReviewRequired",
           o.dispute_status as "disputeStatus",o.dispute_note as "disputeNote",
@@ -437,8 +392,8 @@ export function createCoreRepository({ url, ca }) {
       `, [limit + 1, offset]);
     } else if (resource === 'payouts') {
       result = await pool.query(`
-        select p.id,p.firebase_payout_id as "legacyId",p.driver_id as "driverAccountId",
-          a.firebase_uid as "driverId",a.display_name as "driverName",p.amount,p.status,
+        select p.id,p.driver_id as "driverAccountId",
+          a.supabase_auth_id as "driverId",a.display_name as "driverName",p.amount,p.status,
           p.bank_reference as "bankReference",p.requested_at as "createdAt",
           p.processed_at as "processedAt",p.metadata
         from efata.payouts p join efata.accounts a on a.id=p.driver_id
@@ -541,7 +496,7 @@ export function createCoreRepository({ url, ca }) {
       const client = await pool.connect();
       try {
         await client.query('begin');
-        await client.query('select id from efata.accounts where firebase_uid=$1 for update', [uid]);
+        await client.query('select id from efata.accounts where supabase_auth_id=$1 for update', [uid]);
         const actor = await account(uid, client);
         if (!actor || actor.accountStatus !== 'active' || !['customer','driver'].includes(actor.role)) {
           throw new ApiError(403, 'account_unavailable');
@@ -588,7 +543,7 @@ export function createCoreRepository({ url, ca }) {
     },
     async findSupabaseIdentity(id) {
       const result = await pool.query(`
-        select firebase_uid as uid, email, display_name as "displayName",
+        select supabase_auth_id as uid, email, display_name as "displayName",
           photo_url as "photoUrl", email_verified as "emailVerified"
         from efata.accounts where supabase_auth_id=$1 and account_status='active'
       `, [id]);

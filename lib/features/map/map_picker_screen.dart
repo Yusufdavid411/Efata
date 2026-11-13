@@ -1,11 +1,8 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-import '../../core/config/efata_backend_config.dart';
 import '../../core/services/app_notification_banner_service.dart';
 import '../../core/services/efata_api_client.dart';
 import 'package:logistics_app/core/services/efata_session.dart';
@@ -42,17 +39,13 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   }
 
   Future<void> loadRecentPlaces() async {
-    final currentUser = EfataSession.enabled
-        ? EfataSession.instance.accountUid
-        : FirebaseAuth.instance.currentUser?.uid;
+    final currentUser = EfataSession.instance.accountUid;
     if (currentUser == null) return;
 
     try {
-      final orders = EfataBackendConfig.useNewBackend
-          ? (await EfataApiClient.instance.listOrders()).orders.map(
-              (order) => order.toLegacyMap(),
-            )
-          : await _loadLegacyOrders(currentUser);
+      final orders = (await EfataApiClient.instance.listOrders()).orders.map(
+        (order) => order.toLegacyMap(),
+      );
 
       final seen = <String>{};
       final places = <PlaceSuggestion>[];
@@ -73,25 +66,6 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     } catch (_) {
       // Previous places are optional.
     }
-  }
-
-  Future<Iterable<Map<String, dynamic>>> _loadLegacyOrders(String uid) async {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('orders')
-        .where('customerId', isEqualTo: uid)
-        .limit(40)
-        .get();
-
-    final docs = snapshot.docs.toList()
-      ..sort((a, b) {
-        final aTime = a.data()['createdAt'];
-        final bTime = b.data()['createdAt'];
-        final aMillis = aTime is Timestamp ? aTime.millisecondsSinceEpoch : 0;
-        final bMillis = bTime is Timestamp ? bTime.millisecondsSinceEpoch : 0;
-        return bMillis.compareTo(aMillis);
-      });
-
-    return docs.map((doc) => doc.data());
   }
 
   void _addRecentPlace({

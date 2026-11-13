@@ -1,11 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-import '../../../core/config/efata_backend_config.dart';
 import '../../../core/models/efata_api_models.dart';
 import '../../../core/services/efata_api_client.dart';
 import 'package:logistics_app/core/services/efata_session.dart';
@@ -24,7 +21,6 @@ class AvailableJobsSection extends StatefulWidget {
 }
 
 class _AvailableJobsSectionState extends State<AvailableJobsSection> {
-  List<QueryDocumentSnapshot> _cachedJobs = [];
   List<EfataOrder> _cachedApiJobs = const [];
   final Set<String> _hiddenApiJobs = <String>{};
   LatLng? _apiDriverPoint;
@@ -35,16 +31,13 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
   @override
   void initState() {
     super.initState();
-    if (EfataBackendConfig.useNewBackend) {
-      _syncApiRefresh();
-    }
+    _syncApiRefresh();
   }
 
   @override
   void didUpdateWidget(covariant AvailableJobsSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (EfataBackendConfig.useNewBackend &&
-        oldWidget.isOnline != widget.isOnline) {
+    if (oldWidget.isOnline != widget.isOnline) {
       _syncApiRefresh();
     }
   }
@@ -94,16 +87,6 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     }
   }
 
-  String _normalizeStatus(dynamic value) {
-    return value?.toString().toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '') ??
-        '';
-  }
-
-  bool _isApprovedDriver(Map<String, dynamic>? data) {
-    return data?['profileCompleted'] == true &&
-        data?['verificationStatus']?.toString().toLowerCase() == 'approved';
-  }
-
   String formatPrice(dynamic price) {
     if (price == null) return "Price not available";
 
@@ -133,107 +116,9 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
   }
 
   Future<void> acceptJob(String orderId, String driverId) async {
-    if (EfataBackendConfig.useNewBackend) {
-      try {
-        await EfataApiClient.instance.transitionOrder(orderId, 'accept');
-        if (!mounted) return;
-        AppNotificationBannerService.success(
-          'Job accepted. Opening live map.',
-          title: 'Job accepted',
-        );
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DriverActiveJobsScreen(initialOrderId: orderId),
-          ),
-        );
-      } on EfataApiException catch (error) {
-        if (!mounted) return;
-        final message = switch (error.code) {
-          'current_order_active' => 'Complete your current job first.',
-          'approved_online_driver_required' =>
-            'Go online with an approved driver account before accepting jobs.',
-          'order_unavailable' => 'Another driver has accepted this job.',
-          _ => 'This job could not be accepted. Please try again.',
-        };
-        AppNotificationBannerService.error(
-          message,
-          title: error.code == 'current_order_active'
-              ? 'Current job active'
-              : 'Job unavailable',
-        );
-        await _loadApiJobs();
-      }
-      return;
-    }
-
-    final driverProfile = await FirebaseFirestore.instance
-        .collection('drivers')
-        .doc(driverId)
-        .get();
-
-    if (!_isApprovedDriver(driverProfile.data())) {
+    try {
+      await EfataApiClient.instance.transitionOrder(orderId, 'accept');
       if (!mounted) return;
-      AppNotificationBannerService.error(
-        'Admin approval is required before accepting jobs.',
-        title: 'Approval required',
-      );
-      return;
-    }
-
-    final activeJobs = await FirebaseFirestore.instance
-        .collection('orders')
-        .where('driverId', isEqualTo: driverId)
-        .get();
-
-    final hasActive = activeJobs.docs.any((doc) {
-      final status = _normalizeStatus(doc['status']);
-      return status == 'accepted' || status == 'intransit';
-    });
-
-    if (!mounted) return;
-
-    if (hasActive) {
-      AppNotificationBannerService.error(
-        'Complete your current job first.',
-        title: 'Current job active',
-      );
-      return;
-    }
-
-    var accepted = false;
-
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final orderRef = FirebaseFirestore.instance
-          .collection('orders')
-          .doc(orderId);
-      final order = await transaction.get(orderRef);
-      final data = order.data();
-
-      if (data == null ||
-          data['status'] != 'pending' ||
-          data['driverId'] != null) {
-        return;
-      }
-
-      transaction.update(orderRef, {
-        'driverId': driverId,
-        'status': 'accepted',
-        'acceptedAt': Timestamp.now(),
-        'notificationStatus': 'driverAccepted',
-        if (_toDouble(driverProfile.data()?['driverLat']) != null &&
-            _toDouble(driverProfile.data()?['driverLng']) != null) ...{
-          'driverLat': _toDouble(driverProfile.data()?['driverLat']),
-          'driverLng': _toDouble(driverProfile.data()?['driverLng']),
-          'lastLocationUpdate': Timestamp.now(),
-        },
-      });
-      accepted = true;
-    });
-
-    if (!mounted) return;
-
-    if (accepted) {
       AppNotificationBannerService.success(
         'Job accepted. Opening live map.',
         title: 'Job accepted',
@@ -244,12 +129,24 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
           builder: (_) => DriverActiveJobsScreen(initialOrderId: orderId),
         ),
       );
-    } else {
+    } on EfataApiException catch (error) {
+      if (!mounted) return;
+      final message = switch (error.code) {
+        'current_order_active' => 'Complete your current job first.',
+        'approved_online_driver_required' =>
+          'Go online with an approved driver account before accepting jobs.',
+        'order_unavailable' => 'Another driver has accepted this job.',
+        _ => 'This job could not be accepted. Please try again.',
+      };
       AppNotificationBannerService.error(
-        'This job has already been accepted.',
-        title: 'Job unavailable',
+        message,
+        title: error.code == 'current_order_active'
+            ? 'Current job active'
+            : 'Job unavailable',
       );
+      await _loadApiJobs();
     }
+    return;
   }
 
   Future<void> hideJobForDriver(String orderId, String driverId) async {
@@ -329,31 +226,18 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
 
     if (shouldReject != true) return;
 
-    if (EfataBackendConfig.useNewBackend) {
-      setState(() {
-        _hiddenApiJobs.add(orderId);
-        _cachedApiJobs = _cachedApiJobs
-            .where((order) => order.id != orderId)
-            .toList(growable: false);
-      });
-      AppNotificationBannerService.info(
-        'This delivery has been removed from your available jobs.',
-        title: 'Delivery hidden',
-        icon: Icons.visibility_off_outlined,
-      );
-      return;
-    }
-
-    await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
-      'rejectedBy': FieldValue.arrayUnion([driverId]),
+    setState(() {
+      _hiddenApiJobs.add(orderId);
+      _cachedApiJobs = _cachedApiJobs
+          .where((order) => order.id != orderId)
+          .toList(growable: false);
     });
-
-    if (!mounted) return;
     AppNotificationBannerService.info(
       'This delivery has been removed from your available jobs.',
-      title: 'Delivery rejected',
-      icon: Icons.block_rounded,
+      title: 'Delivery hidden',
+      icon: Icons.visibility_off_outlined,
     );
+    return;
   }
 
   void _showJobMapPreview({
@@ -430,35 +314,6 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
         );
       },
     );
-  }
-
-  List<QueryDocumentSnapshot> _prepareJobs(
-    List<QueryDocumentSnapshot> docs,
-    String driverId,
-  ) {
-    final filtered = docs.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-
-      final status = data['status']?.toString() ?? '';
-      final rejectedByRaw = data['rejectedBy'];
-      final rejectedBy = rejectedByRaw is List ? rejectedByRaw : [];
-
-      return status == 'pending' && !rejectedBy.contains(driverId);
-    }).toList();
-
-    filtered.sort((a, b) {
-      final aData = a.data() as Map<String, dynamic>;
-      final bData = b.data() as Map<String, dynamic>;
-
-      final aTime =
-          (aData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
-      final bTime =
-          (bData['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
-
-      return bTime.compareTo(aTime); // newest first
-    });
-
-    return filtered;
   }
 
   Widget _buildOfflineNotice() {
@@ -635,46 +490,6 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     );
   }
 
-  Widget _buildJobList(BuildContext context, String driverId) {
-    if (_cachedJobs.isEmpty) {
-      return const Text("No available jobs");
-    }
-
-    return Column(
-      children: _cachedJobs.map((job) {
-        return _buildJobCard(
-          context,
-          job.id,
-          job.data() as Map<String, dynamic>,
-          driverId,
-          null,
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildJobListWithDriverPoint(
-    BuildContext context,
-    String driverId,
-    LatLng? driverPoint,
-  ) {
-    if (_cachedJobs.isEmpty) {
-      return const Text("No available jobs");
-    }
-
-    return Column(
-      children: _cachedJobs.map((job) {
-        return _buildJobCard(
-          context,
-          job.id,
-          job.data() as Map<String, dynamic>,
-          driverId,
-          driverPoint,
-        );
-      }).toList(),
-    );
-  }
-
   Widget _buildApiJobs(String driverId) {
     if (!widget.isOnline) {
       return Column(
@@ -722,79 +537,13 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final driver = EfataSession.enabled
-        ? EfataSession.instance.accountUid
-        : FirebaseAuth.instance.currentUser?.uid;
+    final driver = EfataSession.instance.accountUid;
 
     if (driver == null) {
       return const Text("Driver not logged in");
     }
 
-    if (EfataBackendConfig.useNewBackend) {
-      return _buildApiJobs(driver);
-    }
-
-    if (!widget.isOnline) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [_buildOfflineNotice(), _buildJobList(context, driver)],
-      );
-    }
-
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('drivers')
-          .doc(driver)
-          .snapshots(),
-      builder: (context, driverSnapshot) {
-        final driverData = driverSnapshot.data?.data() as Map<String, dynamic>?;
-        final driverLat = _toDouble(driverData?['driverLat']);
-        final driverLng = _toDouble(driverData?['driverLng']);
-        final driverPoint = driverLat != null && driverLng != null
-            ? LatLng(driverLat, driverLng)
-            : null;
-
-        if (driverSnapshot.hasData && !_isApprovedDriver(driverData)) {
-          return Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.orange.shade200),
-            ),
-            child: const Text(
-              "Jobs will appear here after your driver account is approved.",
-            ),
-          );
-        }
-
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('orders')
-              .where('status', isEqualTo: 'pending')
-              .where('driverId', isNull: true)
-              .limit(25)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting &&
-                _cachedJobs.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (snapshot.hasError) {
-              return Text("Something went wrong: ${snapshot.error}");
-            }
-
-            if (snapshot.hasData) {
-              _cachedJobs = _prepareJobs(snapshot.data!.docs, driver);
-            }
-
-            return _buildJobListWithDriverPoint(context, driver, driverPoint);
-          },
-        );
-      },
-    );
+    return _buildApiJobs(driver);
   }
 }
 

@@ -14,7 +14,7 @@ const repository = createCoreRepository({
 await client.connect();
 try {
   const sample = await client.query(`
-    select a.firebase_uid from efata.accounts a
+    select a.supabase_auth_id from efata.accounts a
     left join efata.customer_profiles cp on cp.account_id = a.id
     left join efata.driver_profiles dp on dp.account_id = a.id
     where a.account_status = 'active'
@@ -22,9 +22,9 @@ try {
     order by a.created_at limit 1
   `);
   if (!sample.rowCount) throw new Error('No active EFATA account is available');
-  const account = await repository.getMe(sample.rows[0].firebase_uid);
+  const account = await repository.getMe(sample.rows[0].supabase_auth_id);
   const orders = await repository.listOrders({
-    uid: sample.rows[0].firebase_uid, scope: 'mine', page: 1, limit: 2,
+    uid: sample.rows[0].supabase_auth_id, scope: 'mine', page: 1, limit: 2,
   });
   console.log(JSON.stringify({
     accountLoaded: Boolean(account?.uid),

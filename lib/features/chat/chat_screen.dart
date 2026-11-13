@@ -1,10 +1,7 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/config/efata_backend_config.dart';
 import '../../core/models/efata_api_models.dart';
 import '../../core/services/app_notification_banner_service.dart';
 import '../../core/services/efata_api_client.dart';
@@ -33,36 +30,14 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _apiLoading = false;
   String? _lastMarkedMessageId;
 
-  CollectionReference<Map<String, dynamic>> get messagesRef => FirebaseFirestore
-      .instance
-      .collection('orders')
-      .doc(widget.orderId)
-      .collection('messages');
-
-  String get unreadField => widget.participantRole == 'driver'
-      ? 'unreadForDriver'
-      : 'unreadForCustomer';
-
-  String get recipientUnreadField => widget.participantRole == 'driver'
-      ? 'unreadForCustomer'
-      : 'unreadForDriver';
-
-  String get readAtField => widget.participantRole == 'driver'
-      ? 'driverLastReadAt'
-      : 'customerLastReadAt';
-
   @override
   void initState() {
     super.initState();
-    if (EfataBackendConfig.useNewBackend) {
-      _refreshApiChat();
-      _apiTimer = Timer.periodic(
-        const Duration(seconds: 3),
-        (_) => _refreshApiChat(),
-      );
-    } else {
-      markChatRead();
-    }
+    _refreshApiChat();
+    _apiTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _refreshApiChat(),
+    );
   }
 
   @override
@@ -72,98 +47,9 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> markChatRead() async {
-    if (EfataBackendConfig.useNewBackend) {
-      await EfataApiClient.instance.markMessagesRead(widget.orderId);
-      return;
-    }
-    await FirebaseFirestore.instance
-        .collection('orders')
-        .doc(widget.orderId)
-        .set({
-          unreadField: 0,
-          readAtField: FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true))
-        .catchError((_) {});
-  }
-
   Future<void> sendMessage() async {
-    final user = FirebaseAuth.instance.currentUser;
     final text = controller.text.trim();
-
-    if (text.isEmpty || isSending) return;
-
-    if (EfataBackendConfig.useNewBackend) {
-      await _sendApiMessage(text);
-      return;
-    }
-    if (user == null) return;
-
-    setState(() => isSending = true);
-
-    try {
-      final order = await FirebaseFirestore.instance
-          .collection('orders')
-          .doc(widget.orderId)
-          .get();
-      final orderData = order.data();
-
-      if (_isClosedOrder(orderData)) {
-        if (!mounted) return;
-        AppNotificationBannerService.error(
-          'This delivery has ended, so the chat is now closed.',
-          title: 'Chat closed',
-        );
-        setState(() => isSending = false);
-        return;
-      }
-
-      controller.clear();
-
-      await messagesRef.add({
-        'text': text,
-        'senderId': user.uid,
-        'senderName': user.displayName ?? user.email ?? widget.participantRole,
-        'senderRole': widget.participantRole,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      if (!mounted) return;
-      AppNotificationBannerService.error(
-        'Message failed: $e',
-        title: 'Message not sent',
-      );
-      if (mounted) {
-        setState(() => isSending = false);
-      }
-      return;
-    }
-
-    try {
-      await FirebaseFirestore.instance
-          .collection('orders')
-          .doc(widget.orderId)
-          .set({
-            'lastMessage': text,
-            'lastMessageAt': FieldValue.serverTimestamp(),
-            'lastMessageSenderId': user.uid,
-            'lastMessageSenderRole': widget.participantRole,
-            recipientUnreadField: FieldValue.increment(1),
-            unreadField: 0,
-            readAtField: FieldValue.serverTimestamp(),
-            'notificationStatus': 'chatMessage',
-          }, SetOptions(merge: true));
-    } catch (e) {
-      if (!mounted) return;
-      AppNotificationBannerService.error(
-        'Message sent, but alert failed: $e',
-        title: 'Alert not sent',
-      );
-    } finally {
-      if (mounted) {
-        setState(() => isSending = false);
-      }
-    }
+    if (text.isNotEmpty && !isSending) await _sendApiMessage(text);
   }
 
   Future<void> _sendApiMessage(String text) async {
@@ -231,30 +117,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  String formatTime(dynamic value) {
-    if (value is! Timestamp) return '';
-
-    final date = value.toDate();
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-
-    return '$hour:$minute';
-  }
-
-  bool _isClosedOrder(Map<String, dynamic>? data) {
-    if (data == null || data['chatClosedAt'] != null) return true;
-
-    final status = data['status']?.toString().toLowerCase().replaceAll(
-      RegExp(r'[\s_-]+'),
-      '',
-    );
-
-    return status == 'completed' ||
-        status == 'canceled' ||
-        status == 'cancelled' ||
-        status == 'rejected';
-  }
-
   bool _isClosedStatus(String status) {
     final normalized = status.toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '');
     return normalized == 'completed' ||
@@ -264,159 +126,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (EfataBackendConfig.useNewBackend) return _buildApiChat(context);
-    final currentUser = FirebaseAuth.instance.currentUser;
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Delivery Chat'), centerTitle: true),
-      body: Column(
-        children: [
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: messagesRef
-                  .orderBy('createdAt', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting &&
-                    !snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (snapshot.hasError) {
-                  return const Center(child: Text('Chat could not load'));
-                }
-
-                final messages = snapshot.data?.docs ?? [];
-
-                if (messages.isNotEmpty) {
-                  markChatRead();
-                }
-
-                if (messages.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'No messages yet. Start the delivery conversation here.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  reverse: true,
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final data = messages[index].data();
-                    final isMine = data['senderId'] == currentUser?.uid;
-
-                    return Align(
-                      alignment: isMine
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * 0.78,
-                        ),
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 9,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isMine
-                                ? const Color(0xFF0F766E)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: isMine
-                                  ? const Color(0xFF0F766E)
-                                  : const Color(0xFFE2E8F0),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                data['text']?.toString() ?? '',
-                                style: TextStyle(
-                                  color: isMine
-                                      ? Colors.white
-                                      : const Color(0xFF0F172A),
-                                  height: 1.35,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                [
-                                  data['senderRole']?.toString() ?? 'user',
-                                  formatTime(data['createdAt']),
-                                ].where((item) => item.isNotEmpty).join(' - '),
-                                style: TextStyle(
-                                  color: isMine
-                                      ? Colors.white70
-                                      : const Color(0xFF64748B),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          SafeArea(
-            top: false,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      minLines: 1,
-                      maxLines: 4,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => sendMessage(),
-                      decoration: const InputDecoration(
-                        hintText: 'Message about this delivery',
-                        prefixIcon: Icon(Icons.chat_bubble_outline_rounded),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: isSending ? null : sendMessage,
-                    icon: isSending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send_rounded),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => _buildApiChat(context);
 
   Widget _buildApiChat(BuildContext context) {
     final order = _apiOrder;

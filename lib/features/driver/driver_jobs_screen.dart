@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/widgets/app_bottom_navigation.dart';
-import '../../shared/widgets/order_history_preview.dart';
 import 'widgets/driver_current_job_card.dart';
 import 'widgets/driver_history_section.dart';
 
@@ -30,9 +29,6 @@ class DriverJobsContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (OrderHistoryPreview.enabled) {
-      return const OrderHistoryPreview(isDriver: true);
-    }
     return const SafeArea(
       child: SingleChildScrollView(
         padding: EdgeInsets.all(16),

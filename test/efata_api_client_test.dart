@@ -18,7 +18,7 @@ void main() {
           return http.Response(
             jsonEncode({
               'account': {
-                'uid': 'firebase-1',
+                'uid': 'EFATA-1',
                 'email': 'driver@efata.io',
                 'role': 'driver',
                 'displayName': 'David',
@@ -42,7 +42,7 @@ void main() {
   );
 
   test(
-    'a 401 refreshes the Firebase token once and retries the request',
+    'a 401 refreshes the EFATA token once and retries the request',
     () async {
       final refreshes = <bool>[];
       var calls = 0;
