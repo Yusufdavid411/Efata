@@ -1,4 +1,4 @@
-import { allowedOrigins, bearerToken, handleOptions, prepareApi, readJson, sendJson } from '../lib/api-http.mjs';
+import { allowedOrigins, bearerToken, handleOptions, prepareApi, readJson, sendJson } from './api-http.mjs';
 
 export function createAuthHandler({
   url, key, fetcher = fetch, origins = allowedOrigins(),

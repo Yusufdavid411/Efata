@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/auth",
+      "destination": "/api/account-bootstrap?endpoint=auth"
+    },
+    {
       "source": "/",
       "destination": "/api/live"
     }

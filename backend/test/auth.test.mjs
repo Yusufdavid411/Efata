@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAuthHandler } from '../api/auth.mjs';
+import { createAuthHandler } from '../lib/auth-handler.mjs';
 
 test('auth routes registration, sign-in and refresh without allowing admin signup', async () => {
   const calls = [];

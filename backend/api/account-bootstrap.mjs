@@ -3,6 +3,7 @@ import {
 } from '../lib/api-http.mjs';
 import { ApiError } from '../lib/core-repository.mjs';
 import { createRuntime } from '../lib/runtime.mjs';
+import authHandler from '../lib/auth-handler.mjs';
 
 const roles = new Set(['customer', 'driver']);
 
@@ -32,7 +33,13 @@ export function createAccountBootstrapHandler({
 }
 
 const runtime = createRuntime();
-export default createAccountBootstrapHandler(runtime ? {
+const bootstrapHandler = createAccountBootstrapHandler(runtime ? {
   verify: runtime.verifyRegistration,
   bootstrapAccount: runtime.repository.bootstrapAccount,
 } : undefined);
+
+export default function accountEndpoint(req, res) {
+  const url = new URL(req.url, 'http://localhost');
+  return (url.pathname === '/api/auth' || url.searchParams.get('endpoint') === 'auth'
+    ? authHandler : bootstrapHandler)(req, res);
+}
