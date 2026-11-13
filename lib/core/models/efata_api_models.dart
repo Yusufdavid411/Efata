@@ -139,6 +139,34 @@ class EfataOrder {
     startedAt: _dateValue(json['startedAt']),
     completedAt: _dateValue(json['completedAt']),
   );
+
+  Map<String, dynamic> toLegacyMap() => {
+    'pickup': pickup,
+    'pickupLat': pickupLat,
+    'pickupLng': pickupLng,
+    'dropoff': dropoff,
+    'dropoffLat': dropoffLat,
+    'dropoffLng': dropoffLng,
+    'item': item,
+    'vehicleType': vehicleType,
+    'paymentMethod': paymentMethod,
+    'paymentStatus': paymentStatus,
+    'price': amount,
+    'amount': amount,
+    'status': status,
+    'scheduledPickupAt': scheduledFor,
+    'distanceMeters': distanceMeters,
+    'durationSeconds': durationSeconds,
+    'unreadForCustomer': unreadForCustomer,
+    'unreadForDriver': unreadForDriver,
+    'lastMessage': lastMessage,
+    'lastMessageAt': lastMessageAt,
+    'createdAt': createdAt,
+    'updatedAt': updatedAt,
+    'acceptedAt': acceptedAt,
+    'startedAt': startedAt,
+    'completedAt': completedAt,
+  };
 }
 
 class EfataOrderPage {

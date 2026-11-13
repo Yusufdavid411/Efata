@@ -3,6 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../../../core/config/efata_backend_config.dart';
+import '../../../../core/models/efata_api_models.dart';
+import '../../../../core/services/efata_api_client.dart';
 import '../../../../core/services/google_route_service.dart';
 import '../../../tracking/track_delivery_screen.dart';
 
@@ -13,6 +16,9 @@ class ActiveDeliverySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (EfataBackendConfig.useNewBackend) {
+      return const _ApiActiveDeliverySection();
+    }
     final user = FirebaseAuth.instance.currentUser;
 
     return StreamBuilder<QuerySnapshot>(
@@ -76,21 +82,109 @@ class ActiveDeliverySection extends StatelessWidget {
   }
 }
 
+class _ApiActiveDeliverySection extends StatefulWidget {
+  const _ApiActiveDeliverySection();
+
+  @override
+  State<_ApiActiveDeliverySection> createState() =>
+      _ApiActiveDeliverySectionState();
+}
+
+class _ApiActiveDeliverySectionState extends State<_ApiActiveDeliverySection> {
+  late Future<EfataOrderPage> _orders;
+
+  @override
+  void initState() {
+    super.initState();
+    _orders = EfataApiClient.instance.listOrders();
+  }
+
+  Future<void> _refresh() async {
+    final next = EfataApiClient.instance.listOrders();
+    setState(() => _orders = next);
+    await next;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<EfataOrderPage>(
+      future: _orders,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return _OrderLoadError(onRetry: _refresh);
+        }
+        final orders = snapshot.data?.orders ?? const <EfataOrder>[];
+        if (orders.isEmpty) return const _EmptyOrdersCard();
+        final latest = orders.first;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Your orders',
+                    style: TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: _refresh,
+                  tooltip: 'Refresh orders',
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pushNamed(context, '/orders'),
+                  child: const Text('See more'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            OrderPreviewCard.api(
+              order: latest,
+              title: _isCurrentOrder(latest.status)
+                  ? 'Active delivery'
+                  : 'Most recent delivery',
+              isPrimary: true,
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class OrderPreviewCard extends StatelessWidget {
-  const OrderPreviewCard({
+  OrderPreviewCard({
     super.key,
-    required this.order,
+    required QueryDocumentSnapshot order,
     this.title,
     this.isPrimary = false,
-  });
+  }) : orderId = order.id,
+       data = (order.data() as Map<String, dynamic>);
 
-  final QueryDocumentSnapshot order;
+  OrderPreviewCard.api({
+    super.key,
+    required EfataOrder order,
+    this.title,
+    this.isPrimary = false,
+  }) : orderId = order.id,
+       data = order.toLegacyMap();
+
+  final String orderId;
+  final Map<String, dynamic> data;
   final String? title;
   final bool isPrimary;
 
   @override
   Widget build(BuildContext context) {
-    final data = order.data() as Map<String, dynamic>;
     final pickup = data['pickup']?.toString() ?? 'No pickup';
     final dropoff = data['dropoff']?.toString() ?? 'No drop-off';
     final status = data['status']?.toString() ?? 'unknown';
@@ -107,7 +201,7 @@ class OrderPreviewCard extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => TrackDeliveryScreen(orderId: order.id),
+                builder: (_) => TrackDeliveryScreen(orderId: orderId),
               ),
             );
             return;
@@ -256,6 +350,38 @@ class OrderPreviewCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _OrderLoadError extends StatelessWidget {
+  const _OrderLoadError({required this.onRetry});
+
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off_rounded, color: Color(0xFFDC2626)),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Orders could not load. Check your connection and try again.',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            IconButton(
+              onPressed: onRetry,
+              tooltip: 'Retry',
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

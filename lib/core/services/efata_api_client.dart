@@ -68,6 +68,25 @@ class EfataApiClient {
     return EfataOrderPage.fromJson(json);
   }
 
+  Future<List<EfataOrder>> listAllOrders({
+    String scope = 'mine',
+    String? status,
+    int maxPages = 20,
+  }) async {
+    if (maxPages < 1) return const <EfataOrder>[];
+
+    final orders = <EfataOrder>[];
+    var page = 1;
+    while (page <= maxPages) {
+      final result = await listOrders(scope: scope, status: status, page: page);
+      orders.addAll(result.orders);
+      final nextPage = result.nextPage;
+      if (nextPage == null || nextPage <= page) break;
+      page = nextPage;
+    }
+    return List<EfataOrder>.unmodifiable(orders);
+  }
+
   Future<EfataOrder> getOrder(String orderId) async {
     final json = await _request('GET', '/api/orders', query: {'id': orderId});
     return EfataOrder.fromJson(_map(json['order']));

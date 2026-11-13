@@ -157,4 +157,38 @@ void main() {
       ),
     );
   });
+
+  test('listAllOrders follows bounded order pages', () async {
+    final requestedPages = <String?>[];
+    final client = EfataApiClient(
+      tokenProvider: ({required refresh}) async => 'token',
+      httpClient: MockClient((request) async {
+        requestedPages.add(request.url.queryParameters['page']);
+        final page = int.parse(request.url.queryParameters['page']!);
+        return http.Response(
+          jsonEncode({
+            'orders': [
+              {
+                'id': 'order-$page',
+                'status': 'completed',
+                'pickup': 'Pickup',
+                'dropoff': 'Drop-off',
+                'item': 'Parcel',
+                'vehicleType': 'Van',
+                'paymentMethod': 'Transfer',
+                'amount': 1000,
+              },
+            ],
+            'nextPage': page == 1 ? 2 : null,
+          }),
+          200,
+        );
+      }),
+    );
+
+    final orders = await client.listAllOrders();
+
+    expect(requestedPages, ['1', '2']);
+    expect(orders.map((order) => order.id), ['order-1', 'order-2']);
+  });
 }
