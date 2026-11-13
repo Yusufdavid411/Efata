@@ -39,8 +39,10 @@ class ChatNotificationService {
 
   Future<void> _poll() async {
     final uid = EfataSession.instance.accountUid;
-    if (uid == null || _polling ||
-        !appSettingsController.orderNotificationsEnabled) return;
+    if (uid == null ||
+        _polling ||
+        !appSettingsController.orderNotificationsEnabled)
+      return;
     _polling = true;
     try {
       final api = EfataApiClient.instance;
@@ -49,18 +51,24 @@ class ChatNotificationService {
       final prefs = await SharedPreferences.getInstance();
       for (final order in page.orders) {
         if (EfataSession.instance.accountUid != uid) return;
-        if (!['pending', 'accepted', 'inTransit'].contains(order.status)) continue;
+        if (!['pending', 'accepted', 'inTransit'].contains(order.status))
+          continue;
         final unread = account.role == 'driver'
-            ? order.unreadForDriver : order.unreadForCustomer;
+            ? order.unreadForDriver
+            : order.unreadForCustomer;
         final time = order.lastMessageAt?.millisecondsSinceEpoch;
         final message = order.lastMessage;
-        if (unread < 1 || time == null || message == null || message.isEmpty) continue;
+        if (unread < 1 || time == null || message == null || message.isEmpty)
+          continue;
         final key = 'efata-chat-delivered:$uid:${order.id}';
         if (time <= (prefs.getInt(key) ?? 0)) continue;
         await prefs.setInt(key, time);
         if (EfataSession.instance.accountUid != uid) return;
-        await showChatNotification(orderId: order.id,
-          title: account.role == 'driver' ? 'Customer' : 'Driver', body: message);
+        await showChatNotification(
+          orderId: order.id,
+          title: account.role == 'driver' ? 'Customer' : 'Driver',
+          body: message,
+        );
       }
     } catch (_) {
       // Retry on the next poll without interrupting the current screen.

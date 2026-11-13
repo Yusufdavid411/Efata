@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:logistics_app/core/services/efata_api_client.dart';
+import 'package:logistics_app/core/models/efata_api_models.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
@@ -28,10 +28,16 @@ class DriverProfileScreen extends StatefulWidget {
 class _DriverProfileScreenState extends State<DriverProfileScreen> {
   bool isUploading = false;
 
-  Future<void> uploadProfilePicture() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+  late Future<EfataAccount> _profile = EfataApiClient.instance.getMe();
 
+  void _reload() => setState(() => _profile = EfataApiClient.instance.getMe());
+
+  Future<void> _save(Map<String, String> values) async {
+    final updated = await EfataApiClient.instance.updateProfile(values);
+    if (mounted) setState(() => _profile = Future.value(updated));
+  }
+
+  Future<void> uploadProfilePicture() async {
     final image = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (image == null) return;
 
@@ -62,14 +68,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         throw Exception('No image URL returned from Cloudinary');
       }
 
-      await FirebaseFirestore.instance.collection('drivers').doc(user.uid).set({
-        'photoUrl': imageUrl,
-        'updatedAt': Timestamp.now(),
-      }, SetOptions(merge: true));
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'photoUrl': imageUrl,
-        'updatedAt': Timestamp.now(),
-      }, SetOptions(merge: true));
+      await _save({'photoUrl': imageUrl});
 
       if (!mounted) return;
       AppNotificationBannerService.success(
@@ -94,9 +93,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     required String title,
     required String currentValue,
   }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
     final controller = TextEditingController(
       text:
           currentValue == 'Not added' ||
@@ -134,36 +130,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               }
 
               try {
-                await FirebaseFirestore.instance
-                    .collection('drivers')
-                    .doc(user.uid)
-                    .set({
-                      field: value,
-                      'updatedAt': Timestamp.now(),
-                    }, SetOptions(merge: true));
-
-                final userUpdates = <String, dynamic>{
-                  'updatedAt': Timestamp.now(),
-                };
-
-                if (field == 'fullName') {
-                  userUpdates['fullName'] = value;
-                  userUpdates['name'] = value;
-                } else {
-                  userUpdates[field] = value;
-                }
-
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(user.uid)
-                    .set(userUpdates, SetOptions(merge: true));
-
-                if (field == 'fullName') {
-                  await user.updateDisplayName(value);
-                }
-
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-
+                await _save({field == 'fullName' ? 'name' : field: value});
                 if (!mounted) return;
                 AppNotificationBannerService.success(
                   '$title updated successfully.',
@@ -185,9 +152,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   }
 
   Future<void> updateVehicleType(String currentValue) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
     String selected = currentValue == 'Not added' ? 'Truck' : currentValue;
 
     await showDialog(
@@ -228,23 +192,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           ElevatedButton(
             onPressed: () async {
               try {
-                await FirebaseFirestore.instance
-                    .collection('drivers')
-                    .doc(user.uid)
-                    .set({
-                      'vehicleType': selected,
-                      'updatedAt': Timestamp.now(),
-                    }, SetOptions(merge: true));
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(user.uid)
-                    .set({
-                      'vehicleType': selected,
-                      'updatedAt': Timestamp.now(),
-                    }, SetOptions(merge: true));
-
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-
+                await _save({'vehicleType': selected});
                 if (!mounted) return;
                 AppNotificationBannerService.success(
                   'Vehicle updated successfully.',
@@ -329,21 +277,29 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      return const Scaffold(body: Center(child: Text("Not logged in")));
-    }
-
-    final content = StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('drivers')
-          .doc(user.uid)
-          .snapshots(),
+    final content = FutureBuilder<EfataAccount>(
+      future: _profile,
       builder: (context, snapshot) {
-        final data = snapshot.hasData && snapshot.data!.exists
-            ? snapshot.data!.data() as Map<String, dynamic>
-            : <String, dynamic>{};
+        if (snapshot.hasError) {
+          return Center(
+            child: TextButton(
+              onPressed: _reload,
+              child: const Text('Retry profile'),
+            ),
+          );
+        }
+        final user = snapshot.data;
+        if (user == null)
+          return const Center(child: CircularProgressIndicator());
+        final data = <String, dynamic>{
+          'name': user.displayName,
+          'fullName': user.displayName,
+          'phone': user.phone,
+          'photoUrl': user.photoUrl,
+          'profileCompleted': user.profileCompleted,
+          ...?user.driverProfile,
+          'address': user.customerProfile?['defaultPickupAddress'],
+        };
 
         final name =
             data['fullName']?.toString() ??
@@ -543,7 +499,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     ListTile(
                       leading: const Icon(Icons.email_outlined),
                       title: const Text("Email"),
-                      subtitle: Text(user.email ?? 'No email'),
+                      subtitle: Text(user.email),
                     ),
                   ],
                 ),
@@ -577,7 +533,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     ListTile(
                       leading: const Icon(Icons.email_outlined),
                       title: const Text("Email"),
-                      subtitle: Text(user.email ?? 'No email'),
+                      subtitle: Text(user.email),
                     ),
                     tile(
                       title: "Vehicle",

@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:logistics_app/core/services/efata_api_client.dart';
+import 'package:logistics_app/core/models/efata_api_models.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
@@ -23,10 +23,16 @@ class CustomerProfileScreen extends StatefulWidget {
 class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   bool isUploading = false;
 
-  Future<void> uploadProfilePicture() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+  late Future<EfataAccount> _profile = EfataApiClient.instance.getMe();
 
+  void _reload() => setState(() => _profile = EfataApiClient.instance.getMe());
+
+  Future<void> _save(Map<String, String> values) async {
+    final updated = await EfataApiClient.instance.updateProfile(values);
+    if (mounted) setState(() => _profile = Future.value(updated));
+  }
+
+  Future<void> uploadProfilePicture() async {
     final image = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (image == null) return;
 
@@ -58,10 +64,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         throw Exception('No image URL returned from Cloudinary');
       }
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'photoUrl': imageUrl,
-        'updatedAt': Timestamp.now(),
-      }, SetOptions(merge: true));
+      await _save({'photoUrl': imageUrl});
 
       if (!mounted) return;
 
@@ -84,9 +87,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   }
 
   Future<void> showEditProfileForm(Map<String, dynamic> data) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
     final savedName = _customerNameFromData(data);
     final nameController = TextEditingController(
       text: savedName == 'Customer' ? '' : savedName,
@@ -113,7 +113,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Update your display name. Phone, email, and address can be edited directly from your profile details.',
+                  'Update your display name.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Color(0xFF64748B), height: 1.35),
                 ),
@@ -146,27 +146,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       }
 
                       try {
-                        await user.updateDisplayName(name);
-
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(user.uid)
-                            .set({
-                              'customerId': user.uid,
-                              'uid': user.uid,
-                              'email': user.email,
-                              'name': name,
-                              'fullName': name,
-                              'role': 'customer',
-                              'profileCompleted': true,
-                              'onboardingSkipped': false,
-                              'updatedAt': Timestamp.now(),
-                            }, SetOptions(merge: true));
-
-                        if (sheetContext.mounted) {
-                          Navigator.pop(sheetContext);
-                        }
-
+                        await _save({'name': name});
                         if (!mounted) return;
                         AppNotificationBannerService.success(
                           'Profile updated successfully.',
@@ -198,9 +178,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     required TextInputType keyboardType,
     int maxLines = 1,
   }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
     final controller = TextEditingController(
       text: currentValue == 'Not added' ? '' : currentValue,
     );
@@ -253,16 +230,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     }
 
                     try {
-                      await FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(user.uid)
-                          .set({
-                            field: value,
-                            'profileCompleted': true,
-                            'updatedAt': Timestamp.now(),
-                          }, SetOptions(merge: true));
-
-                      if (sheetContext.mounted) Navigator.pop(sheetContext);
+                      await _save({field: value});
                       if (!mounted) return;
                       AppNotificationBannerService.success(
                         '$title updated successfully.',
@@ -277,108 +245,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     }
                   },
                   child: const Text('Save Changes'),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> showEditEmailSheet(String currentEmail) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final controller = TextEditingController(text: currentEmail);
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Edit Email',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'EFATA will send a verification link to the new email before it becomes active.',
-                style: TextStyle(color: Color(0xFF64748B), height: 1.35),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final email = controller.text.trim();
-                    if (email.isEmpty || !email.contains('@')) {
-                      AppNotificationBannerService.error(
-                        'Enter a valid email address.',
-                        title: 'Invalid email',
-                      );
-                      return;
-                    }
-
-                    if (email.toLowerCase() == currentEmail.toLowerCase()) {
-                      Navigator.pop(sheetContext);
-                      return;
-                    }
-
-                    try {
-                      await user.verifyBeforeUpdateEmail(email);
-                      await FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(user.uid)
-                          .set({
-                            'pendingEmail': email,
-                            'updatedAt': Timestamp.now(),
-                          }, SetOptions(merge: true));
-
-                      if (sheetContext.mounted) Navigator.pop(sheetContext);
-                      if (!mounted) return;
-                      AppNotificationBannerService.success(
-                        'Check $email to confirm your new email address.',
-                        title: 'Verification sent',
-                      );
-                    } on FirebaseAuthException catch (e) {
-                      if (!mounted) return;
-                      final message = e.code == 'requires-recent-login'
-                          ? 'Please log out and sign in again before changing your email.'
-                          : e.message ?? 'Email update failed.';
-                      AppNotificationBannerService.error(
-                        message,
-                        title: 'Email not updated',
-                      );
-                    } catch (e) {
-                      if (!mounted) return;
-                      AppNotificationBannerService.error(
-                        'Email update failed: $e',
-                        title: 'Email not updated',
-                      );
-                    }
-                  },
-                  child: const Text('Send Verification Link'),
                 ),
               ),
             ],
@@ -465,21 +331,29 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      return const Scaffold(body: Center(child: Text("Not logged in")));
-    }
-
-    final content = StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .snapshots(),
+    final content = FutureBuilder<EfataAccount>(
+      future: _profile,
       builder: (context, snapshot) {
-        final data = snapshot.hasData && snapshot.data!.exists
-            ? snapshot.data!.data() as Map<String, dynamic>
-            : <String, dynamic>{};
+        if (snapshot.hasError) {
+          return Center(
+            child: TextButton(
+              onPressed: _reload,
+              child: const Text('Retry profile'),
+            ),
+          );
+        }
+        final user = snapshot.data;
+        if (user == null)
+          return const Center(child: CircularProgressIndicator());
+        final data = <String, dynamic>{
+          'name': user.displayName,
+          'fullName': user.displayName,
+          'phone': user.phone,
+          'photoUrl': user.photoUrl,
+          'profileCompleted': user.profileCompleted,
+          ...?user.driverProfile,
+          'address': user.customerProfile?['defaultPickupAddress'],
+        };
 
         final fullName = _customerNameFromData(data);
 
@@ -583,8 +457,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                   infoTile(
                     icon: Icons.email_outlined,
                     title: "Email",
-                    value: user.email ?? "No email",
-                    onEdit: () => showEditEmailSheet(user.email ?? ''),
+                    value: user.email,
                   ),
                   infoTile(
                     icon: Icons.location_on_outlined,

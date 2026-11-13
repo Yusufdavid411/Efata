@@ -49,14 +49,6 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    nameController.dispose();
-    phoneController.dispose();
-    plateController.dispose();
-    super.dispose();
-  }
-
   Future<void> uploadLicense() async {
     final image = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (image == null) return;
@@ -110,8 +102,6 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
   }
 
   Future<void> submit() async {
-
-    if (user == null) return;
 
     if (nameController.text.trim().isEmpty ||
         phoneController.text.trim().isEmpty ||
