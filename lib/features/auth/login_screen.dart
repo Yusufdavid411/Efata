@@ -1,8 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:logistics_app/core/services/auth_service.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
+import 'package:logistics_app/core/services/account_access_service.dart';
 
 import 'role_selection_screen.dart';
 
@@ -22,6 +22,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool obscurePassword = true;
 
   final AuthService authService = AuthService();
+  final AccountAccessService accountAccessService = AccountAccessService();
 
   @override
   void dispose() {
@@ -60,69 +61,28 @@ class _LoginScreenState extends State<LoginScreen> {
         throw Exception('Login failed. Please try again.');
       }
 
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
+      final access = await accountAccessService.loadCurrent();
       if (!mounted) return;
-
-      if (!userDoc.exists) {
+      if (access == null || !['customer', 'driver'].contains(access.role)) {
         AppNotificationBannerService.error(
           'User role not found. Please register again.',
           title: 'Account setup issue',
         );
         return;
       }
-
-      final userData = userDoc.data() as Map<String, dynamic>;
-      final role = userData['role']?.toString();
-
-      if (userData['isSuspended'] == true) {
+      if (access.isBlocked) {
         await FirebaseAuth.instance.signOut();
         if (!mounted) return;
         AppNotificationBannerService.error(
-          'This account is suspended. Contact support.',
-          title: 'Account suspended',
+          access.driverVerificationStatus == 'rejected'
+              ? 'This driver account was rejected. Contact support.'
+              : 'This account is unavailable. Contact support.',
+          title: 'Account unavailable',
         );
         return;
       }
-
-      if (role == 'driver') {
-        final driverDoc = await FirebaseFirestore.instance
-            .collection('drivers')
-            .doc(user.uid)
-            .get();
-        final driverStatus = driverDoc
-            .data()?['verificationStatus']
-            ?.toString()
-            .toLowerCase();
-
-        if (driverStatus == 'suspended' || driverStatus == 'rejected') {
-          await FirebaseAuth.instance.signOut();
-          if (!mounted) return;
-          AppNotificationBannerService.error(
-            driverStatus == 'rejected'
-                ? 'This driver account was rejected. Contact support.'
-                : 'This driver account is suspended. Contact support.',
-            title: 'Driver account blocked',
-          );
-          return;
-        }
-      }
-
       if (!mounted) return;
-
-      if (role == 'customer') {
-        Navigator.pushReplacementNamed(context, '/customerHome');
-      } else if (role == 'driver') {
-        Navigator.pushReplacementNamed(context, '/driverHome');
-      } else {
-        AppNotificationBannerService.error(
-          'Invalid user role.',
-          title: 'Account setup issue',
-        );
-      }
+      Navigator.pushReplacementNamed(context, access.homeRoute);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
 
@@ -168,90 +128,40 @@ class _LoginScreenState extends State<LoginScreen> {
         throw Exception('Google sign-in failed. Please try again.');
       }
 
-      String? role = await authService.ensureGoogleProfile(user: user);
-      var userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      var access = await accountAccessService.loadCurrent();
+      if (access == null) {
+        var role = await authService.ensureGoogleProfile(user: user);
+        if (role == null || role.isEmpty) {
+          if (!mounted) return;
+          role = await _chooseGoogleRole();
+          if (role == null) {
+            await FirebaseAuth.instance.signOut();
+            return;
+          }
+        }
+        await authService.ensureGoogleProfile(user: user, preferredRole: role);
+        access = await accountAccessService.bootstrap(role: role);
+      } else {
+        await authService.ensureGoogleProfile(
+          user: user,
+          preferredRole: access.role,
+        );
+      }
 
-      if (userDoc.exists && userDoc.data()?['isSuspended'] == true) {
+      if (access.isBlocked) {
         await FirebaseAuth.instance.signOut();
         if (!mounted) return;
         AppNotificationBannerService.error(
-          'This account is suspended. Contact support.',
-          title: 'Account suspended',
+          access.driverVerificationStatus == 'rejected'
+              ? 'This driver account was rejected. Contact support.'
+              : 'This account is unavailable. Contact support.',
+          title: 'Account unavailable',
         );
         return;
       }
 
-      if (role == null || role.isEmpty) {
-        if (!mounted) return;
-        role = await _chooseGoogleRole();
-        if (role == null) {
-          await FirebaseAuth.instance.signOut();
-          return;
-        }
-
-        role = await authService.ensureGoogleProfile(
-          user: user,
-          preferredRole: role,
-        );
-        userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-      }
-
-      if (role == 'driver') {
-        final driverDoc = await FirebaseFirestore.instance
-            .collection('drivers')
-            .doc(user.uid)
-            .get();
-        final driverStatus = driverDoc
-            .data()?['verificationStatus']
-            ?.toString()
-            .toLowerCase();
-
-        if (driverStatus == 'suspended' || driverStatus == 'rejected') {
-          await FirebaseAuth.instance.signOut();
-          if (!mounted) return;
-          AppNotificationBannerService.error(
-            driverStatus == 'rejected'
-                ? 'This driver account was rejected. Contact support.'
-                : 'This driver account is suspended. Contact support.',
-            title: 'Driver account blocked',
-          );
-          return;
-        }
-      }
-
       if (!mounted) return;
-
-      if (role == 'customer') {
-        final completed = userDoc.data()?['profileCompleted'] == true;
-        Navigator.pushReplacementNamed(
-          context,
-          completed ? '/customerHome' : '/customerOnboarding',
-        );
-      } else if (role == 'driver') {
-        final driverDoc = await FirebaseFirestore.instance
-            .collection('drivers')
-            .doc(user.uid)
-            .get();
-        final driverCompleted = driverDoc.data()?['profileCompleted'] == true;
-        if (!mounted) return;
-        Navigator.pushReplacementNamed(
-          context,
-          driverDoc.exists && driverCompleted
-              ? '/driverHome'
-              : '/driverOnboarding',
-        );
-      } else {
-        AppNotificationBannerService.error(
-          'Invalid user role.',
-          title: 'Account setup issue',
-        );
-      }
+      Navigator.pushReplacementNamed(context, access.landingRoute);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
 

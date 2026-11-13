@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/services/account_access_service.dart';
 import '../../core/services/auth_service.dart';
 import '../booking/customer/customer_home_screen.dart';
 import '../driver/driver_home_screen.dart';
@@ -13,64 +14,38 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  Timer? _loginTimer;
+
   @override
   void initState() {
     super.initState();
-    checkLogin();
+    _loginTimer = Timer(const Duration(seconds: 2), checkLogin);
   }
 
   Future<void> checkLogin() async {
-    await Future.delayed(const Duration(seconds: 2));
-
     final authService = AuthService();
     final user = authService.currentUser;
 
     if (!mounted) return;
 
     if (user != null) {
-      final userData = await authService.getUserData(user.uid);
-      final role = userData?['role']?.toString() ?? '';
-      final isSuspended = userData?['isSuspended'] == true;
-
-      if (isSuspended) {
+      final access = await AccountAccessService().loadCurrent();
+      if (access == null || access.isBlocked) {
         await authService.logout();
-
         if (!mounted) return;
-
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),
         );
         return;
       }
-
-      if (role == 'driver') {
-        final driverData = await authService.getDriverData(user.uid);
-        final driverStatus = driverData?['verificationStatus']
-            ?.toString()
-            .toLowerCase();
-
-        if (driverStatus == 'suspended' || driverStatus == 'rejected') {
-          await authService.logout();
-
-          if (!mounted) return;
-
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const LoginScreen()),
-          );
-          return;
-        }
-      }
-
       if (!mounted) return;
-
-      if (role == 'customer') {
+      if (access.role == 'customer') {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
         );
-      } else if (role == 'driver') {
+      } else if (access.role == 'driver') {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
@@ -87,6 +62,12 @@ class _SplashScreenState extends State<SplashScreen> {
         MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
     }
+  }
+
+  @override
+  void dispose() {
+    _loginTimer?.cancel();
+    super.dispose();
   }
 
   @override

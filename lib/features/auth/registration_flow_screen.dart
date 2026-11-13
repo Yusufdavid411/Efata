@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/services/app_notification_banner_service.dart';
+import '../../core/services/account_access_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/email_registration_service.dart';
 import '../../core/services/password_strength_service.dart';
@@ -32,6 +33,7 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
   final confirmPasswordController = TextEditingController();
   final registrationService = EmailRegistrationService.instance;
   final authService = AuthService();
+  final accountAccessService = AccountAccessService();
 
   int step = 0;
   bool isLoading = false;
@@ -172,6 +174,7 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
         email: email,
         password: password,
       );
+      await accountAccessService.bootstrap(role: widget.role);
 
       if (!mounted) return;
       AppNotificationBannerService.success(
@@ -227,8 +230,11 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
         user: user,
         preferredRole: widget.role,
       );
+      final access = await accountAccessService.bootstrap(role: widget.role);
 
-      final route = await _routeForGoogleUser(user.uid, widget.role);
+      final route = access.profileCompleted
+          ? access.homeRoute
+          : await _routeForGoogleUser(user.uid, widget.role);
       if (!mounted) return;
       AppNotificationBannerService.success(
         'Google account connected. Continue your EFATA setup.',
