@@ -7,6 +7,7 @@ import '../../core/services/account_access_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/email_registration_service.dart';
 import '../../core/services/password_strength_service.dart';
+import '../../core/services/efata_session.dart';
 
 class RegistrationFlowScreen extends StatefulWidget {
   const RegistrationFlowScreen({
@@ -79,6 +80,10 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
       return;
     }
 
+    if (EfataSession.enabled) {
+      setState(() => step = 2);
+      return;
+    }
     setState(() => isLoading = true);
 
     try {
@@ -163,6 +168,16 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
     setState(() => isLoading = true);
 
     try {
+      if (EfataSession.enabled) {
+        await EfataSession.instance.register(email, password, widget.role);
+        if (!mounted) return;
+        AppNotificationBannerService.success(
+          'Confirm your email, then sign in to EFATA.',
+          title: 'Check your email',
+        );
+        Navigator.pop(context);
+        return;
+      }
       await registrationService.completeRegistration(
         email: email,
         role: widget.role,
@@ -204,6 +219,7 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
   }
 
   Future<void> continueWithGoogle() async {
+    if (EfataSession.enabled) return;
     setState(() => isGoogleLoading = true);
 
     try {

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/efata_backend_config.dart';
 import '../models/efata_api_models.dart';
+import 'efata_session.dart';
 
 typedef EfataTokenProvider = Future<String?> Function({required bool refresh});
 
@@ -27,7 +28,9 @@ class EfataApiClient {
        _tokenProvider = tokenProvider ?? _firebaseToken,
        _apiOrigin = Uri.parse(apiOrigin);
 
-  static final instance = EfataApiClient();
+  static final instance = EfataApiClient(
+    tokenProvider: EfataSession.enabled ? EfataSession.instance.token : null,
+  );
 
   final http.Client _httpClient;
   final EfataTokenProvider _tokenProvider;

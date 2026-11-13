@@ -15,7 +15,8 @@ export function createSupabaseVerifier({ url, key, findIdentity, fetcher = fetch
     if (!findIdentity) {
       if (typeof user.email !== 'string' || !user.email) return null;
       return { uid: user.id, email: user.email.trim().toLowerCase(),
-        emailVerified: true, supabaseAuthId: user.id };
+        emailVerified: true, supabaseAuthId: user.id,
+        registrationRole: user.user_metadata?.role };
     }
     return await findIdentity(user.id);
   };

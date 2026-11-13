@@ -18,7 +18,7 @@ export function createAccountBootstrapHandler({
       const identity = await authenticate(req, verify);
       if (!identity?.uid) return sendJson(res, 401, { error: 'session_invalid' });
       const body = await readJson(req, 8 * 1024);
-      const role = body.role == null ? null : body.role;
+      const role = body.role ?? identity.registrationRole ?? null;
       if (role != null && !roles.has(role)) return sendJson(res, 400, { error: 'invalid_role' });
       const account = await bootstrapAccount({ identity, role });
       return sendJson(res, 200, { account });

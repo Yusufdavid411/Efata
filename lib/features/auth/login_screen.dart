@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:logistics_app/core/services/auth_service.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/account_access_service.dart';
+import 'package:logistics_app/core/services/efata_api_client.dart';
+import 'package:logistics_app/core/services/efata_session.dart';
 
 import 'role_selection_screen.dart';
 
@@ -33,7 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> loginUser() async {
     final email = emailController.text.trim();
-    final password = passwordController.text.trim();
+    final password = passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
       AppNotificationBannerService.error(
@@ -48,6 +50,17 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      if (EfataSession.enabled) {
+        await EfataSession.instance.signIn(email, password);
+        final access = AccountAccess.fromApi(
+          await EfataApiClient.instance.bootstrapAccount(),
+        );
+        if (access.isBlocked || !['customer', 'driver'].contains(access.role)) {
+          throw const EfataApiException('account_unavailable', statusCode: 403);
+        }
+        if (mounted) Navigator.pushReplacementNamed(context, access.homeRoute);
+        return;
+      }
       await FirebaseAuth.instance.signOut();
 
       final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -83,6 +96,16 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, access.homeRoute);
+    } on EfataApiException catch (error) {
+      EfataSession.instance.clear();
+      if (!mounted) return;
+      AppNotificationBannerService.error(switch (error.code) {
+        'invalid_credentials' => 'Incorrect email or password.',
+        'email_not_confirmed' => 'Confirm your email before signing in.',
+        'account_unavailable' =>
+          'This account is unavailable. Contact support.',
+        _ => 'EFATA sign-in is unavailable for this account.',
+      }, title: 'Login failed');
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
 
@@ -102,6 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       AppNotificationBannerService.error(message, title: 'Login failed');
     } catch (e) {
+      if (EfataSession.enabled) EfataSession.instance.clear();
       if (!mounted) return;
 
       AppNotificationBannerService.error(e.toString(), title: 'Login failed');
@@ -115,6 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> loginWithGoogle() async {
+    if (EfataSession.enabled) return;
     setState(() {
       isGoogleLoading = true;
     });
