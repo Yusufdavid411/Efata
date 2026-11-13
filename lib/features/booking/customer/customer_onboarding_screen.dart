@@ -1,6 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:logistics_app/core/services/efata_api_client.dart';
 
 import '../../../core/services/app_notification_banner_service.dart';
 
@@ -25,22 +24,12 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
   }
 
   Future<void> loadSavedProfile() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      final data = doc.data();
-      final savedName = data?['fullName']?.toString().trim().isNotEmpty == true
-          ? data!['fullName'].toString()
-          : data?['name']?.toString().trim().isNotEmpty == true
-          ? data!['name'].toString()
-          : '';
-      final savedPhone = data?['phone']?.toString() ?? '';
-      final savedAddress = data?['address']?.toString() ?? '';
+      final account = await EfataApiClient.instance.getMe();
+      final savedName = account.displayName;
+      final savedPhone = account.phone ?? '';
+      final savedAddress = account.customerProfile?['defaultPickupAddress']?.toString() ?? '';
 
       if (!mounted) return;
       nameController.text = savedName;
@@ -61,8 +50,6 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
   }
 
   Future<void> submit() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
 
     final name = nameController.text.trim();
     final phone = phoneController.text.trim();
@@ -79,20 +66,9 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
     setState(() => isSaving = true);
 
     try {
-      await user.updateDisplayName(name);
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'uid': user.uid,
-        'customerId': user.uid,
-        'email': user.email,
-        'name': name,
-        'fullName': name,
-        'phone': phone,
-        'address': address,
-        'role': 'customer',
-        'profileCompleted': true,
-        'onboardingSkipped': false,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await EfataApiClient.instance.updateProfile({
+        'name': name, 'phone': phone, 'address': address,
+      });
 
       if (!mounted) return;
       AppNotificationBannerService.success(
@@ -112,39 +88,6 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
   }
 
   Future<void> skip() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      final data = doc.data();
-      final updates = <String, dynamic>{
-        'uid': user.uid,
-        'customerId': user.uid,
-        'email': user.email,
-        'role': 'customer',
-        'profileCompleted': false,
-        'onboardingSkipped': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-      final existingName =
-          data?['fullName']?.toString().trim().isNotEmpty == true
-          ? data!['fullName'].toString()
-          : data?['name']?.toString().trim().isNotEmpty == true
-          ? data!['name'].toString()
-          : null;
-
-      if (existingName != null) {
-        updates['name'] = existingName;
-        updates['fullName'] = existingName;
-      }
-
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        ...updates,
-      }, SetOptions(merge: true));
-    }
-
     if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/customerHome', (_) => false);
   }

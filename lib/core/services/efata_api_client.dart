@@ -38,6 +38,11 @@ class EfataApiClient {
     return EfataAccount.fromJson(_map(json['account']));
   }
 
+  Future<EfataAccount> updateProfile(Map<String, String> fields) async {
+    final json = await _request('PATCH', '/api/me', body: fields);
+    return EfataAccount.fromJson(_map(json['account']));
+  }
+
   Future<EfataAccount> bootstrapAccount({String? role}) async {
     final json = await _request(
       'POST',

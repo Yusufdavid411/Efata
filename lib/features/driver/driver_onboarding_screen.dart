@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:logistics_app/core/services/efata_api_client.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
@@ -31,8 +30,31 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
   @override
   void initState() {
     super.initState();
-    final user = FirebaseAuth.instance.currentUser;
-    nameController.text = user?.displayName ?? '';
+    loadSavedProfile();
+  }
+
+  Future<void> loadSavedProfile() async {
+    try {
+      final account = await EfataApiClient.instance.getMe();
+      if (!mounted) return;
+      nameController.text = account.displayName;
+      phoneController.text = account.phone ?? '';
+      plateController.text = account.driverProfile?['plateNumber']?.toString() ?? '';
+      setState(() {
+        licenseUrl = account.driverProfile?['licenseUrl']?.toString();
+        licenseUploaded = licenseUrl?.isNotEmpty == true;
+      });
+    } catch (_) {
+      if (mounted) AppNotificationBannerService.error('Could not load your profile.');
+    }
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    phoneController.dispose();
+    plateController.dispose();
+    super.dispose();
   }
 
   Future<void> uploadLicense() async {
@@ -88,7 +110,6 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
   }
 
   Future<void> submit() async {
-    final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) return;
 
@@ -105,33 +126,20 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
 
     setState(() => isSaving = true);
 
-    await user.updateDisplayName(nameController.text.trim());
-
-    await FirebaseFirestore.instance.collection('drivers').doc(user.uid).set({
-      'driverId': user.uid,
-      'email': user.email,
-      'fullName': nameController.text.trim(),
-      'phone': phoneController.text.trim(),
-      'vehicleType': vehicleType,
-      'plateNumber': plateController.text.trim(),
-      'licenseUploaded': licenseUploaded,
-      'licenseUrl': licenseUrl,
-      'verificationStatus': 'pending',
-      'profileCompleted': true,
-      'onboardingSkipped': false,
-      'isOnline': false,
-      'updatedAt': Timestamp.now(),
-    }, SetOptions(merge: true));
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-      'name': nameController.text.trim(),
-      'fullName': nameController.text.trim(),
-      'phone': phoneController.text.trim(),
-      'vehicleType': vehicleType,
-      'plateNumber': plateController.text.trim(),
-      'profileCompleted': true,
-      'onboardingSkipped': false,
-      'updatedAt': Timestamp.now(),
-    }, SetOptions(merge: true));
+    try {
+      await EfataApiClient.instance.updateProfile({
+        'name': nameController.text.trim(),
+        'phone': phoneController.text.trim(),
+        'vehicleType': vehicleType,
+        'plateNumber': plateController.text.trim(),
+        'licenseUrl': licenseUrl!,
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => isSaving = false);
+      AppNotificationBannerService.error('Could not save your driver profile.');
+      return;
+    }
 
     if (!mounted) return;
 
@@ -144,30 +152,6 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
   }
 
   Future<void> skipOnboarding() async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user != null) {
-      await FirebaseFirestore.instance.collection('drivers').doc(user.uid).set({
-        'driverId': user.uid,
-        'email': user.email,
-        'fullName': user.displayName ?? 'Driver profile not completed',
-        'phone': 'Not added',
-        'vehicleType': 'Not added',
-        'plateNumber': 'Not added',
-        'licenseUploaded': false,
-        'licenseUrl': null,
-        'verificationStatus': 'incomplete',
-        'profileCompleted': false,
-        'onboardingSkipped': true,
-        'isOnline': false,
-        'updatedAt': Timestamp.now(),
-      }, SetOptions(merge: true));
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'profileCompleted': false,
-        'onboardingSkipped': true,
-        'updatedAt': Timestamp.now(),
-      }, SetOptions(merge: true));
-    }
 
     if (!mounted) return;
 

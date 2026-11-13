@@ -1,14 +1,13 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/app_settings_controller.dart';
 import 'app_notification_banner_service.dart';
-import 'chat_notification_delivery.dart';
+import 'efata_api_client.dart';
+import 'efata_session.dart';
 
 class ChatNotificationService {
   ChatNotificationService._();
@@ -18,29 +17,11 @@ class ChatNotificationService {
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
-  late final ChatNotificationDelivery _delivery = ChatNotificationDelivery(
-    readLocal: (userId, orderId) async {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getInt(_deliveredMessageKey(userId, orderId)) ?? 0;
-    },
-    saveLocal: (userId, orderId, time) async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_deliveredMessageKey(userId, orderId), time);
-    },
-    claimRemote: _claimNotification,
-  );
-  int _session = 0;
-  final List<StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>
-  _orderSubscriptions = [];
-
-  StreamSubscription<User?>? _authSubscription;
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
-  _profileSubscription;
-  String? _listeningRole;
-  bool _initialized = false;
+  Timer? _poller;
+  bool _polling = false;
 
   Future<void> initialize() async {
-    if (_initialized) return;
+    if (_poller != null) return;
 
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
@@ -53,172 +34,38 @@ class ChatNotificationService {
 
     await requestPhonePermission();
 
-    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
-      _clearOrderListeners();
+    _poller = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
+  }
 
-      if (user != null) {
-        _listenForOrderMessages(user.uid);
+  Future<void> _poll() async {
+    final uid = EfataSession.instance.accountUid;
+    if (uid == null || _polling ||
+        !appSettingsController.orderNotificationsEnabled) return;
+    _polling = true;
+    try {
+      final api = EfataApiClient.instance;
+      final account = await api.getMe();
+      final page = await api.listOrders();
+      final prefs = await SharedPreferences.getInstance();
+      for (final order in page.orders) {
+        if (EfataSession.instance.accountUid != uid) return;
+        if (!['pending', 'accepted', 'inTransit'].contains(order.status)) continue;
+        final unread = account.role == 'driver'
+            ? order.unreadForDriver : order.unreadForCustomer;
+        final time = order.lastMessageAt?.millisecondsSinceEpoch;
+        final message = order.lastMessage;
+        if (unread < 1 || time == null || message == null || message.isEmpty) continue;
+        final key = 'efata-chat-delivered:$uid:${order.id}';
+        if (time <= (prefs.getInt(key) ?? 0)) continue;
+        await prefs.setInt(key, time);
+        if (EfataSession.instance.accountUid != uid) return;
+        await showChatNotification(orderId: order.id,
+          title: account.role == 'driver' ? 'Customer' : 'Driver', body: message);
       }
-    });
-
-    _initialized = true;
-  }
-
-  void _listenForOrderMessages(String userId) {
-    final authSession = _session;
-    // Registration can publish the profile after the auth event, so wait for it.
-    _profileSubscription = FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .snapshots()
-        .listen(
-          (profile) {
-            if (FirebaseAuth.instance.currentUser?.uid != userId ||
-                authSession != _session) {
-              return;
-            }
-            final role = profile.data()?['role']?.toString();
-            if (role == _listeningRole) return;
-            _listeningRole = role;
-            for (final subscription in _orderSubscriptions) {
-              subscription.cancel();
-            }
-            _orderSubscriptions.clear();
-            if (role != 'customer' && role != 'driver') return;
-            _orderSubscriptions.add(
-              FirebaseFirestore.instance
-                  .collection('orders')
-                  .where(
-                    role == 'driver' ? 'driverId' : 'customerId',
-                    isEqualTo: userId,
-                  )
-                  .snapshots()
-                  .listen(
-                    (snapshot) =>
-                        _processSnapshot(snapshot, userId, authSession),
-                    onError: (Object error) =>
-                        debugPrint('Chat listener: $error'),
-                  ),
-            );
-          },
-          onError: (Object error) =>
-              debugPrint('Chat profile listener: $error'),
-        );
-  }
-
-  Future<void> _processSnapshot(
-    QuerySnapshot<Map<String, dynamic>> snapshot,
-    String userId,
-    int session,
-  ) async {
-    for (final change in snapshot.docChanges) {
-      if (!_isCurrentSession(userId, session)) return;
-      if (change.type == DocumentChangeType.removed) continue;
-
-      final order = change.doc;
-      final data = order.data();
-      if (data == null) continue;
-
-      final lastMessage = data['lastMessage']?.toString() ?? '';
-      final senderId = data['lastMessageSenderId']?.toString();
-      final lastMessageAt = data['lastMessageAt'];
-      final messageTime = _messageTime(lastMessageAt);
-      final unreadCount = _unreadCountForUser(data, userId);
-      final isClosedOrder = _isClosedOrder(data);
-
-      if (lastMessage.isEmpty || senderId == null || messageTime == null) {
-        if (isClosedOrder) {
-          await _notifications.cancel(id: _notificationId(order.id));
-        }
-        continue;
-      }
-
-      final isOwnMessage = senderId == userId;
-      if (isOwnMessage) continue;
-      final closedTime =
-          _messageTime(data['chatClosedAt']) ??
-          _messageTime(data['completedAt']) ??
-          _messageTime(data['canceledAt']) ??
-          _messageTime(data['rejectedAt']);
-      if (unreadCount <= 0 ||
-          !ChatNotificationDelivery.isEligible(
-            now: DateTime.now(),
-            messageTime: messageTime,
-            isClosed: isClosedOrder,
-            closedTime: closedTime,
-          )) {
-        await _notifications.cancel(id: _notificationId(order.id));
-        continue;
-      }
-      if (!appSettingsController.orderNotificationsEnabled) continue;
-
-      try {
-        await _delivery.deliver(
-          userId: userId,
-          orderId: order.id,
-          messageTime: messageTime,
-          isCurrentSession: () => _isCurrentSession(userId, session),
-          show: () => showChatNotification(
-            orderId: order.id,
-            title: _senderTitle(data['lastMessageSenderRole']),
-            body: lastMessage,
-          ),
-        );
-      } catch (error) {
-        // Fail closed when a receipt cannot be checked (for example offline).
-        debugPrint('Chat notification receipt check failed: $error');
-      }
-    }
-  }
-
-  bool _isCurrentSession(String userId, int session) =>
-      session == _session && FirebaseAuth.instance.currentUser?.uid == userId;
-
-  Future<bool> _claimNotification(String userId, String orderId, int time) {
-    final receipt = FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('chatNotificationReceipts')
-        .doc(orderId);
-    return FirebaseFirestore.instance.runTransaction((transaction) async {
-      final existing = await transaction.get(receipt);
-      final delivered = (existing.data()?['messageTime'] as num?)?.toInt() ?? 0;
-      if (delivered >= time) return false;
-      transaction.set(receipt, {
-        'messageTime': time,
-        'deliveredAt': FieldValue.serverTimestamp(),
-      });
-      return true;
-    });
-  }
-
-  String _deliveredMessageKey(String userId, String orderId) {
-    return 'efata_chat_notified_${userId}_$orderId';
-  }
-
-  int? _messageTime(dynamic value) {
-    if (value is Timestamp) {
-      return value.millisecondsSinceEpoch;
-    }
-    if (value is int) return value;
-    return null;
-  }
-
-  int _unreadCountForUser(Map<String, dynamic> data, String userId) {
-    final isCustomer = data['customerId']?.toString() == userId;
-    final field = isCustomer ? 'unreadForCustomer' : 'unreadForDriver';
-
-    return (data[field] as num?)?.toInt() ?? 0;
-  }
-
-  String _senderTitle(dynamic senderRole) {
-    switch (senderRole?.toString().toLowerCase()) {
-      case 'customer':
-        return 'Customer';
-      case 'driver':
-        return 'Driver';
-      default:
-        return 'Delivery chat';
+    } catch (_) {
+      // Retry on the next poll without interrupting the current screen.
+    } finally {
+      _polling = false;
     }
   }
 
@@ -269,20 +116,6 @@ class ChatNotificationService {
 
   int _notificationId(String orderId) => orderId.hashCode & 0x7fffffff;
 
-  bool _isClosedOrder(Map<String, dynamic> data) {
-    if (data['chatClosedAt'] != null) return true;
-
-    final status = data['status']?.toString().toLowerCase().replaceAll(
-      RegExp(r'[\s_-]+'),
-      '',
-    );
-
-    return status == 'completed' ||
-        status == 'canceled' ||
-        status == 'cancelled' ||
-        status == 'rejected';
-  }
-
   Future<bool?> requestPhonePermission() async {
     return await _notifications
         .resolvePlatformSpecificImplementation<
@@ -299,20 +132,8 @@ class ChatNotificationService {
     );
   }
 
-  void _clearOrderListeners() {
-    _session++;
-    _profileSubscription?.cancel();
-    _profileSubscription = null;
-    _listeningRole = null;
-    for (final subscription in _orderSubscriptions) {
-      subscription.cancel();
-    }
-    _orderSubscriptions.clear();
-  }
-
   Future<void> dispose() async {
-    await _authSubscription?.cancel();
-    _clearOrderListeners();
-    _initialized = false;
+    _poller?.cancel();
+    _poller = null;
   }
 }

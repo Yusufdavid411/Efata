@@ -47,6 +47,7 @@ export function createCoreRepository({ url, ca }) {
         case when dp.account_id is null then null else jsonb_build_object(
           'vehicleType', dp.vehicle_type, 'plateNumber', dp.plate_number,
           'verificationStatus', dp.verification_status, 'isOnline', dp.is_online,
+          'licenseUrl', dp.license_file_key,
           'currentLat', dp.current_lat, 'currentLng', dp.current_lng,
           'heading', dp.heading, 'locationUpdatedAt', dp.location_updated_at,
           'totalEarnings', dp.total_earnings) end as "driverProfile"
@@ -405,6 +406,8 @@ export function createCoreRepository({ url, ca }) {
           a.photo_url as "photoUrl",a.profile_completed as "profileCompleted",
           a.account_status as "accountStatus",dp.vehicle_type as "vehicleType",
           dp.plate_number as "plateNumber",dp.license_file_key as "licenseFileKey",
+          case when dp.license_file_key like 'https://res.cloudinary.com/dk21bi5fg/image/upload/%'
+            then dp.license_file_key end as "licenseUrl",
           dp.verification_status as "verificationStatus",dp.verification_notes as "verificationNotes",
           dp.is_online as "isOnline",dp.total_earnings as "totalEarnings",
           a.created_at as "createdAt",a.updated_at as "updatedAt"
@@ -534,6 +537,55 @@ export function createCoreRepository({ url, ca }) {
     listMessages, sendMessage, markMessagesRead,
     setDriverAvailability, updateDriverLocation, getDriverLocation,
     listAdminResource, performAdminAction,
+    async updateProfile(uid, data) {
+      const client = await pool.connect();
+      try {
+        await client.query('begin');
+        await client.query('select id from efata.accounts where firebase_uid=$1 for update', [uid]);
+        const actor = await account(uid, client);
+        if (!actor || actor.accountStatus !== 'active' || !['customer','driver'].includes(actor.role)) {
+          throw new ApiError(403, 'account_unavailable');
+        }
+        const { name, phone, address, vehicleType, plateNumber, licenseUrl, photoUrl } =
+          Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value.trim()]));
+        if (actor.role === 'customer') {
+          if (vehicleType || plateNumber || licenseUrl) throw new ApiError(400, 'invalid_profile');
+          if (address) await client.query('update efata.customer_profiles set default_pickup_address=$2 where account_id=$1', [actor.id, address]);
+        } else {
+          if (address) throw new ApiError(400, 'invalid_profile');
+          await client.query(`
+            update efata.driver_profiles set vehicle_type=coalesce($2,vehicle_type),
+              plate_number=coalesce($3,plate_number), license_file_key=coalesce($4,license_file_key),
+              verification_status=case when verification_status='approved' and
+                (($2 is not null and vehicle_type is distinct from $2) or
+                 ($3 is not null and plate_number is distinct from $3) or
+                 ($4 is not null and license_file_key is distinct from $4))
+                then 'pending' else verification_status end,
+              is_online=case when ($2 is not null and vehicle_type is distinct from $2) or
+                 ($3 is not null and plate_number is distinct from $3) or
+                 ($4 is not null and license_file_key is distinct from $4)
+                then false else is_online end
+            where account_id=$1
+          `, [actor.id, vehicleType, plateNumber, licenseUrl]);
+        }
+        const complete = Boolean((name ?? actor.displayName) && (phone ?? actor.phone) &&
+          (actor.role === 'customer' ? (address ?? actor.customerProfile?.defaultPickupAddress) :
+            (vehicleType ?? actor.driverProfile?.vehicleType) &&
+            (plateNumber ?? actor.driverProfile?.plateNumber) &&
+            (licenseUrl ?? actor.driverProfile?.licenseUrl)));
+        await client.query(`update efata.accounts set display_name=coalesce($2,display_name),
+          phone=coalesce($3,phone), photo_url=coalesce($4,photo_url), profile_completed=$5 where id=$1`,
+        [actor.id, name, phone, photoUrl, complete]);
+        const updated = await account(uid, client);
+        await client.query('commit');
+        return updated;
+      } catch (error) {
+        await client.query('rollback');
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
     async findSupabaseIdentity(id) {
       const result = await pool.query(`
         select firebase_uid as uid, email, display_name as "displayName",
