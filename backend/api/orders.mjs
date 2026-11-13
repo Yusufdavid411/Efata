@@ -5,6 +5,7 @@ import { ApiError } from '../lib/core-repository.mjs';
 import { createRuntime } from '../lib/runtime.mjs';
 
 const statuses = new Set(['pending', 'accepted', 'inTransit', 'completed', 'canceled']);
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function coordinate(value, min, max) {
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
@@ -35,7 +36,9 @@ export function validateOrder(body) {
   };
 }
 
-export function createOrdersHandler({ verify, listOrders, createOrder, origins = allowedOrigins() } = {}) {
+export function createOrdersHandler({
+  verify, listOrders, getOrder, createOrder, origins = allowedOrigins(),
+} = {}) {
   return async function orders(req, res) {
     if (handleOptions(req, res, ['GET', 'POST'], origins)) return;
     if (!prepareApi(req, res, origins)) return sendJson(res, 403, { error: 'origin_not_allowed' });
@@ -43,7 +46,9 @@ export function createOrdersHandler({ verify, listOrders, createOrder, origins =
       res.setHeader('Allow', 'GET, POST, OPTIONS');
       return sendJson(res, 405, { error: 'method_not_allowed' });
     }
-    if (!verify || !listOrders || !createOrder) return sendJson(res, 503, { error: 'api_not_configured' });
+    if (!verify || !listOrders || !getOrder || !createOrder) {
+      return sendJson(res, 503, { error: 'api_not_configured' });
+    }
     try {
       const identity = await authenticate(req, verify);
       if (!identity?.uid) return sendJson(res, 401, { error: 'session_invalid' });
@@ -53,6 +58,11 @@ export function createOrdersHandler({ verify, listOrders, createOrder, origins =
         return sendJson(res, 201, { order: await createOrder({ uid: identity.uid, order }) });
       }
       const params = new URL(req.url, 'http://localhost').searchParams;
+      const orderId = params.get('id');
+      if (orderId != null) {
+        if (!uuid.test(orderId)) return sendJson(res, 400, { error: 'invalid_order' });
+        return sendJson(res, 200, { order: await getOrder({ uid: identity.uid, orderId }) });
+      }
       const scope = params.get('scope') ?? 'mine';
       const page = Number(params.get('page') ?? '1');
       const status = params.get('status') || null;
@@ -75,5 +85,6 @@ const runtime = createRuntime();
 export default createOrdersHandler(runtime ? {
   verify: runtime.verify,
   listOrders: runtime.repository.listOrders,
+  getOrder: runtime.repository.getOrder,
   createOrder: runtime.repository.createOrder,
 } : undefined);

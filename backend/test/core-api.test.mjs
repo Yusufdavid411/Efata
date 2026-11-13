@@ -92,6 +92,7 @@ test('orders endpoint validates creation and never accepts a caller-selected acc
     origins,
     verify: async () => ({ uid: 'customer-id' }),
     listOrders: async (query) => ({ orders: [], query }),
+    getOrder: async (query) => ({ id: query.orderId, uid: query.uid }),
     createOrder: async (command) => { calls.push(command); return { id: 'new-order' }; },
   });
   const { server, url } = await testServer({ '/api/orders': handler });
@@ -119,6 +120,10 @@ test('orders endpoint validates creation and never accepts a caller-selected acc
     assert.deepEqual((await listed.json()).query, {
       uid: 'customer-id', scope: 'available', page: 2, limit: 25, status: null,
     });
+    const orderId = 'b917c25d-bbd4-4a58-8417-613e64c4ed76';
+    const single = await fetch(`${url}/api/orders?id=${orderId}`, { headers: auth });
+    assert.equal(single.status, 200);
+    assert.deepEqual((await single.json()).order, { id: orderId, uid: 'customer-id' });
   } finally {
     await close(server);
   }

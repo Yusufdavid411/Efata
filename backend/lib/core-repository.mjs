@@ -93,6 +93,17 @@ export function createCoreRepository({ url, ca }) {
     return { orders: result.rows.slice(0, limit), nextPage: result.rows.length > limit ? page + 1 : null };
   };
 
+  const getOrder = async ({ uid, orderId }) => {
+    const actor = await account(uid);
+    if (!actor || actor.accountStatus !== 'active') throw new ApiError(403, 'account_unavailable');
+    const result = await pool.query(`
+      select ${orderFields()} from efata.orders o
+      where o.id=$1 and ($2='admin' or o.customer_id=$3 or o.driver_id=$3)
+    `, [orderId, actor.role, actor.id]);
+    if (!result.rowCount) throw new ApiError(404, 'order_not_found');
+    return result.rows[0];
+  };
+
   const bootstrapAccount = async ({ identity, role }) => {
     if (!identity.email) throw new ApiError(400, 'identity_email_required');
     const client = await pool.connect();
@@ -506,7 +517,7 @@ export function createCoreRepository({ url, ca }) {
   };
 
   return {
-    getMe: account, bootstrapAccount, listOrders, createOrder, transitionOrder,
+    getMe: account, bootstrapAccount, listOrders, getOrder, createOrder, transitionOrder,
     listMessages, sendMessage, markMessagesRead,
     setDriverAvailability, updateDriverLocation, getDriverLocation,
     listAdminResource, performAdminAction,

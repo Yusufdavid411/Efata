@@ -68,6 +68,11 @@ class EfataApiClient {
     return EfataOrderPage.fromJson(json);
   }
 
+  Future<EfataOrder> getOrder(String orderId) async {
+    final json = await _request('GET', '/api/orders', query: {'id': orderId});
+    return EfataOrder.fromJson(_map(json['order']));
+  }
+
   Future<EfataOrder> createOrder({
     required String pickup,
     required double pickupLat,
