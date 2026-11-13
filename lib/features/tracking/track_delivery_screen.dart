@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/config/efata_backend_config.dart';
+import '../../core/models/efata_api_models.dart';
 import '../../core/services/app_notification_banner_service.dart';
+import '../../core/services/efata_api_client.dart';
 import '../chat/chat_screen.dart';
 import '../../shared/widgets/app_live_map.dart';
 
@@ -65,6 +70,7 @@ class TrackDeliveryScreen extends StatelessWidget {
   }
 
   bool _canMarkPaymentSent(String status, String paymentStatus) {
+    if (EfataBackendConfig.useNewBackend) return false;
     final orderActive = [
       'accepted',
       'intransit',
@@ -79,6 +85,7 @@ class TrackDeliveryScreen extends StatelessWidget {
   }
 
   bool _canReportPaymentIssue(String status, String paymentStatus) {
+    if (EfataBackendConfig.useNewBackend) return false;
     final closed = [
       'rejected',
       'canceled',
@@ -213,15 +220,30 @@ class TrackDeliveryScreen extends StatelessWidget {
 
     if (confirmed != true) return;
 
-    await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
-      'status': 'canceled',
-      'canceledAt': FieldValue.serverTimestamp(),
-      'canceledBy': 'customer',
-      'notificationStatus': 'canceled',
-      'unreadForCustomer': 0,
-      'unreadForDriver': 0,
-      'chatClosedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    try {
+      if (EfataBackendConfig.useNewBackend) {
+        await EfataApiClient.instance.transitionOrder(orderId, 'cancel');
+      } else {
+        await FirebaseFirestore.instance.collection('orders').doc(orderId).set({
+          'status': 'canceled',
+          'canceledAt': FieldValue.serverTimestamp(),
+          'canceledBy': 'customer',
+          'notificationStatus': 'canceled',
+          'unreadForCustomer': 0,
+          'unreadForDriver': 0,
+          'chatClosedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } on EfataApiException catch (error) {
+      if (!context.mounted) return;
+      AppNotificationBannerService.error(
+        error.code == 'order_cannot_cancel'
+            ? 'This delivery can no longer be canceled.'
+            : 'The request could not be canceled. Please try again.',
+        title: 'Cancel failed',
+      );
+      return;
+    }
 
     if (!context.mounted) return;
     AppNotificationBannerService.success(
@@ -273,173 +295,298 @@ class TrackDeliveryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Track Delivery'), centerTitle: true),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('orders')
-            .doc(orderId)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: EfataBackendConfig.useNewBackend
+          ? _ApiTrackingBody(orderId: orderId, builder: _buildTrackingBody)
+          : StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('orders')
+                  .doc(orderId)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          if (snapshot.hasError) {
-            return const Center(child: Text('Something went wrong'));
-          }
+                if (snapshot.hasError) {
+                  return const Center(child: Text('Something went wrong'));
+                }
 
-          if (!snapshot.hasData || !snapshot.data!.exists) {
-            return const Center(child: Text('Order not found'));
-          }
+                if (!snapshot.hasData || !snapshot.data!.exists) {
+                  return const Center(child: Text('Order not found'));
+                }
 
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-
-          final pickupLat = _toDouble(data['pickupLat']);
-          final pickupLng = _toDouble(data['pickupLng']);
-          final dropoffLat = _toDouble(data['dropoffLat']);
-          final dropoffLng = _toDouble(data['dropoffLng']);
-          final driverLat = _toDouble(data['driverLat']);
-          final driverLng = _toDouble(data['driverLng']);
-
-          final status = data['status']?.toString() ?? 'pending';
-          final paymentMethod =
-              data['paymentMethod']?.toString() ?? 'Cash on Delivery';
-          final paymentStatus = data['paymentStatus']?.toString() ?? 'pending';
-          final price = data['price'];
-          final unreadMessages =
-              (data['unreadForCustomer'] as num?)?.toInt() ?? 0;
-          final lastMessageSenderRole =
-              data['lastMessageSenderRole']?.toString() ?? '';
-          final isCompleted = status.toLowerCase() == 'completed';
-          final summary = _TrackingSummary(
-            status: _formatStatus(status),
-            message: _progressMessage(status),
-            progressIndex: _progressIndex(status),
-            amount: _formatPrice(price),
-            payment: '$paymentMethod - ${_formatPaymentStatus(paymentStatus)}',
-            unreadMessages: unreadMessages,
-            chatLabel: _chatButtonLabel(
-              unreadMessages,
-              lastMessageSenderRole,
-              'customer',
+                return _buildTrackingBody(
+                  context,
+                  snapshot.data!.data() as Map<String, dynamic>,
+                );
+              },
             ),
-            hasDriverLocation: driverLat != null && driverLng != null,
-            isCompleted: isCompleted,
-            onChat: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      ChatScreen(orderId: orderId, participantRole: 'customer'),
-                ),
-              );
-            },
-            onPaymentTap: _canMarkPaymentSent(status, paymentStatus)
-                ? () => _markPaymentSent(context, paymentMethod)
-                : null,
-            onPaymentIssueTap: _canReportPaymentIssue(status, paymentStatus)
-                ? () => _reportPaymentIssue(context)
-                : null,
-            onCancelTap: _canCancelOrder(status)
-                ? () => _cancelPendingOrder(context)
-                : null,
-          );
+    );
+  }
 
-          if (pickupLat == null ||
-              pickupLng == null ||
-              dropoffLat == null ||
-              dropoffLng == null) {
-            return Column(
-              children: [
-                summary,
-                const Expanded(
-                  child: Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text(
-                        'Map location is not available for this order, but delivery progress will keep updating here.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+  Widget _buildTrackingBody(BuildContext context, Map<String, dynamic> data) {
+    final pickupLat = _toDouble(data['pickupLat']);
+    final pickupLng = _toDouble(data['pickupLng']);
+    final dropoffLat = _toDouble(data['dropoffLat']);
+    final dropoffLng = _toDouble(data['dropoffLng']);
+    final driverLat = _toDouble(data['driverLat']);
+    final driverLng = _toDouble(data['driverLng']);
+
+    final status = data['status']?.toString() ?? 'pending';
+    final paymentMethod =
+        data['paymentMethod']?.toString() ?? 'Cash on Delivery';
+    final paymentStatus = data['paymentStatus']?.toString() ?? 'pending';
+    final price = data['price'];
+    final unreadMessages = (data['unreadForCustomer'] as num?)?.toInt() ?? 0;
+    final lastMessageSenderRole =
+        data['lastMessageSenderRole']?.toString() ?? '';
+    final isCompleted = status.toLowerCase() == 'completed';
+    final summary = _TrackingSummary(
+      status: _formatStatus(status),
+      message: _progressMessage(status),
+      progressIndex: _progressIndex(status),
+      amount: _formatPrice(price),
+      payment: '$paymentMethod - ${_formatPaymentStatus(paymentStatus)}',
+      unreadMessages: unreadMessages,
+      chatLabel: _chatButtonLabel(
+        unreadMessages,
+        lastMessageSenderRole,
+        'customer',
+      ),
+      hasDriverLocation: driverLat != null && driverLng != null,
+      isCompleted: isCompleted,
+      onChat: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                ChatScreen(orderId: orderId, participantRole: 'customer'),
+          ),
+        );
+      },
+      onPaymentTap: _canMarkPaymentSent(status, paymentStatus)
+          ? () => _markPaymentSent(context, paymentMethod)
+          : null,
+      onPaymentIssueTap: _canReportPaymentIssue(status, paymentStatus)
+          ? () => _reportPaymentIssue(context)
+          : null,
+      onCancelTap: _canCancelOrder(status)
+          ? () => _cancelPendingOrder(context)
+          : null,
+    );
+
+    if (pickupLat == null ||
+        pickupLng == null ||
+        dropoffLat == null ||
+        dropoffLng == null) {
+      return Column(
+        children: [
+          summary,
+          const Expanded(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'Map location is not available for this order, but delivery progress will keep updating here.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final pickupPoint = LatLng(pickupLat, pickupLng);
+    final dropoffPoint = LatLng(dropoffLat, dropoffLng);
+    final driverPoint = driverLat != null && driverLng != null
+        ? LatLng(driverLat, driverLng)
+        : null;
+    final normalizedStatus = status.toLowerCase().replaceAll(
+      RegExp(r'[\s_-]+'),
+      '',
+    );
+    final activeTargetPoint = normalizedStatus == 'intransit'
+        ? dropoffPoint
+        : pickupPoint;
+    final activeTargetLabel = normalizedStatus == 'intransit'
+        ? 'Driver heading to drop-off'
+        : 'Driver heading to pickup';
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: AppLiveMap(
+            pickupPoint: pickupPoint,
+            dropoffPoint: dropoffPoint,
+            driverPoint: driverPoint,
+            followDriver: normalizedStatus == 'intransit',
+            activeTargetPoint: activeTargetPoint,
+            activeTargetLabel: activeTargetLabel,
+          ),
+        ),
+        DraggableScrollableSheet(
+          initialChildSize: 0.44,
+          minChildSize: 0.22,
+          maxChildSize: 0.78,
+          builder: (context, scrollController) {
+            return DecoratedBox(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x260F172A),
+                    blurRadius: 18,
+                    offset: Offset(0, -6),
                   ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    Container(
+                      width: 46,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    summary,
+                  ],
                 ),
-              ],
+              ),
             );
-          }
+          },
+        ),
+      ],
+    );
+  }
+}
 
-          final pickupPoint = LatLng(pickupLat, pickupLng);
-          final dropoffPoint = LatLng(dropoffLat, dropoffLng);
+typedef _TrackingBuilder =
+    Widget Function(BuildContext context, Map<String, dynamic> data);
 
-          final driverPoint = driverLat != null && driverLng != null
-              ? LatLng(driverLat, driverLng)
-              : null;
+class _ApiTrackingBody extends StatefulWidget {
+  const _ApiTrackingBody({required this.orderId, required this.builder});
 
-          final normalizedStatus = status.toLowerCase().replaceAll(
-            RegExp(r'[\s_-]+'),
-            '',
-          );
-          final activeTargetPoint = normalizedStatus == 'intransit'
-              ? dropoffPoint
-              : pickupPoint;
-          final activeTargetLabel = normalizedStatus == 'intransit'
-              ? 'Driver heading to drop-off'
-              : 'Driver heading to pickup';
+  final String orderId;
+  final _TrackingBuilder builder;
 
-          return Stack(
-            children: [
-              Positioned.fill(
-                child: AppLiveMap(
-                  pickupPoint: pickupPoint,
-                  dropoffPoint: dropoffPoint,
-                  driverPoint: driverPoint,
-                  followDriver: normalizedStatus == 'intransit',
-                  activeTargetPoint: activeTargetPoint,
-                  activeTargetLabel: activeTargetLabel,
-                ),
-              ),
-              DraggableScrollableSheet(
-                initialChildSize: 0.44,
-                minChildSize: 0.22,
-                maxChildSize: 0.78,
-                builder: (context, scrollController) {
-                  return DecoratedBox(
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(26),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color(0x260F172A),
-                          blurRadius: 18,
-                          offset: Offset(0, -6),
-                        ),
-                      ],
-                    ),
-                    child: SingleChildScrollView(
-                      controller: scrollController,
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 10),
-                          Container(
-                            width: 46,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFCBD5E1),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          summary,
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          );
-        },
+  @override
+  State<_ApiTrackingBody> createState() => _ApiTrackingBodyState();
+}
+
+class _ApiTrackingBodyState extends State<_ApiTrackingBody> {
+  Timer? _timer;
+  EfataOrder? _order;
+  EfataDriverTracking? _tracking;
+  Object? _error;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
+  }
+
+  Future<void> _refresh() async {
+    if (_loading) return;
+    _loading = true;
+    try {
+      final order = await EfataApiClient.instance.getOrder(widget.orderId);
+      final normalized = order.status.toLowerCase().replaceAll(
+        RegExp(r'[\s_-]+'),
+        '',
+      );
+      EfataDriverTracking? tracking;
+      if (normalized == 'accepted' || normalized == 'intransit') {
+        tracking = await EfataApiClient.instance.getDriverLocation(
+          widget.orderId,
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _order = order;
+        _tracking = tracking;
+        _error = null;
+      });
+      if (normalized == 'completed' || normalized == 'canceled') {
+        _timer?.cancel();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error);
+    } finally {
+      _loading = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final order = _order;
+    if (order == null && _error == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (order == null) {
+      return _TrackingLoadError(onRetry: _refresh);
+    }
+
+    final data = order.toLegacyMap();
+    final tracking = _tracking;
+    if (tracking != null) {
+      data['driverLat'] = tracking.lat;
+      data['driverLng'] = tracking.lng;
+      data['driverHeading'] = tracking.heading;
+    }
+    return widget.builder(context, data);
+  }
+}
+
+class _TrackingLoadError extends StatelessWidget {
+  const _TrackingLoadError({required this.onRetry});
+
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.cloud_off_rounded,
+              color: Color(0xFFDC2626),
+              size: 38,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Tracking is temporarily unavailable.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try again'),
+            ),
+          ],
+        ),
       ),
     );
   }
