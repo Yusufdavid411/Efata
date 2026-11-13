@@ -8,6 +8,7 @@ import 'package:logistics_app/core/controllers/app_settings_controller.dart';
 import 'package:logistics_app/core/config/efata_backend_config.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/efata_api_client.dart';
+import 'package:logistics_app/core/services/efata_session.dart';
 import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/core/services/place_suggestion_service.dart';
 import 'package:logistics_app/features/map/map_picker_screen.dart';
@@ -60,7 +61,9 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   }
 
   Future<void> loadRecentPlaces() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
+    final currentUser = EfataSession.enabled
+        ? EfataSession.instance.accountUid
+        : FirebaseAuth.instance.currentUser?.uid;
     if (currentUser == null) return;
 
     try {
@@ -96,7 +99,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
 
       final snapshot = await FirebaseFirestore.instance
           .collection('orders')
-          .where('customerId', isEqualTo: currentUser.uid)
+          .where('customerId', isEqualTo: currentUser)
           .limit(40)
           .get();
 
@@ -352,7 +355,9 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   }
 
   Future<void> submitOrder() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
+    final currentUser = EfataSession.enabled
+        ? EfataSession.instance.accountUid
+        : FirebaseAuth.instance.currentUser?.uid;
 
     if (currentUser == null) {
       AppNotificationBannerService.error(
@@ -412,7 +417,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
         'vehicleType': vehicleType,
         'paymentMethod': paymentMethod,
         'paymentStatus': 'pending',
-        'customerId': currentUser.uid,
+        'customerId': currentUser,
         'driverId': null,
         'status': 'pending',
         'createdAt': Timestamp.now(),

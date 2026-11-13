@@ -8,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../core/config/efata_backend_config.dart';
 import '../../core/services/app_notification_banner_service.dart';
 import '../../core/services/efata_api_client.dart';
+import 'package:logistics_app/core/services/efata_session.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/place_suggestion_service.dart';
 
@@ -41,7 +42,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   }
 
   Future<void> loadRecentPlaces() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
+    final currentUser = EfataSession.enabled
+        ? EfataSession.instance.accountUid
+        : FirebaseAuth.instance.currentUser?.uid;
     if (currentUser == null) return;
 
     try {
@@ -49,7 +52,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
           ? (await EfataApiClient.instance.listOrders()).orders.map(
               (order) => order.toLegacyMap(),
             )
-          : await _loadLegacyOrders(currentUser.uid);
+          : await _loadLegacyOrders(currentUser);
 
       final seen = <String>{};
       final places = <PlaceSuggestion>[];

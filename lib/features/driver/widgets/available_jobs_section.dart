@@ -8,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../core/config/efata_backend_config.dart';
 import '../../../core/models/efata_api_models.dart';
 import '../../../core/services/efata_api_client.dart';
+import 'package:logistics_app/core/services/efata_session.dart';
 import '../../../core/services/google_route_service.dart';
 import '../../../core/services/app_notification_banner_service.dart';
 import '../../../shared/widgets/app_live_map.dart';
@@ -721,27 +722,29 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final driver = FirebaseAuth.instance.currentUser;
+    final driver = EfataSession.enabled
+        ? EfataSession.instance.accountUid
+        : FirebaseAuth.instance.currentUser?.uid;
 
     if (driver == null) {
       return const Text("Driver not logged in");
     }
 
     if (EfataBackendConfig.useNewBackend) {
-      return _buildApiJobs(driver.uid);
+      return _buildApiJobs(driver);
     }
 
     if (!widget.isOnline) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [_buildOfflineNotice(), _buildJobList(context, driver.uid)],
+        children: [_buildOfflineNotice(), _buildJobList(context, driver)],
       );
     }
 
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('drivers')
-          .doc(driver.uid)
+          .doc(driver)
           .snapshots(),
       builder: (context, driverSnapshot) {
         final driverData = driverSnapshot.data?.data() as Map<String, dynamic>?;
@@ -784,14 +787,10 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
             }
 
             if (snapshot.hasData) {
-              _cachedJobs = _prepareJobs(snapshot.data!.docs, driver.uid);
+              _cachedJobs = _prepareJobs(snapshot.data!.docs, driver);
             }
 
-            return _buildJobListWithDriverPoint(
-              context,
-              driver.uid,
-              driverPoint,
-            );
+            return _buildJobListWithDriverPoint(context, driver, driverPoint);
           },
         );
       },

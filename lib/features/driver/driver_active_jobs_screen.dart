@@ -9,6 +9,7 @@ import 'package:logistics_app/core/config/efata_backend_config.dart';
 import 'package:logistics_app/core/models/efata_api_models.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/efata_api_client.dart';
+import 'package:logistics_app/core/services/efata_session.dart';
 import 'package:logistics_app/core/services/location_service.dart';
 import 'package:logistics_app/core/services/voice_navigation_control_service.dart';
 import 'package:logistics_app/shared/widgets/app_live_map.dart';
@@ -258,16 +259,15 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                   'driverLng': position.longitude,
                   'lastLocationUpdate': Timestamp.now(),
                 });
-            final driver = FirebaseAuth.instance.currentUser;
+            final driver = EfataSession.enabled
+                ? EfataSession.instance.accountUid
+                : FirebaseAuth.instance.currentUser?.uid;
             if (driver != null) {
-              FirebaseFirestore.instance
-                  .collection('drivers')
-                  .doc(driver.uid)
-                  .set({
-                    'driverLat': position.latitude,
-                    'driverLng': position.longitude,
-                    'lastLocationUpdate': Timestamp.now(),
-                  }, SetOptions(merge: true));
+              FirebaseFirestore.instance.collection('drivers').doc(driver).set({
+                'driverLat': position.latitude,
+                'driverLng': position.longitude,
+                'lastLocationUpdate': Timestamp.now(),
+              }, SetOptions(merge: true));
             }
           }
         });
@@ -312,7 +312,9 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final driver = FirebaseAuth.instance.currentUser;
+    final driver = EfataSession.enabled
+        ? EfataSession.instance.accountUid
+        : FirebaseAuth.instance.currentUser?.uid;
 
     if (driver == null) {
       return Scaffold(
@@ -331,7 +333,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
           : StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('orders')
-                  .where('driverId', isEqualTo: driver.uid)
+                  .where('driverId', isEqualTo: driver)
                   .limit(25)
                   .snapshots(),
               builder: (context, snapshot) {

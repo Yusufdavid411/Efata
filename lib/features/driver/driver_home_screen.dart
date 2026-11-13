@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:logistics_app/core/config/efata_backend_config.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/efata_api_client.dart';
+import 'package:logistics_app/core/services/efata_session.dart';
 import 'package:logistics_app/core/services/location_service.dart';
 
 import '../../shared/widgets/app_bottom_navigation.dart';
@@ -48,7 +49,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       _loadApiDriverAvailability();
       return;
     }
-    final driver = FirebaseAuth.instance.currentUser;
+    final driver = EfataSession.enabled
+        ? EfataSession.instance.accountUid
+        : FirebaseAuth.instance.currentUser?.uid;
 
     if (driver == null) {
       if (mounted) setState(() => isLoadingAvailability = false);
@@ -57,7 +60,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     driverProfileSubscription = FirebaseFirestore.instance
         .collection('drivers')
-        .doc(driver.uid)
+        .doc(driver)
         .snapshots()
         .listen(
           (doc) {
@@ -108,7 +111,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   Future<void> handleStatusChange(bool value) async {
-    final driver = FirebaseAuth.instance.currentUser;
+    final driver = EfataSession.enabled
+        ? EfataSession.instance.accountUid
+        : FirebaseAuth.instance.currentUser?.uid;
 
     if (driver == null) return;
 
@@ -159,20 +164,17 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           heading: currentPosition?.heading,
         );
       } else {
-        await FirebaseFirestore.instance
-            .collection('drivers')
-            .doc(driver.uid)
-            .set({
-              'isOnline': value,
-              'isAvailable': value,
-              'availabilityUpdatedAt': Timestamp.now(),
-              'updatedAt': Timestamp.now(),
-              if (currentPosition != null) ...{
-                'driverLat': currentPosition.latitude,
-                'driverLng': currentPosition.longitude,
-                'lastLocationUpdate': Timestamp.now(),
-              },
-            }, SetOptions(merge: true));
+        await FirebaseFirestore.instance.collection('drivers').doc(driver).set({
+          'isOnline': value,
+          'isAvailable': value,
+          'availabilityUpdatedAt': Timestamp.now(),
+          'updatedAt': Timestamp.now(),
+          if (currentPosition != null) ...{
+            'driverLat': currentPosition.latitude,
+            'driverLng': currentPosition.longitude,
+            'lastLocationUpdate': Timestamp.now(),
+          },
+        }, SetOptions(merge: true));
       }
 
       setState(() => isOnline = value);
@@ -230,7 +232,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   Future<void> _syncOnlineLocationTracking(bool shouldTrack) async {
-    final driver = FirebaseAuth.instance.currentUser;
+    final driver = EfataSession.enabled
+        ? EfataSession.instance.accountUid
+        : FirebaseAuth.instance.currentUser?.uid;
     if (driver == null) return;
 
     if (!shouldTrack) {
@@ -255,7 +259,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           _lastApiLocationPushAt = now;
           unawaited(_pushApiLocation(position));
         } else {
-          FirebaseFirestore.instance.collection('drivers').doc(driver.uid).set({
+          FirebaseFirestore.instance.collection('drivers').doc(driver).set({
             'driverLat': position.latitude,
             'driverLng': position.longitude,
             'lastLocationUpdate': Timestamp.now(),

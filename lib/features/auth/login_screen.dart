@@ -52,12 +52,12 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       if (EfataSession.enabled) {
         await EfataSession.instance.signIn(email, password);
-        final access = AccountAccess.fromApi(
-          await EfataApiClient.instance.bootstrapAccount(),
-        );
+        final account = await EfataApiClient.instance.bootstrapAccount();
+        final access = AccountAccess.fromApi(account);
         if (access.isBlocked || !['customer', 'driver'].contains(access.role)) {
           throw const EfataApiException('account_unavailable', statusCode: 403);
         }
+        EfataSession.instance.accountUid = account.uid;
         if (mounted) Navigator.pushReplacementNamed(context, access.homeRoute);
         return;
       }

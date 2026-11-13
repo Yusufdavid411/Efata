@@ -91,12 +91,13 @@ class _ChatScreenState extends State<ChatScreen> {
     final user = FirebaseAuth.instance.currentUser;
     final text = controller.text.trim();
 
-    if (user == null || text.isEmpty || isSending) return;
+    if (text.isEmpty || isSending) return;
 
     if (EfataBackendConfig.useNewBackend) {
       await _sendApiMessage(text);
       return;
     }
+    if (user == null) return;
 
     setState(() => isSending = true);
 

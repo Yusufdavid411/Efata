@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'efata_session.dart';
+
 const String googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
 
 class AuthService {
@@ -391,6 +393,10 @@ class AuthService {
 
   // Logout
   Future<void> logout() async {
+    if (EfataSession.enabled) {
+      EfataSession.instance.clear();
+      return;
+    }
     try {
       await _ensureGoogleInitialized();
       await _googleSignIn.signOut();
@@ -420,3 +426,4 @@ class AuthService {
     return doc.data();
   }
 }
+

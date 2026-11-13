@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../../core/config/efata_backend_config.dart';
 import '../../../core/models/efata_api_models.dart';
 import '../../../core/services/efata_api_client.dart';
+import 'package:logistics_app/core/services/efata_session.dart';
 import '../driver_active_jobs_screen.dart';
 
 class DriverCurrentJobCard extends StatelessWidget {
@@ -38,7 +39,9 @@ class DriverCurrentJobCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final driver = FirebaseAuth.instance.currentUser;
+    final driver = EfataSession.enabled
+        ? EfataSession.instance.accountUid
+        : FirebaseAuth.instance.currentUser?.uid;
 
     if (driver == null) return const SizedBox.shrink();
 
@@ -49,7 +52,7 @@ class DriverCurrentJobCard extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('orders')
-          .where('driverId', isEqualTo: driver.uid)
+          .where('driverId', isEqualTo: driver)
           .limit(25)
           .snapshots(),
       builder: (context, snapshot) {

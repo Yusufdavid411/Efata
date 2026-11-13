@@ -15,6 +15,7 @@ class EfataSession {
   int _generation = 0;
 
   bool get signedIn => _access != null;
+  String? accountUid;
 
   Future<void> register(String email, String password, String role) async {
     final response = await http
@@ -47,6 +48,7 @@ class EfataSession {
   }
 
   void clear() {
+    accountUid = null;
     _generation++;
     _access = null;
     _refresh = null;
