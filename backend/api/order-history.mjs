@@ -1,4 +1,4 @@
-import { createPreviewVerifier } from '../lib/preview-auth.mjs';
+import { createRuntime } from '../lib/runtime.mjs';
 import { createPreviewOrderReader } from '../lib/preview-orders.mjs';
 
 export function createOrderHistoryHandler({ verify, read, adminUids = [], origins = [] } = {}) {
@@ -56,11 +56,12 @@ export function createOrderHistoryHandler({ verify, read, adminUids = [], origin
 
 const list = (name) => (process.env[name] ?? '').split(',').map((value) => value.trim()).filter(Boolean);
 const env = process.env;
-const enabled = env.EFATA_ORDER_PREVIEW === '1' && env.EFATA_PREVIEW_DATABASE_URL &&
-  env.EFATA_FIREBASE_LOOKUP_API_KEY && env.EFATA_PREVIEW_SNAPSHOT_ID;
+const runtime = env.EFATA_ORDER_PREVIEW === '1' &&
+  env.EFATA_PREVIEW_DATABASE_URL && env.EFATA_PREVIEW_SNAPSHOT_ID
+  ? createRuntime(env) : null;
 
-export default createOrderHistoryHandler(enabled ? {
-  verify: createPreviewVerifier({ apiKey: env.EFATA_FIREBASE_LOOKUP_API_KEY }),
+export default createOrderHistoryHandler(runtime ? {
+  verify: runtime.verify,
   read: createPreviewOrderReader({
     url: env.EFATA_PREVIEW_DATABASE_URL, ca: env.EFATA_DB_CA_PEM, snapshotId: env.EFATA_PREVIEW_SNAPSHOT_ID,
   }),
