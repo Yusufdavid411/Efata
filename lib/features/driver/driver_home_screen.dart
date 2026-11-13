@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:logistics_app/core/config/efata_backend_config.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
+import 'package:logistics_app/core/services/efata_api_client.dart';
 import 'package:logistics_app/core/services/location_service.dart';
 
 import '../../shared/widgets/app_bottom_navigation.dart';
@@ -33,6 +35,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
   driverProfileSubscription;
   StreamSubscription<Position>? driverLocationSubscription;
+  DateTime? _lastApiLocationPushAt;
 
   @override
   void initState() {
@@ -41,6 +44,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   void loadDriverAvailability() {
+    if (EfataBackendConfig.useNewBackend) {
+      _loadApiDriverAvailability();
+      return;
+    }
     final driver = FirebaseAuth.instance.currentUser;
 
     if (driver == null) {
@@ -74,6 +81,30 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             if (mounted) setState(() => isLoadingAvailability = false);
           },
         );
+  }
+
+  Future<void> _loadApiDriverAvailability() async {
+    try {
+      final account = await EfataApiClient.instance.getMe();
+      final profile = account.driverProfile;
+      final savedStatus = profile?['isOnline'] == true;
+      if (!mounted) return;
+      setState(() {
+        isOnline = savedStatus;
+        verificationStatus =
+            profile?['verificationStatus']?.toString() ?? 'incomplete';
+        profileCompleted = account.profileCompleted;
+        isLoadingAvailability = false;
+      });
+      _syncOnlineLocationTracking(savedStatus);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => isLoadingAvailability = false);
+      AppNotificationBannerService.error(
+        'Driver status could not load. Pull down or reopen the dashboard to retry.',
+        title: 'Status unavailable',
+      );
+    }
   }
 
   Future<void> handleStatusChange(bool value) async {
@@ -120,20 +151,29 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     }
 
     try {
-      await FirebaseFirestore.instance
-          .collection('drivers')
-          .doc(driver.uid)
-          .set({
-            'isOnline': value,
-            'isAvailable': value,
-            'availabilityUpdatedAt': Timestamp.now(),
-            'updatedAt': Timestamp.now(),
-            if (currentPosition != null) ...{
-              'driverLat': currentPosition.latitude,
-              'driverLng': currentPosition.longitude,
-              'lastLocationUpdate': Timestamp.now(),
-            },
-          }, SetOptions(merge: true));
+      if (EfataBackendConfig.useNewBackend) {
+        await EfataApiClient.instance.setDriverAvailability(
+          online: value,
+          lat: currentPosition?.latitude,
+          lng: currentPosition?.longitude,
+          heading: currentPosition?.heading,
+        );
+      } else {
+        await FirebaseFirestore.instance
+            .collection('drivers')
+            .doc(driver.uid)
+            .set({
+              'isOnline': value,
+              'isAvailable': value,
+              'availabilityUpdatedAt': Timestamp.now(),
+              'updatedAt': Timestamp.now(),
+              if (currentPosition != null) ...{
+                'driverLat': currentPosition.latitude,
+                'driverLng': currentPosition.longitude,
+                'lastLocationUpdate': Timestamp.now(),
+              },
+            }, SetOptions(merge: true));
+      }
 
       setState(() => isOnline = value);
       _syncOnlineLocationTracking(value);
@@ -206,15 +246,37 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     driverLocationSubscription = LocationService.getLiveLocationStream().listen(
       (position) {
-        FirebaseFirestore.instance.collection('drivers').doc(driver.uid).set({
-          'driverLat': position.latitude,
-          'driverLng': position.longitude,
-          'lastLocationUpdate': Timestamp.now(),
-          'isOnline': true,
-          'isAvailable': true,
-        }, SetOptions(merge: true));
+        if (EfataBackendConfig.useNewBackend) {
+          final now = DateTime.now();
+          final lastPush = _lastApiLocationPushAt;
+          if (lastPush != null && now.difference(lastPush).inSeconds < 5) {
+            return;
+          }
+          _lastApiLocationPushAt = now;
+          unawaited(_pushApiLocation(position));
+        } else {
+          FirebaseFirestore.instance.collection('drivers').doc(driver.uid).set({
+            'driverLat': position.latitude,
+            'driverLng': position.longitude,
+            'lastLocationUpdate': Timestamp.now(),
+            'isOnline': true,
+            'isAvailable': true,
+          }, SetOptions(merge: true));
+        }
       },
     );
+  }
+
+  Future<void> _pushApiLocation(Position position) async {
+    try {
+      await EfataApiClient.instance.updateDriverLocation(
+        lat: position.latitude,
+        lng: position.longitude,
+        heading: position.heading,
+      );
+    } catch (_) {
+      _lastApiLocationPushAt = null;
+    }
   }
 
   @override
