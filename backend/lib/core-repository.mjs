@@ -521,6 +521,14 @@ export function createCoreRepository({ url, ca }) {
     listMessages, sendMessage, markMessagesRead,
     setDriverAvailability, updateDriverLocation, getDriverLocation,
     listAdminResource, performAdminAction,
+    async findSupabaseIdentity(id) {
+      const result = await pool.query(`
+        select firebase_uid as uid, email, display_name as "displayName",
+          photo_url as "photoUrl", email_verified as "emailVerified"
+        from efata.accounts where supabase_auth_id=$1 and account_status='active'
+      `, [id]);
+      return result.rows[0] ?? null;
+    },
     close: () => pool.end(),
   };
 }
