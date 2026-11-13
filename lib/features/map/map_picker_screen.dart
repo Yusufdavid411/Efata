@@ -5,7 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/config/efata_backend_config.dart';
 import '../../core/services/app_notification_banner_service.dart';
+import '../../core/services/efata_api_client.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/place_suggestion_service.dart';
 
@@ -43,50 +45,50 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     if (currentUser == null) return;
 
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('orders')
-          .where('customerId', isEqualTo: currentUser.uid)
-          .limit(40)
-          .get();
-
-      final docs = snapshot.docs.toList()
-        ..sort((a, b) {
-          final aTime = a.data()['createdAt'];
-          final bTime = b.data()['createdAt'];
-          final aMillis = aTime is Timestamp ? aTime.millisecondsSinceEpoch : 0;
-          final bMillis = bTime is Timestamp ? bTime.millisecondsSinceEpoch : 0;
-          return bMillis.compareTo(aMillis);
-        });
+      final orders = EfataBackendConfig.useNewBackend
+          ? (await EfataApiClient.instance.listOrders()).orders.map(
+              (order) => order.toLegacyMap(),
+            )
+          : await _loadLegacyOrders(currentUser.uid);
 
       final seen = <String>{};
       final places = <PlaceSuggestion>[];
-
-      for (final doc in docs) {
-        final data = doc.data();
-        _addRecentPlace(
-          target: places,
-          seen: seen,
-          address: data['pickup'],
-          latitude: data['pickupLat'],
-          longitude: data['pickupLng'],
-        );
-        _addRecentPlace(
-          target: places,
-          seen: seen,
-          address: data['dropoff'],
-          latitude: data['dropoffLat'],
-          longitude: data['dropoffLng'],
-        );
+      for (final data in orders) {
+        for (final prefix in ['pickup', 'dropoff']) {
+          _addRecentPlace(
+            target: places,
+            seen: seen,
+            address: data[prefix],
+            latitude: data['${prefix}Lat'],
+            longitude: data['${prefix}Lng'],
+          );
+        }
+        if (places.length >= 8) break;
       }
-
       if (!mounted) return;
-
-      setState(() {
-        recentSuggestions = places.take(8).toList();
-      });
+      setState(() => recentSuggestions = places.take(8).toList());
     } catch (_) {
-      // Previous places are optional; users can still search the catalog or pin the map.
+      // Previous places are optional.
     }
+  }
+
+  Future<Iterable<Map<String, dynamic>>> _loadLegacyOrders(String uid) async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('orders')
+        .where('customerId', isEqualTo: uid)
+        .limit(40)
+        .get();
+
+    final docs = snapshot.docs.toList()
+      ..sort((a, b) {
+        final aTime = a.data()['createdAt'];
+        final bTime = b.data()['createdAt'];
+        final aMillis = aTime is Timestamp ? aTime.millisecondsSinceEpoch : 0;
+        final bMillis = bTime is Timestamp ? bTime.millisecondsSinceEpoch : 0;
+        return bMillis.compareTo(aMillis);
+      });
+
+    return docs.map((doc) => doc.data());
   }
 
   void _addRecentPlace({

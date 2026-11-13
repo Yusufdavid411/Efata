@@ -172,10 +172,12 @@ class _ChatScreenState extends State<ChatScreen> {
         widget.orderId,
         text,
       );
-      controller.clear();
       if (!mounted) return;
+      if (controller.text.trim() == text) controller.clear();
       setState(() {
-        _apiMessages = [..._apiMessages, message];
+        if (!_apiMessages.any((entry) => entry.id == message.id)) {
+          _apiMessages = [..._apiMessages, message];
+        }
         _apiError = null;
       });
     } on EfataApiException catch (error) {
