@@ -61,7 +61,6 @@ class _AppLiveMapState extends State<AppLiveMap> {
   BitmapDescriptor? pickupMarkerIcon;
   BitmapDescriptor? dropoffMarkerIcon;
   BitmapDescriptor? driverMarkerIcon;
-  BitmapDescriptor? currentLocationMarkerIcon;
 
   @override
   void initState() {
@@ -263,7 +262,6 @@ class _AppLiveMapState extends State<AppLiveMap> {
       _buildPickupMarkerIcon(),
       _buildDropoffMarkerIcon(),
       _buildDriverMarkerIcon(),
-      _buildCurrentLocationMarkerIcon(),
     ]);
 
     if (!mounted) return;
@@ -272,7 +270,6 @@ class _AppLiveMapState extends State<AppLiveMap> {
       pickupMarkerIcon = icons[0];
       dropoffMarkerIcon = icons[1];
       driverMarkerIcon = icons[2];
-      currentLocationMarkerIcon = icons[3];
     });
   }
 
@@ -362,7 +359,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
       Paint()..color = const Color(0xFFECFDF5),
     );
 
-    return _bitmapFromRecorder(recorder, markerSize);
+    return _bitmapFromRecorder(recorder, markerSize, 36);
   }
 
   Future<BitmapDescriptor> _buildDropoffMarkerIcon() async {
@@ -410,7 +407,7 @@ class _AppLiveMapState extends State<AppLiveMap> {
       Paint()..color = Colors.white.withValues(alpha: 0.38),
     );
 
-    return _bitmapFromRecorder(recorder, markerSize);
+    return _bitmapFromRecorder(recorder, markerSize, 34);
   }
 
   Future<BitmapDescriptor> _buildDriverMarkerIcon() async {
@@ -428,12 +425,12 @@ class _AppLiveMapState extends State<AppLiveMap> {
     canvas.translate(center.dx, center.dy);
 
     final body = Path()
-      ..moveTo(0, -34)
-      ..cubicTo(16, -30, 24, -14, 22, 8)
-      ..cubicTo(21, 25, 13, 34, 0, 37)
-      ..cubicTo(-13, 34, -21, 25, -22, 8)
-      ..cubicTo(-24, -14, -16, -30, 0, -34)
-      ..close();
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          const Rect.fromLTWH(-22, -35, 44, 73),
+          const Radius.circular(12),
+        ),
+      );
     canvas.drawPath(
       body.shift(const Offset(0, 4)),
       Paint()..color = const Color(0xFF065F46),
@@ -523,29 +520,13 @@ class _AppLiveMapState extends State<AppLiveMap> {
     );
     canvas.restore();
 
-    return _bitmapFromRecorder(recorder, markerSize);
-  }
-
-  Future<BitmapDescriptor> _buildCurrentLocationMarkerIcon() async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    const markerSize = Size(52, 52);
-    const center = Offset(26, 26);
-
-    canvas.drawCircle(
-      center,
-      18,
-      Paint()..color = const Color(0xFF2563EB).withValues(alpha: 0.22),
-    );
-    canvas.drawCircle(center, 9, Paint()..color = Colors.white);
-    canvas.drawCircle(center, 6, Paint()..color = const Color(0xFF2563EB));
-
-    return _bitmapFromRecorder(recorder, markerSize);
+    return _bitmapFromRecorder(recorder, markerSize, 44);
   }
 
   Future<BitmapDescriptor> _bitmapFromRecorder(
     ui.PictureRecorder recorder,
     Size markerSize,
+    double width,
   ) async {
     final picture = recorder.endRecording();
     final image = await picture.toImage(
@@ -553,7 +534,9 @@ class _AppLiveMapState extends State<AppLiveMap> {
       markerSize.height.toInt(),
     );
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+    image.dispose();
+    picture.dispose();
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(), width: width);
   }
 
   double _bearingBetween(LatLng from, LatLng to) {
@@ -731,10 +714,6 @@ class _AppLiveMapState extends State<AppLiveMap> {
         : null;
     final driverRouteStart = widget.driverPoint ?? userPoint;
     final activeTargetPoint = widget.activeTargetPoint;
-    final driverBearing =
-        widget.driverPoint != null && activeTargetPoint != null
-        ? _bearingBetween(widget.driverPoint!, activeTargetPoint)
-        : 0.0;
     final markers = {
       Marker(
         markerId: const MarkerId('pickup'),
@@ -743,16 +722,14 @@ class _AppLiveMapState extends State<AppLiveMap> {
         icon:
             pickupMarkerIcon ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        anchor: const Offset(0.5, 0.72),
+        anchor: Offset(0.5, pickupMarkerIcon == null ? 1 : 0.91),
       ),
       Marker(
         markerId: const MarkerId('dropoff'),
         position: widget.dropoffPoint,
         infoWindow: const InfoWindow(title: 'Drop-off'),
-        icon:
-            dropoffMarkerIcon ??
-            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        anchor: const Offset(0.5, 0.86),
+        icon: dropoffMarkerIcon ?? BitmapDescriptor.defaultMarker,
+        anchor: Offset(0.5, dropoffMarkerIcon == null ? 1 : 0.86),
       ),
       if (widget.driverPoint != null)
         Marker(
@@ -762,18 +739,11 @@ class _AppLiveMapState extends State<AppLiveMap> {
           icon:
               driverMarkerIcon ??
               BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-          anchor: const Offset(0.5, 0.5),
-          flat: true,
-          rotation: driverBearing,
-        ),
-      if (userPoint != null)
-        Marker(
-          markerId: const MarkerId('current-location'),
-          position: userPoint!,
-          infoWindow: const InfoWindow(title: 'Your location'),
-          icon:
-              currentLocationMarkerIcon ??
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+          anchor: Offset(0.5, driverMarkerIcon == null ? 1 : 0.5),
+          flat: driverMarkerIcon != null,
+          rotation: driverMarkerIcon != null && activeTargetPoint != null
+              ? _bearingBetween(widget.driverPoint!, activeTargetPoint)
+              : 0,
         ),
     };
 
