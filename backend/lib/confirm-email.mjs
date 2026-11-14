@@ -8,12 +8,19 @@ export function createConfirmEmailHandler({ url, key, fetcher = fetch } = {}) {
     // Keep the token out of the POST URL and do not consume it on email scanner GETs.
     let token = query.get('token_hash') ?? '';
     if (req.method === 'POST') {
-      let body = '';
-      for await (const chunk of req) {
-        body += chunk;
+      if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+        token = typeof req.body.token_hash === 'string' ? req.body.token_hash : '';
+      } else {
+        let body = req.body?.toString() ?? '';
+        if (req.body == null) {
+          for await (const chunk of req) {
+            body += chunk;
+            if (body.length > 1024) { res.statusCode = 413; return res.end(); }
+          }
+        }
         if (body.length > 1024) { res.statusCode = 413; return res.end(); }
+        token = new URLSearchParams(body).get('token_hash') ?? '';
       }
-      token = new URLSearchParams(body).get('token_hash') ?? '';
     }
     const valid = /^[A-Za-z0-9_-]{32,256}$/.test(token);
     let title = 'Confirm your email';
