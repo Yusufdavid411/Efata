@@ -16,14 +16,14 @@ export function createMeHandler({ verify, getMe, updateProfile, origins = allowe
       if (req.method === 'PATCH') {
         if (!updateProfile) return sendJson(res, 503, { error: 'api_not_configured' });
         const body = await readJson(req, 8192);
-        const fields = { name: 120, phone: 40, address: 500, vehicleType: 80, plateNumber: 40, licenseUrl: 1000, photoUrl: 1000 };
+        const fields = { name: 120, phone: 40, address: 500, vehicleType: 80, plateNumber: 40, licenseUrl: 1000, photoUrl: 1000, vehiclePhotoUrl: 1000 };
         if (!body || Array.isArray(body) || typeof body !== 'object' ||
             !Object.keys(body).length || Object.entries(body).some(([key, value]) =>
               !Object.hasOwn(fields, key) || typeof value !== 'string' ||
               !value.trim() || value.length > fields[key])) {
           return sendJson(res, 400, { error: 'invalid_profile' });
         }
-        for (const key of ['licenseUrl', 'photoUrl']) {
+        for (const key of ['licenseUrl', 'photoUrl', 'vehiclePhotoUrl']) {
           if (body[key] && !/^https:\/\/res\.cloudinary\.com\/dk21bi5fg\/image\/upload\//.test(body[key])) {
             return sendJson(res, 400, { error: 'invalid_profile_asset' });
           }

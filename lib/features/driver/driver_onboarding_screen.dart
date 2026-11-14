@@ -10,7 +10,9 @@ import 'package:logistics_app/core/services/app_notification_banner_service.dart
 import 'driver_home_screen.dart';
 
 class DriverOnboardingScreen extends StatefulWidget {
-  const DriverOnboardingScreen({super.key});
+  const DriverOnboardingScreen({super.key, this.returnToProfile = false});
+
+  final bool returnToProfile;
 
   @override
   State<DriverOnboardingScreen> createState() => _DriverOnboardingScreenState();
@@ -26,6 +28,8 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
   bool isUploadingLicense = false;
   bool isSaving = false;
   String? licenseUrl;
+  String? vehiclePhotoUrl;
+  bool approved = false;
 
   @override
   void initState() {
@@ -39,23 +43,32 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
       if (!mounted) return;
       nameController.text = account.displayName;
       phoneController.text = account.phone ?? '';
-      plateController.text = account.driverProfile?['plateNumber']?.toString() ?? '';
+      plateController.text =
+          account.driverProfile?['plateNumber']?.toString() ?? '';
       setState(() {
+        vehicleType =
+            account.driverProfile?['vehicleType']?.toString() ?? 'Truck';
+        approved = account.driverProfile?['verificationStatus'] == 'approved';
+        vehiclePhotoUrl = account.driverProfile?['vehiclePhotoUrl']?.toString();
         licenseUrl = account.driverProfile?['licenseUrl']?.toString();
         licenseUploaded = licenseUrl?.isNotEmpty == true;
       });
     } catch (_) {
-      if (mounted) AppNotificationBannerService.error('Could not load your profile.');
+      if (mounted)
+        AppNotificationBannerService.error('Could not load your profile.');
     }
   }
 
-  Future<void> uploadLicense() async {
-    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (image == null) return;
-
+  Future<void> uploadLicense({bool vehicle = false}) async {
     setState(() => isUploadingLicense = true);
 
     try {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1800,
+        imageQuality: 85,
+      );
+      if (image == null || !mounted) return;
       final file = File(image.path);
       final uri = Uri.parse(
         'https://api.cloudinary.com/v1_1/dk21bi5fg/image/upload',
@@ -80,13 +93,17 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
 
       if (!mounted) return;
       setState(() {
-        licenseUrl = uploadedUrl;
-        licenseUploaded = true;
+        if (vehicle) {
+          vehiclePhotoUrl = uploadedUrl;
+        } else {
+          licenseUrl = uploadedUrl;
+          licenseUploaded = true;
+        }
       });
 
       AppNotificationBannerService.success(
-        'Driver license uploaded.',
-        title: 'License uploaded',
+        vehicle ? 'Vehicle photo uploaded.' : 'Driver license uploaded.',
+        title: 'Upload complete',
       );
     } catch (e) {
       if (!mounted) return;
@@ -102,13 +119,12 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
   }
 
   Future<void> submit() async {
-
     if (nameController.text.trim().isEmpty ||
         phoneController.text.trim().isEmpty ||
         plateController.text.trim().isEmpty ||
-        !licenseUploaded) {
+        (!approved && (!licenseUploaded || vehiclePhotoUrl == null))) {
       AppNotificationBannerService.error(
-        'Please complete all fields and upload your license.',
+        'Complete all fields and upload your license and vehicle photo.',
         title: 'Missing driver details',
       );
       return;
@@ -117,13 +133,21 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
     setState(() => isSaving = true);
 
     try {
-      await EfataApiClient.instance.updateProfile({
+      final account = await EfataApiClient.instance.updateProfile({
         'name': nameController.text.trim(),
         'phone': phoneController.text.trim(),
         'vehicleType': vehicleType,
         'plateNumber': plateController.text.trim(),
-        'licenseUrl': licenseUrl!,
+        if (!approved && licenseUrl != null) 'licenseUrl': licenseUrl!,
+        if (vehiclePhotoUrl != null) 'vehiclePhotoUrl': vehiclePhotoUrl!,
       });
+      if (!mounted) return;
+      if (account.driverProfile?['verificationStatus'] == 'pending') {
+        AppNotificationBannerService.success(
+          'Please allow 24 to 48 hours for review.',
+          title: 'Documents received',
+        );
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => isSaving = false);
@@ -134,6 +158,10 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
     if (!mounted) return;
 
     setState(() => isSaving = false);
+    if (widget.returnToProfile) {
+      Navigator.pop(context);
+      return;
+    }
 
     Navigator.pushReplacement(
       context,
@@ -142,7 +170,6 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
   }
 
   Future<void> skipOnboarding() async {
-
     if (!mounted) return;
 
     Navigator.pushReplacement(
@@ -250,6 +277,7 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
                           value: 'Pickup',
                           child: Text('Pickup'),
                         ),
+                        DropdownMenuItem(value: 'Mixer', child: Text('Mixer')),
                       ],
                       onChanged: (v) => setState(() => vehicleType = v!),
                     ),
@@ -267,81 +295,101 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            Card(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: isUploadingLicense ? null : uploadLicense,
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: licenseUploaded
-                              ? const Color(0xFFDCFCE7)
-                              : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: isUploadingLicense
-                            ? const Padding(
-                                padding: EdgeInsets.all(13),
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.4,
+            if (!approved)
+              Card(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: isUploadingLicense || approved
+                      ? null
+                      : () => uploadLicense(),
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: licenseUploaded
+                                ? const Color(0xFFDCFCE7)
+                                : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: isUploadingLicense
+                              ? const Padding(
+                                  padding: EdgeInsets.all(13),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.4,
+                                  ),
+                                )
+                              : Icon(
+                                  licenseUploaded
+                                      ? Icons.check_circle_rounded
+                                      : Icons.upload_file_outlined,
+                                  color: licenseUploaded
+                                      ? const Color(0xFF16A34A)
+                                      : const Color(0xFF0F766E),
                                 ),
-                              )
-                            : Icon(
-                                licenseUploaded
-                                    ? Icons.check_circle_rounded
-                                    : Icons.upload_file_outlined,
-                                color: licenseUploaded
-                                    ? const Color(0xFF16A34A)
-                                    : const Color(0xFF0F766E),
-                              ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              isUploadingLicense
-                                  ? 'Uploading license'
-                                  : licenseUploaded
-                                  ? 'Driver license uploaded'
-                                  : 'Upload driver license',
-                              style: const TextStyle(
-                                color: Color(0xFF0F172A),
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Required before admin approval.',
-                              style: TextStyle(color: Color(0xFF64748B)),
-                            ),
-                          ],
                         ),
-                      ),
-                      const Icon(Icons.chevron_right_rounded),
-                    ],
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isUploadingLicense
+                                    ? 'Uploading license'
+                                    : licenseUploaded
+                                    ? 'Replace driver license'
+                                    : 'Upload driver license',
+                                style: const TextStyle(
+                                  color: Color(0xFF0F172A),
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Required before admin approval.',
+                                style: TextStyle(color: Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded),
+                      ],
+                    ),
                   ),
                 ),
+              ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: isUploadingLicense || isSaving
+                  ? null
+                  : () => uploadLicense(vehicle: true),
+              icon: Icon(
+                vehiclePhotoUrl == null
+                    ? Icons.add_a_photo_outlined
+                    : Icons.check_circle_outline,
+              ),
+              label: Text(
+                vehiclePhotoUrl == null
+                    ? 'Upload vehicle photo'
+                    : 'Replace vehicle photo',
               ),
             ),
             const SizedBox(height: 22),
             ElevatedButton(
-              onPressed: isSaving ? null : submit,
+              onPressed: isSaving || isUploadingLicense ? null : submit,
               child: Text(
                 isSaving ? 'Submitting profile...' : 'Submit for Review',
               ),
             ),
             const SizedBox(height: 10),
-            TextButton(
-              onPressed: isSaving ? null : skipOnboarding,
-              child: const Text("Skip for now"),
-            ),
+            if (!widget.returnToProfile)
+              TextButton(
+                onPressed: isSaving ? null : skipOnboarding,
+                child: const Text("Skip for now"),
+              ),
           ],
         ),
       ),

@@ -119,6 +119,13 @@ class MyApp extends StatelessWidget {
           darkTheme: darkTheme(),
           themeMode: appSettingsController.themeMode,
           initialRoute: '/',
+          onGenerateRoute: (settings) {
+            final uri = Uri.tryParse(settings.name ?? '');
+            if (uri?.scheme == 'efata' && uri?.host == 'login') {
+              return MaterialPageRoute(builder: (_) => const LoginScreen());
+            }
+            return null;
+          },
           routes: {
             '/': (context) => const SplashScreen(),
             '/login': (context) => const LoginScreen(),

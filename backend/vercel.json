@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/confirm-email",
+      "destination": "/api/account-bootstrap?endpoint=confirm-email"
+    },
+    {
       "source": "/api/auth",
       "destination": "/api/account-bootstrap?endpoint=auth"
     },

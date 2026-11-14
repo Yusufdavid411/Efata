@@ -32,31 +32,51 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   bool profileCompleted = false;
   StreamSubscription<Position>? driverLocationSubscription;
   DateTime? _lastApiLocationPushAt;
+  Timer? _availabilityRefresh;
+  int _availabilityRequest = 0;
 
   @override
   void initState() {
     super.initState();
     loadDriverAvailability();
+    _availabilityRefresh = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+          !isLoadingAvailability) {
+        unawaited(_loadApiDriverAvailability(quiet: true));
+      }
+    });
   }
 
   void loadDriverAvailability() => unawaited(_loadApiDriverAvailability());
 
-  Future<void> _loadApiDriverAvailability() async {
+  Future<void> _loadApiDriverAvailability({bool quiet = false}) async {
+    final request = ++_availabilityRequest;
     try {
       final account = await EfataApiClient.instance.getMe();
       final profile = account.driverProfile;
       final savedStatus = profile?['isOnline'] == true;
-      if (!mounted) return;
+      if (!mounted || request != _availabilityRequest) return;
+      final status = profile?['verificationStatus']?.toString() ?? 'incomplete';
+      final justApproved =
+          !isLoadingAvailability &&
+          verificationStatus != 'approved' &&
+          status == 'approved';
+      final onlineChanged = isOnline != savedStatus;
       setState(() {
         isOnline = savedStatus;
-        verificationStatus =
-            profile?['verificationStatus']?.toString() ?? 'incomplete';
+        verificationStatus = status;
         profileCompleted = account.profileCompleted;
         isLoadingAvailability = false;
       });
-      _syncOnlineLocationTracking(savedStatus);
+      if (onlineChanged) _syncOnlineLocationTracking(savedStatus);
+      if (justApproved) {
+        AppNotificationBannerService.success(
+          'You can now go online and receive jobs.',
+          title: 'Driver approved',
+        );
+      }
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || request != _availabilityRequest || quiet) return;
       setState(() => isLoadingAvailability = false);
       AppNotificationBannerService.error(
         'Driver status could not load. Pull down or reopen the dashboard to retry.',
@@ -70,6 +90,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     if (driver == null) return;
 
+    if (value && verificationStatus != 'approved') {
+      await _loadApiDriverAvailability(quiet: true);
+      if (!mounted) return;
+    }
     if (value && verificationStatus.toLowerCase() != 'approved') {
       AppNotificationBannerService.error(
         !profileCompleted
@@ -212,6 +236,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   @override
   void dispose() {
+    _availabilityRefresh?.cancel();
     driverLocationSubscription?.cancel();
     super.dispose();
   }
@@ -232,12 +257,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final title = !profileCompleted
         ? 'Complete driver profile'
         : status == 'pending'
-        ? 'Approval in review'
+        ? 'Awaiting review'
         : 'Driver approval required';
     final message = !profileCompleted
         ? 'Add your vehicle and contact details so admin can verify your account.'
         : status == 'pending'
-        ? 'Admin is reviewing your driver profile. You can go online after approval.'
+        ? 'Your documents were received. Allow 24 to 48 hours for review.'
         : 'Your account must be approved before you can receive delivery requests.';
 
     return Padding(

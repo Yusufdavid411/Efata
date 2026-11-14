@@ -46,7 +46,10 @@ export function createAuthHandler({
             typeof password !== 'string' || !password || password.length > 256) {
           return send(400, { error: 'invalid_request' });
         }
-        if (action === 'register' && (password.length < 12 || !['customer', 'driver'].includes(role))) {
+        if (action === 'register' && (password.length < 8 || !/[A-Za-z]/.test(password) ||
+            !/[^A-Za-z]/.test(password) || new Set(password).size <= 3 ||
+            (email.split('@')[0].length >= 3 && password.toLowerCase().includes(email.split('@')[0])) ||
+            !['customer', 'driver'].includes(role))) {
           return send(400, { error: 'invalid_registration' });
         }
         path = action === 'register' ? '/auth/v1/signup' : '/auth/v1/token?grant_type=password';

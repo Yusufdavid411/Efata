@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/vehicle_illustration.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/efata_api_client.dart';
@@ -967,15 +968,18 @@ class _ShipmentDetailsSection extends StatelessWidget {
                 labelText: 'Vehicle type',
                 prefixIcon: Icon(Icons.local_shipping_outlined),
               ),
-              items: const [
-                DropdownMenuItem(value: 'Truck', child: Text('Truck')),
-                DropdownMenuItem(value: 'Tipper', child: Text('Tipper')),
-                DropdownMenuItem(
-                  value: 'Petrol Tanker',
-                  child: Text('Petrol Tanker'),
-                ),
-                DropdownMenuItem(value: 'Van', child: Text('Van')),
-                DropdownMenuItem(value: 'Pickup', child: Text('Pickup')),
+              items: [
+                for (final type in efataVehicleTypes)
+                  DropdownMenuItem(
+                    value: type,
+                    child: Row(
+                      children: [
+                        VehicleIllustration(type),
+                        const SizedBox(width: 8),
+                        Text(type),
+                      ],
+                    ),
+                  ),
               ],
               onChanged: onVehicleChanged,
             ),

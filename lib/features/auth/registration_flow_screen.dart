@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/services/app_notification_banner_service.dart';
 import '../../core/services/password_strength_service.dart';
 import '../../core/services/efata_session.dart';
+import 'login_screen.dart';
 
 class RegistrationFlowScreen extends StatefulWidget {
   const RegistrationFlowScreen({
@@ -97,7 +98,10 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
         'Confirm your email, then sign in to EFATA.',
         title: 'Check your email',
       );
-      Navigator.pop(context);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
     } catch (_) {
       if (mounted) {
         AppNotificationBannerService.error(
@@ -421,7 +425,7 @@ class _PasswordStrengthPanel extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             child: LinearProgressIndicator(
               minHeight: 7,
-              value: (result.score / 6).clamp(0.05, 1),
+              value: (result.score / 5).clamp(0.05, 1),
               backgroundColor: const Color(0xFFE2E8F0),
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
@@ -429,11 +433,7 @@ class _PasswordStrengthPanel extends StatelessWidget {
           const SizedBox(height: 12),
           _RuleRow(
             passed: result.passedRules.contains(PasswordRule.length),
-            label: 'At least 12 characters',
-          ),
-          _RuleRow(
-            passed: result.passedRules.contains(PasswordRule.passphrase),
-            label: '15+ characters recommended',
+            label: 'At least 8 characters',
           ),
           _RuleRow(
             passed: result.passedRules.contains(PasswordRule.mixedCharacters),
@@ -441,7 +441,7 @@ class _PasswordStrengthPanel extends StatelessWidget {
           ),
           _RuleRow(
             passed: result.passedRules.contains(PasswordRule.noObviousWords),
-            label: 'Avoid common words, EFATA, or your email name',
+            label: 'Avoid using your email or phone number',
           ),
           _RuleRow(
             passed: result.passedRules.contains(PasswordRule.passwordsMatch),

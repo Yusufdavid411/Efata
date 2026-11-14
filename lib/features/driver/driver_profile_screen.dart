@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,6 +11,7 @@ import 'package:http/http.dart' as http;
 import '../../core/services/app_notification_banner_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../shared/widgets/app_bottom_navigation.dart';
+import 'driver_onboarding_screen.dart';
 
 class DriverProfileScreen extends StatefulWidget {
   const DriverProfileScreen({
@@ -29,6 +31,37 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   bool isUploading = false;
 
   late Future<EfataAccount> _profile = EfataApiClient.instance.getMe();
+  Timer? _refreshTimer;
+  bool _refreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        unawaited(_refresh());
+      }
+    });
+  }
+
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    _refreshing = true;
+    try {
+      final result = await EfataApiClient.instance.getMe();
+      if (mounted) setState(() => _profile = Future.value(result));
+    } catch (_) {
+      // Keep the last successful view during a temporary connection failure.
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   void _reload() => setState(() => _profile = EfataApiClient.instance.getMe());
 
@@ -175,6 +208,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                 ),
                 DropdownMenuItem(value: 'Van', child: Text('Van')),
                 DropdownMenuItem(value: 'Pickup', child: Text('Pickup')),
+                DropdownMenuItem(value: 'Mixer', child: Text('Mixer')),
               ],
               onChanged: (value) {
                 if (value != null) {
@@ -319,14 +353,14 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             : !profileCompleted
             ? 'Profile Incomplete'
             : verificationStatus == 'pending'
-            ? 'Awaiting Approval'
+            ? 'Awaiting Review'
             : 'Not Verified';
         final statusMessage = isVerified
             ? 'Admin has approved this driver account.'
             : !profileCompleted
             ? 'Complete your driver profile to start verification.'
             : verificationStatus == 'pending'
-            ? 'Admin is reviewing your submitted driver details.'
+            ? 'Your documents were received. Allow 24 to 48 hours for review.'
             : 'Driver approval is required before receiving jobs.';
         final statusColor = isVerified
             ? const Color(0xFF16A34A)
@@ -555,6 +589,24 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                 ),
               ),
             const SizedBox(height: 20),
+            if (profileCompleted)
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const DriverOnboardingScreen(returnToProfile: true),
+                    ),
+                  );
+                  if (mounted) _reload();
+                },
+                icon: const Icon(Icons.description_outlined),
+                label: Text(
+                  isVerified
+                      ? 'Update vehicle photo'
+                      : 'Update review documents',
+                ),
+              ),
             _ProfileActionCard(
               children: [
                 _ProfileActionTile(

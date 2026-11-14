@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { sendDriverReviewEmail } from './driver-email.mjs';
 
 export class ApiError extends Error {
   constructor(statusCode, code) {
@@ -48,6 +49,7 @@ export function createCoreRepository({ url, ca }) {
           'vehicleType', dp.vehicle_type, 'plateNumber', dp.plate_number,
           'verificationStatus', dp.verification_status, 'isOnline', dp.is_online,
           'licenseUrl', dp.license_file_key,
+          'vehiclePhotoUrl', to_jsonb(dp)->>'vehicle_photo_url',
           'currentLat', dp.current_lat, 'currentLng', dp.current_lng,
           'heading', dp.heading, 'locationUpdatedAt', dp.location_updated_at,
           'totalEarnings', dp.total_earnings) end as "driverProfile"
@@ -63,7 +65,7 @@ export function createCoreRepository({ url, ca }) {
     const actor = await account(uid);
     if (!actor || actor.accountStatus !== 'active') throw new ApiError(403, 'account_unavailable');
     let condition;
-    const values = [actor.id];
+    const values = [];
     if (scope === 'available' && actor.role === 'driver') {
       if (actor.driverProfile?.verificationStatus !== 'approved') {
         throw new ApiError(403, 'approved_driver_required');
@@ -72,8 +74,10 @@ export function createCoreRepository({ url, ca }) {
     } else if (scope === 'all' && actor.role === 'admin') {
       condition = 'true';
     } else if (scope === 'mine' && actor.role === 'driver') {
+      values.push(actor.id);
       condition = 'o.driver_id = $1';
     } else if (scope === 'mine' && actor.role === 'customer') {
+      values.push(actor.id);
       condition = 'o.customer_id = $1';
     } else if (scope === 'mine' && actor.role === 'admin') {
       condition = 'true';
@@ -361,6 +365,7 @@ export function createCoreRepository({ url, ca }) {
           a.photo_url as "photoUrl",a.profile_completed as "profileCompleted",
           a.account_status as "accountStatus",dp.vehicle_type as "vehicleType",
           dp.plate_number as "plateNumber",dp.license_file_key as "licenseFileKey",
+          to_jsonb(dp)->>'vehicle_photo_url' as "vehiclePhotoUrl",
           case when dp.license_file_key like 'https://res.cloudinary.com/dk21bi5fg/image/upload/%'
             then dp.license_file_key end as "licenseUrl",
           dp.verification_status as "verificationStatus",dp.verification_notes as "verificationNotes",
@@ -424,9 +429,16 @@ export function createCoreRepository({ url, ca }) {
       let targetType;
       let result;
       let metadata;
+      let approvalEmail;
       if (action === 'driver-status') {
         const allowed = new Set(['pending', 'incomplete', 'approved', 'rejected', 'suspended']);
         if (!allowed.has(status)) throw new ApiError(400, 'invalid_driver_status');
+        const target = await client.query(`select a.email, dp.verification_status
+          from efata.accounts a join efata.driver_profiles dp on dp.account_id=a.id
+          where a.id=$1 for update of a,dp`, [targetId]);
+        if (status === 'approved' && target.rows[0]?.verification_status !== 'approved') {
+          approvalEmail = target.rows[0]?.email;
+        }
         result = await client.query(`
           update efata.driver_profiles set verification_status=$2,
             verification_notes=nullif($3,''),is_online=case when $2='approved' then is_online else false end
@@ -478,6 +490,7 @@ export function createCoreRepository({ url, ca }) {
         values ($1,$2,$3,$4,$5::jsonb)
       `, [actor.id, action, targetType, targetId, JSON.stringify(metadata)]);
       await client.query('commit');
+      await sendDriverReviewEmail(approvalEmail, 'approved');
       return result.rows[0];
     } catch (error) {
       await client.query('rollback');
@@ -501,13 +514,15 @@ export function createCoreRepository({ url, ca }) {
         if (!actor || actor.accountStatus !== 'active' || !['customer','driver'].includes(actor.role)) {
           throw new ApiError(403, 'account_unavailable');
         }
-        const { name, phone, address, vehicleType, plateNumber, licenseUrl, photoUrl } =
+        const { name, phone, address, vehicleType, plateNumber, licenseUrl, photoUrl, vehiclePhotoUrl } =
           Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value.trim()]));
         if (actor.role === 'customer') {
-          if (vehicleType || plateNumber || licenseUrl) throw new ApiError(400, 'invalid_profile');
+          if (vehicleType || plateNumber || licenseUrl || vehiclePhotoUrl) throw new ApiError(400, 'invalid_profile');
           if (address) await client.query('update efata.customer_profiles set default_pickup_address=$2 where account_id=$1', [actor.id, address]);
         } else {
           if (address) throw new ApiError(400, 'invalid_profile');
+          if (licenseUrl && actor.driverProfile?.verificationStatus === 'approved' &&
+              licenseUrl !== actor.driverProfile.licenseUrl) throw new ApiError(409, 'license_already_approved');
           await client.query(`
             update efata.driver_profiles set vehicle_type=coalesce($2,vehicle_type),
               plate_number=coalesce($3,plate_number), license_file_key=coalesce($4,license_file_key),
@@ -522,17 +537,32 @@ export function createCoreRepository({ url, ca }) {
                 then false else is_online end
             where account_id=$1
           `, [actor.id, vehicleType, plateNumber, licenseUrl]);
+          if (vehiclePhotoUrl && vehiclePhotoUrl !== actor.driverProfile?.vehiclePhotoUrl) {
+            await client.query(`update efata.driver_profiles set vehicle_photo_url=$2,
+              verification_status=case when verification_status='approved' then 'pending' else verification_status end,
+              is_online=false where account_id=$1`, [actor.id, vehiclePhotoUrl]);
+          }
         }
         const complete = Boolean((name ?? actor.displayName) && (phone ?? actor.phone) &&
           (actor.role === 'customer' ? (address ?? actor.customerProfile?.defaultPickupAddress) :
             (vehicleType ?? actor.driverProfile?.vehicleType) &&
             (plateNumber ?? actor.driverProfile?.plateNumber) &&
             (licenseUrl ?? actor.driverProfile?.licenseUrl)));
+        if (actor.role === 'driver' && complete) {
+          await client.query(`update efata.driver_profiles set verification_status='pending'
+            where account_id=$1 and verification_status in ('incomplete','rejected')`, [actor.id]);
+        }
         await client.query(`update efata.accounts set display_name=coalesce($2,display_name),
           phone=coalesce($3,phone), photo_url=coalesce($4,photo_url), profile_completed=$5 where id=$1`,
         [actor.id, name, phone, photoUrl, complete]);
         const updated = await account(uid, client);
         await client.query('commit');
+        if (updated.driverProfile?.verificationStatus === 'pending' &&
+            (actor.driverProfile?.verificationStatus !== 'pending' ||
+             (licenseUrl && licenseUrl !== actor.driverProfile?.licenseUrl) ||
+             (vehiclePhotoUrl && vehiclePhotoUrl !== actor.driverProfile?.vehiclePhotoUrl))) {
+          await sendDriverReviewEmail(updated.email, 'pending');
+        }
         return updated;
       } catch (error) {
         await client.query('rollback');

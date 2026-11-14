@@ -4,6 +4,7 @@ import {
 import { ApiError } from '../lib/core-repository.mjs';
 import { createRuntime } from '../lib/runtime.mjs';
 import authHandler from '../lib/auth-handler.mjs';
+import confirmEmail from '../lib/confirm-email.mjs';
 
 const roles = new Set(['customer', 'driver']);
 
@@ -40,6 +41,8 @@ const bootstrapHandler = createAccountBootstrapHandler(runtime ? {
 
 export default function accountEndpoint(req, res) {
   const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/confirm-email' ||
+      url.searchParams.get('endpoint') === 'confirm-email') return confirmEmail(req, res);
   return (url.pathname === '/api/auth' || url.searchParams.get('endpoint') === 'auth'
     ? authHandler : bootstrapHandler)(req, res);
 }

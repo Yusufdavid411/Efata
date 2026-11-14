@@ -16,7 +16,6 @@ class PasswordStrengthResult {
 
 enum PasswordRule {
   length,
-  passphrase,
   mixedCharacters,
   notOnlyLetters,
   notOnlyNumbers,
@@ -40,7 +39,6 @@ class PasswordStrengthService {
     'iloveyou',
     'admin',
     'letmein',
-    'efata',
   };
 
   static PasswordStrengthResult evaluate({
@@ -57,16 +55,10 @@ class PasswordStrengthService {
     final hasNumber = RegExp(r'\d').hasMatch(password);
     final hasSymbolOrSpace = RegExp(r'[^A-Za-z0-9]').hasMatch(password);
 
-    if (password.length >= 12) {
+    if (password.length >= 8) {
       passed.add(PasswordRule.length);
     } else {
-      feedback.add('Use at least 12 characters.');
-    }
-
-    if (password.length >= 15) {
-      passed.add(PasswordRule.passphrase);
-    } else {
-      feedback.add('15+ characters is stronger and easier to remember.');
+      feedback.add('Use at least 8 characters.');
     }
 
     if ((hasLetter && hasNumber) || (hasLetter && hasSymbolOrSpace)) {
@@ -95,7 +87,7 @@ class PasswordStrengthService {
     if (!containsWeakTerm) {
       passed.add(PasswordRule.noObviousWords);
     } else {
-      feedback.add('Avoid EFATA, your email name, repeated, or common words.');
+      feedback.add('Choose a less predictable password without your email.');
     }
 
     if (password.isNotEmpty && password == confirmPassword) {
@@ -106,7 +98,6 @@ class PasswordStrengthService {
 
     final baseScore = [
       PasswordRule.length,
-      PasswordRule.passphrase,
       PasswordRule.mixedCharacters,
       PasswordRule.notOnlyLetters,
       PasswordRule.notOnlyNumbers,
@@ -116,8 +107,7 @@ class PasswordStrengthService {
     final label = switch (baseScore) {
       <= 2 => 'Weak',
       3 || 4 => 'Fair',
-      5 => 'Strong',
-      _ => 'Excellent',
+      _ => 'Strong',
     };
 
     final isAcceptable =
