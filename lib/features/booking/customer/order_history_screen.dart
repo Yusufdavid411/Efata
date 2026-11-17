@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/efata_api_models.dart';
 import '../../../core/services/efata_api_client.dart';
+import 'simple_order_form.dart';
 import 'widgets/active_delivery_section.dart';
 
 class OrderHistoryScreen extends StatelessWidget {
@@ -98,7 +99,34 @@ class _ApiOrderHistoryContentState extends State<_ApiOrderHistoryContent> {
                 ...previousOrders.map(
                   (order) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: OrderPreviewCard.api(order: order),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        OrderPreviewCard.api(order: order),
+                        if (const {
+                          'canceled',
+                          'cancelled',
+                        }.contains(order.status.trim().toLowerCase()))
+                          TextButton.icon(
+                            icon: const Icon(Icons.replay),
+                            label: const Text('Rebook delivery'),
+                            onPressed: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) =>
+                                      SimpleOrderForm(previousOrder: order),
+                                ),
+                              );
+                              if (mounted) {
+                                setState(
+                                  () => _orders = EfataApiClient.instance
+                                      .listAllOrders(),
+                                );
+                              }
+                            },
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ],

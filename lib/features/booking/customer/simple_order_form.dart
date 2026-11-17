@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/models/efata_api_models.dart';
 import '../../../shared/widgets/vehicle_illustration.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
@@ -16,10 +17,12 @@ class SimpleOrderForm extends StatefulWidget {
     super.key,
     this.embedded = false,
     this.scheduleOnOpen = false,
+    this.previousOrder,
   });
 
   final bool embedded;
   final bool scheduleOnOpen;
+  final EfataOrder? previousOrder;
 
   @override
   State<SimpleOrderForm> createState() => _SimpleOrderFormState();
@@ -59,6 +62,20 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   @override
   void initState() {
     super.initState();
+    final previous = widget.previousOrder;
+    if (previous != null) {
+      pickupController.text = previous.pickup;
+      dropoffController.text = previous.dropoff;
+      itemController.text = previous.item;
+      pickupLat = previous.pickupLat;
+      pickupLng = previous.pickupLng;
+      dropoffLat = previous.dropoffLat;
+      dropoffLng = previous.dropoffLng;
+      if (efataVehicleTypes.contains(previous.vehicleType)) {
+        vehicleType = previous.vehicleType;
+      }
+      calculateDistanceAndPrice();
+    }
     loadRecentPlaces();
     if (widget.scheduleOnOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
