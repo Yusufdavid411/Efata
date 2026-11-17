@@ -28,6 +28,45 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
   StreamSubscription<Position>? locationSubscription;
   String? trackingOrderId;
   DateTime? _lastApiLocationPushAt;
+  bool _withdrawing = false;
+
+  Future<void> _withdrawJob(String id) async {
+    if (_withdrawing) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Withdraw from this delivery?'),
+        content: const Text(
+          'This cancels the order so the customer can rebook.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Keep job'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Withdraw'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true || _withdrawing) return;
+    setState(() => _withdrawing = true);
+    try {
+      await EfataApiClient.instance.transitionOrder(id, 'withdraw');
+      if (!mounted) return;
+      AppNotificationBannerService.success('You withdrew from the delivery.');
+    } catch (_) {
+      if (mounted) {
+        AppNotificationBannerService.error(
+          'Could not withdraw. Refresh the job and try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _withdrawing = false);
+    }
+  }
 
   Future<bool> startTransit(String id) async {
     final allowed = await ensureLocationPermission();
@@ -441,7 +480,13 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                       icon: Icons.check_circle_outline,
                       onPressed: () => completeJob(orderId, data),
                     ),
-              secondaryAction: null,
+              secondaryAction: status == 'accepted' && !_withdrawing
+                  ? _DriverJobAction(
+                      label: 'Withdraw from job',
+                      icon: Icons.cancel_outlined,
+                      onPressed: () => _withdrawJob(orderId),
+                    )
+                  : null,
             );
           },
         ),

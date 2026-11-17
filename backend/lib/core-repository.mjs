@@ -203,9 +203,11 @@ export function createCoreRepository({ url, ca }) {
         }
         update = `status='completed',completed_at=now(),chat_closed_at=now(),
           unread_for_customer=0,unread_for_driver=0`;
-      } else if (action === 'cancel') {
-        const allowed = actor.role === 'admin' ||
-          (actor.role === 'customer' && order.customer_id === actor.id && order.status === 'pending');
+      } else if (action === 'cancel' || action === 'withdraw') {
+        const allowed = action === 'withdraw'
+          ? actor.role === 'driver' && order.driver_id === actor.id && order.status === 'accepted'
+          : actor.role === 'admin' ||
+            (actor.role === 'customer' && order.customer_id === actor.id && order.status === 'pending');
         if (!allowed) throw new ApiError(409, 'order_cannot_cancel');
         update = `status='canceled',canceled_at=now(),canceled_by=$2,chat_closed_at=now(),
           unread_for_customer=0,unread_for_driver=0`;
@@ -213,7 +215,7 @@ export function createCoreRepository({ url, ca }) {
         throw new ApiError(400, 'invalid_action');
       }
       const params = action === 'accept' ? [orderId, actor.id]
-        : action === 'cancel' ? [orderId, actor.uid] : [orderId];
+        : ['cancel', 'withdraw'].includes(action) ? [orderId, actor.uid] : [orderId];
       const result = await client.query(`
         update efata.orders set ${update} where id=$1
         returning ${orderFields().replaceAll('o.', '')}
