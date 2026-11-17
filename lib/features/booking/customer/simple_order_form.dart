@@ -12,9 +12,14 @@ import 'package:logistics_app/features/map/map_picker_screen.dart';
 import 'package:logistics_app/features/tracking/track_delivery_screen.dart';
 
 class SimpleOrderForm extends StatefulWidget {
-  const SimpleOrderForm({super.key, this.embedded = false});
+  const SimpleOrderForm({
+    super.key,
+    this.embedded = false,
+    this.scheduleOnOpen = false,
+  });
 
   final bool embedded;
+  final bool scheduleOnOpen;
 
   @override
   State<SimpleOrderForm> createState() => _SimpleOrderFormState();
@@ -55,6 +60,11 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   void initState() {
     super.initState();
     loadRecentPlaces();
+    if (widget.scheduleOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(openSchedulePicker());
+      });
+    }
   }
 
   Future<void> loadRecentPlaces() async {
@@ -321,6 +331,15 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
       );
       return;
     }
+    final pickupTime = scheduledPickupAt;
+    if (pickupTime != null && !pickupTime.isAfter(DateTime.now())) {
+      AppNotificationBannerService.error(
+        'Choose a pickup time in the future.',
+        title: 'Pickup time has passed',
+      );
+      await openSchedulePicker();
+      return;
+    }
 
     setState(() {
       isSubmitting = true;
@@ -338,7 +357,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
         vehicleType: vehicleType,
         paymentMethod: paymentMethod,
         amount: estimatedPrice,
-        scheduledFor: scheduledPickupAt,
+        scheduledFor: pickupTime,
       );
 
       if (!mounted) return;
@@ -419,7 +438,7 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
       ),
     );
 
-    if (result == null) return;
+    if (!mounted || result == null) return;
 
     setState(() {
       scheduledPickupAt = result.dateTime;

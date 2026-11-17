@@ -33,14 +33,24 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           padding: const EdgeInsets.all(16),
           child: ListView(
             children: [
-              const CustomerSummaryCard(),
-              const SizedBox(height: 20),
               CustomerPrimaryAction(
                 onPressed: () => setState(() => currentIndex = 1),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.calendar_month_outlined),
+                title: const Text('Schedule a goods pickup'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SimpleOrderForm(scheduleOnOpen: true),
+                  ),
+                ),
               ),
               const SizedBox(height: 20),
               const ActiveDeliverySection(),
               const SizedBox(height: 20),
+              const CustomerSummaryCard(),
             ],
           ),
         ),
