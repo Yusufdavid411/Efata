@@ -1,5 +1,8 @@
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/efata_backend_config.dart';
@@ -53,6 +56,45 @@ class EfataSession {
     _access = null;
     _refresh = null;
     _refreshing = null;
+  }
+
+  Future<void> signInWithGoogle() async {
+    clear();
+    final generation = _generation;
+    final random = Random.secure();
+    final verifier = base64UrlEncode(
+      List<int>.generate(32, (_) => random.nextInt(256)),
+    ).replaceAll('=', '');
+    final challenge = base64UrlEncode(
+      sha256.convert(ascii.encode(verifier)).bytes,
+    ).replaceAll('=', '');
+    const scheme = 'io.efata.auth';
+    const redirect = '$scheme://google';
+    final authorization =
+        Uri.https('fwjxmutbsiokeevgvbat.supabase.co', '/auth/v1/authorize', {
+          'provider': 'google',
+          'redirect_to': redirect,
+          'code_challenge': challenge,
+          'code_challenge_method': 's256',
+        });
+    final callback = Uri.parse(
+      await FlutterWebAuth2.authenticate(
+        url: authorization.toString(),
+        callbackUrlScheme: scheme,
+      ),
+    );
+    final code = callback.queryParameters['code'];
+    if (callback.scheme != scheme ||
+        callback.authority != 'google' ||
+        code == null ||
+        code.isEmpty ||
+        generation != _generation) {
+      throw const EfataApiException('google_sign_in_failed', statusCode: 400);
+    }
+    await _exchange('google_exchange', {
+      'code': code,
+      'verifier': verifier,
+    }, generation);
   }
 
   Future<String?> token({required bool refresh}) async {

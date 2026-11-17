@@ -34,7 +34,15 @@ export function createAuthHandler({
             { error: 'password_change_failed' });
       }
       let path, body;
-      if (action === 'refresh') {
+      if (action === 'google_exchange') {
+        const { code, verifier } = input;
+        if (typeof code !== 'string' || !code || code.length > 512 ||
+            typeof verifier !== 'string' || !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier)) {
+          return send(400, { error: 'invalid_request' });
+        }
+        path = '/auth/v1/token?grant_type=pkce';
+        body = { auth_code: code, code_verifier: verifier };
+      } else if (action === 'refresh') {
         if (typeof refreshToken !== 'string' || !refreshToken || refreshToken.length > 4096) {
           return send(400, { error: 'invalid_request' });
         }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/efata_api_client.dart';
 import 'package:logistics_app/core/services/efata_session.dart';
@@ -39,13 +40,46 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    await _signIn(() => EfataSession.instance.signIn(email, password));
+  }
+
+  Future<void> _signIn(
+    Future<void> Function() authenticate, {
+    bool google = false,
+  }) async {
     setState(() {
       isLoading = true;
     });
 
     try {
-      await EfataSession.instance.signIn(email, password);
-      final account = await EfataApiClient.instance.bootstrapAccount();
+      await authenticate();
+      final client = EfataApiClient.instance;
+      final account = await client
+          .bootstrapAccount()
+          .onError<EfataApiException>((error, stack) async {
+            if (!google || error.code != 'account_role_required') throw error;
+            if (!mounted) throw error;
+            final role = await showDialog<String>(
+              context: context,
+              builder: (context) => SimpleDialog(
+                title: const Text('Choose your account type'),
+                children: [
+                  for (final role in ['customer', 'driver'])
+                    SimpleDialogOption(
+                      onPressed: () => Navigator.pop(context, role),
+                      child: Text(role == 'customer' ? 'Customer' : 'Driver'),
+                    ),
+                ],
+              ),
+            );
+            if (role == null || !mounted) {
+              throw const EfataApiException(
+                'sign_in_cancelled',
+                statusCode: 400,
+              );
+            }
+            return client.bootstrapAccount(role: role);
+          });
       final access = AccountAccess.fromApi(account);
       if (access.isBlocked || !['customer', 'driver'].contains(access.role)) {
         throw const EfataApiException('account_unavailable', statusCode: 403);
@@ -55,6 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on EfataApiException catch (error) {
       EfataSession.instance.clear();
       if (!mounted) return;
+      if (error.code == 'sign_in_cancelled') return;
       AppNotificationBannerService.error(switch (error.code) {
         'invalid_credentials' => 'Incorrect email or password.',
         'email_not_confirmed' => 'Confirm your email before signing in.',
@@ -66,7 +101,10 @@ class _LoginScreenState extends State<LoginScreen> {
       EfataSession.instance.clear();
       if (!mounted) return;
 
-      AppNotificationBannerService.error(e.toString(), title: 'Login failed');
+      AppNotificationBannerService.error(
+        'Sign-in was interrupted. Please try again.',
+        title: 'Login failed',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -166,6 +204,22 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Text(isLoading ? 'Signing in...' : 'Sign In'),
                         ),
                       ),
+                      if (!kIsWeb &&
+                          defaultTargetPlatform == TargetPlatform.android) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: isLoading
+                                ? null
+                                : () => _signIn(
+                                    EfataSession.instance.signInWithGoogle,
+                                    google: true,
+                                  ),
+                            child: const Text('Continue with Google'),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
