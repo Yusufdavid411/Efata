@@ -25,7 +25,8 @@ export function validateOrder(body) {
   let scheduledFor = null;
   if (body.scheduledFor != null) {
     const parsed = new Date(body.scheduledFor);
-    if (Number.isNaN(parsed.valueOf())) return null;
+    if (typeof body.scheduledFor !== 'string' ||
+        !Number.isFinite(parsed.valueOf()) || parsed.valueOf() <= Date.now()) return null;
     scheduledFor = parsed.toISOString();
   }
   return {

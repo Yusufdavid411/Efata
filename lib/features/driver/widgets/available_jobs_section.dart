@@ -353,6 +353,11 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     final item = data['item']?.toString() ?? 'No item description';
     final vehicleType = data['vehicleType']?.toString();
     final price = data['price'];
+    final scheduledAt = data['scheduledPickupAt'];
+    final localizations = MaterialLocalizations.of(context);
+    final pickupTime = scheduledAt is DateTime
+        ? '${localizations.formatMediumDate(scheduledAt.toLocal())}, ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(scheduledAt.toLocal()))}'
+        : null;
     final pickupPoint = _pointFromData(data, 'pickup');
     final dropoffPoint = _pointFromData(data, 'dropoff');
 
@@ -429,6 +434,12 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
               spacing: 8,
               runSpacing: 8,
               children: [
+                if (pickupTime != null)
+                  _JobChip(
+                    icon: Icons.event_outlined,
+                    label: 'Pickup: $pickupTime',
+                    tone: const Color(0xFF0F766E),
+                  ),
                 _JobChip(
                   icon: Icons.payments_outlined,
                   label: formatPrice(price),
@@ -468,6 +479,28 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
+                      if (pickupTime != null) {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (dialogContext) => AlertDialog(
+                            title: const Text('Accept scheduled pickup?'),
+                            content: Text('Pickup: $pickupTime'),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.pop(dialogContext, false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                onPressed: () =>
+                                    Navigator.pop(dialogContext, true),
+                                child: const Text('Accept'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (!mounted || confirmed != true) return;
+                      }
                       await acceptJob(jobId, driverId);
                     },
                     child: const Text("Accept"),
