@@ -2,19 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/efata_api_client.dart';
 import 'package:logistics_app/core/services/efata_session.dart';
 import 'package:logistics_app/core/services/location_service.dart';
 
 import '../../shared/widgets/app_bottom_navigation.dart';
-import '../../shared/widgets/ai_floating_button.dart';
 import 'driver_jobs_screen.dart';
 import 'driver_profile_screen.dart';
 import 'widgets/driver_status_toggle.dart';
 import 'widgets/available_jobs_section.dart';
 import 'widgets/driver_current_job_card.dart';
-import 'widgets/driver_history_section.dart';
 import 'widgets/driver_earnings_summary.dart';
 
 class DriverHomeScreen extends StatefulWidget {
@@ -34,6 +33,24 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   DateTime? _lastApiLocationPushAt;
   Timer? _availabilityRefresh;
   int _availabilityRequest = 0;
+  Position? _mapPosition;
+  GoogleMapController? _dashboardMap;
+  bool _changingAvailability = false;
+
+  LatLng? get _driverPoint {
+    final position = _mapPosition;
+    return isOnline && position != null
+        ? LatLng(position.latitude, position.longitude)
+        : null;
+  }
+
+  void _centerMap() {
+    final point = _driverPoint;
+    final map = _dashboardMap;
+    if (point != null && map != null) {
+      unawaited(map.animateCamera(CameraUpdate.newLatLngZoom(point, 16)));
+    }
+  }
 
   @override
   void initState() {
@@ -64,6 +81,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       final onlineChanged = isOnline != savedStatus;
       setState(() {
         isOnline = savedStatus;
+        if (!savedStatus) _mapPosition = null;
         verificationStatus = status;
         profileCompleted = account.profileCompleted;
         isLoadingAvailability = false;
@@ -86,6 +104,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   Future<void> handleStatusChange(bool value) async {
+    if (_changingAvailability) return;
+    setState(() => _changingAvailability = true);
+    try {
+      await _changeAvailability(value);
+    } finally {
+      if (mounted) setState(() => _changingAvailability = false);
+    }
+  }
+
+  Future<void> _changeAvailability(bool value) async {
     final driver = EfataSession.instance.accountUid;
 
     if (driver == null) return;
@@ -129,7 +157,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     Position? currentPosition;
     if (value) {
       currentPosition = await _prepareDriverLocation();
-      if (currentPosition == null) return;
+      if (currentPosition == null || !mounted) return;
     }
 
     try {
@@ -140,7 +168,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         heading: currentPosition?.heading,
       );
 
-      setState(() => isOnline = value);
+      if (!mounted) return;
+      ++_availabilityRequest;
+      setState(() {
+        isOnline = value;
+        _mapPosition = currentPosition;
+      });
+      _centerMap();
       _syncOnlineLocationTracking(value);
       AppNotificationBannerService.success(
         value
@@ -199,18 +233,31 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     if (driver == null) return;
 
     if (!shouldTrack) {
-      await driverLocationSubscription?.cancel();
+      final subscription = driverLocationSubscription;
       driverLocationSubscription = null;
+      await subscription?.cancel();
       return;
     }
 
     if (driverLocationSubscription != null) return;
 
     final access = await LocationService.requestLocationAccess();
-    if (access != LocationAccessStatus.granted) return;
+    if (access != LocationAccessStatus.granted ||
+        !mounted ||
+        !isOnline ||
+        driverLocationSubscription != null) {
+      return;
+    }
 
     driverLocationSubscription = LocationService.getLiveLocationStream().listen(
       (position) {
+        if (!mounted || !isOnline) return;
+        if (_mapPosition == null) {
+          setState(() => _mapPosition = position);
+          _centerMap();
+        } else {
+          _mapPosition = position;
+        }
         final now = DateTime.now();
         final lastPush = _lastApiLocationPushAt;
         if (lastPush != null && now.difference(lastPush).inSeconds < 5) {
@@ -357,48 +404,93 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   };
 
   Widget dashboardTab() {
-    return Stack(
+    return ListView(
+      padding: const EdgeInsets.all(16),
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: ListView(
-            children: [
-              const DriverEarningsSummary(),
-              const SizedBox(height: 20),
-
-              if (isLoadingAvailability)
-                const _DriverDashboardLoading()
-              else ...[
-                verificationCard(),
-
-                DriverStatusToggle(
-                  isOnline: isOnline,
-                  isLoading: isLoadingAvailability,
-                  onChanged: handleStatusChange,
+        if (currentIndex == 0)
+          SizedBox(
+            height: (MediaQuery.sizeOf(context).height * 0.46)
+                .clamp(240.0, 440.0)
+                .toDouble(),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: _driverPoint ?? const LatLng(9.08, 8.68),
+                        zoom: _driverPoint == null ? 5.5 : 16,
+                      ),
+                      onMapCreated: (map) {
+                        _dashboardMap = map;
+                        _centerMap();
+                      },
+                      myLocationEnabled: _driverPoint != null,
+                      myLocationButtonEnabled: false,
+                      zoomControlsEnabled: false,
+                    ),
+                  ),
                 ),
-
-                const SizedBox(height: 20),
-
-                const DriverCurrentJobCard(),
-
-                const Text(
-                  "Available Jobs",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Material(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    child: IconButton(
+                      tooltip: 'Center on my location',
+                      onPressed: _driverPoint == null ? null : _centerMap,
+                      icon: const Icon(Icons.my_location),
+                    ),
+                  ),
                 ),
-
-                const SizedBox(height: 10),
-
-                AvailableJobsSection(isOnline: isOnline),
-
-                const SizedBox(height: 30),
-
-                const DriverHistorySection(maxItems: 2),
               ],
-            ],
+            ),
           ),
-        ),
+        const SizedBox(height: 12),
 
-        const AIFloatingButton(),
+        if (isLoadingAvailability)
+          const _DriverDashboardLoading()
+        else ...[
+          verificationCard(),
+
+          DriverStatusToggle(
+            isOnline: isOnline,
+            isLoading: _changingAvailability,
+            onChanged: handleStatusChange,
+          ),
+
+          const SizedBox(height: 20),
+
+          const DriverCurrentJobCard(),
+
+          const Text(
+            "Available Jobs",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+
+          const SizedBox(height: 10),
+
+          AvailableJobsSection(isOnline: isOnline),
+
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.account_balance_wallet_outlined),
+            title: const Text('Earnings'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              useSafeArea: true,
+              showDragHandle: true,
+              builder: (_) => const SingleChildScrollView(
+                padding: EdgeInsets.all(16),
+                child: DriverEarningsSummary(),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -410,7 +502,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       bottomNavigationBar: AppBottomNavigation(
         isDriver: true,
         currentIndex: currentIndex,
-        onDestinationSelected: (index) => setState(() => currentIndex = index),
+        onDestinationSelected: (index) => setState(() {
+          if (index != 0) _dashboardMap = null;
+          currentIndex = index;
+        }),
       ),
       body: IndexedStack(
         index: currentIndex,
@@ -419,7 +514,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           const DriverJobsContent(),
           DriverProfileScreen(
             embedded: true,
-            onOpenJobs: () => setState(() => currentIndex = 1),
+            onOpenJobs: () => setState(() {
+              _dashboardMap = null;
+              currentIndex = 1;
+            }),
           ),
         ],
       ),
