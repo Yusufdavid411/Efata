@@ -23,6 +23,17 @@ export function validateOrder(body) {
     return null;
   }
   let scheduledFor = null;
+  let parcelPhoto = null;
+  if (body.parcelPhoto != null) {
+    const encoded = body.parcelPhoto;
+    if (typeof encoded !== 'string' || encoded.length > 349528 ||
+        !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) return null;
+    const bytes = Buffer.from(encoded, 'base64');
+    if (bytes.length > 256 * 1024 || bytes.toString('base64') !== encoded ||
+        !(bytes.subarray(0, 3).toString('hex') === 'ffd8ff' ||
+          bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a')) return null;
+    parcelPhoto = bytes;
+  }
   if (body.scheduledFor != null) {
     const parsed = new Date(body.scheduledFor);
     if (typeof body.scheduledFor !== 'string' ||
@@ -34,6 +45,7 @@ export function validateOrder(body) {
     dropoff: { label: body.dropoff.label.trim(), lat: body.dropoff.lat, lng: body.dropoff.lng },
     item: body.item.trim(), vehicleType: body.vehicleType.trim(),
     paymentMethod: body.paymentMethod.trim(), amount: body.amount, scheduledFor,
+    ...(parcelPhoto && { parcelPhoto }),
   };
 }
 
@@ -54,7 +66,7 @@ export function createOrdersHandler({
       const identity = await authenticate(req, verify);
       if (!identity?.uid) return sendJson(res, 401, { error: 'session_invalid' });
       if (req.method === 'POST') {
-        const order = validateOrder(await readJson(req));
+        const order = validateOrder(await readJson(req, 384 * 1024));
         if (!order) return sendJson(res, 400, { error: 'invalid_order' });
         return sendJson(res, 201, { order: await createOrder({ uid: identity.uid, order }) });
       }
@@ -62,7 +74,10 @@ export function createOrdersHandler({
       const orderId = params.get('id');
       if (orderId != null) {
         if (!uuid.test(orderId)) return sendJson(res, 400, { error: 'invalid_order' });
-        return sendJson(res, 200, { order: await getOrder({ uid: identity.uid, orderId }) });
+        const includePhoto = params.get('includePhoto') === '1';
+        return sendJson(res, 200, { order: await getOrder({
+          uid: identity.uid, orderId, ...(includePhoto && { includePhoto }),
+        }) });
       }
       const scope = params.get('scope') ?? 'mine';
       const page = Number(params.get('page') ?? '1');

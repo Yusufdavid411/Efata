@@ -93,6 +93,15 @@ class EfataApiClient {
     return EfataOrder.fromJson(_map(json['order']));
   }
 
+  Future<String?> getParcelPhoto(String orderId) async {
+    final json = await _request(
+      'GET',
+      '/api/orders',
+      query: {'id': orderId, 'includePhoto': '1'},
+    );
+    return _map(json['order'])['parcelPhoto'] as String?;
+  }
+
   Future<EfataOrder> createOrder({
     required String pickup,
     required double pickupLat,
@@ -105,6 +114,7 @@ class EfataApiClient {
     required String paymentMethod,
     required double amount,
     DateTime? scheduledFor,
+    String? parcelPhoto,
   }) async {
     final json = await _request(
       'POST',
@@ -116,6 +126,7 @@ class EfataApiClient {
         'vehicleType': vehicleType,
         'paymentMethod': paymentMethod,
         'amount': amount,
+        if (parcelPhoto != null) 'parcelPhoto': parcelPhoto,
         if (scheduledFor != null)
           'scheduledFor': scheduledFor.toUtc().toIso8601String(),
       },

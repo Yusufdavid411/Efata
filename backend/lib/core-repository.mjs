@@ -98,11 +98,13 @@ export function createCoreRepository({ url, ca }) {
     return { orders: result.rows.slice(0, limit), nextPage: result.rows.length > limit ? page + 1 : null };
   };
 
-  const getOrder = async ({ uid, orderId }) => {
+  const getOrder = async ({ uid, orderId, includePhoto = false }) => {
     const actor = await account(uid);
     if (!actor || actor.accountStatus !== 'active') throw new ApiError(403, 'account_unavailable');
     const result = await pool.query(`
-      select ${orderFields()} from efata.orders o
+      select ${orderFields()}
+        ${includePhoto ? ", replace(encode(o.parcel_photo, 'base64'), chr(10), '') as \"parcelPhoto\"" : ''}
+      from efata.orders o
       where o.id=$1 and ($2='admin' or o.customer_id=$3 or o.driver_id=$3)
     `, [orderId, actor.role, actor.id]);
     if (!result.rowCount) throw new ApiError(404, 'order_not_found');
@@ -160,12 +162,12 @@ export function createCoreRepository({ url, ca }) {
     const result = await pool.query(`
       insert into efata.orders
         (customer_id,pickup_label,pickup_lat,pickup_lng,dropoff_label,dropoff_lat,
-         dropoff_lng,item_description,vehicle_type,scheduled_for,amount,payment_method)
-      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         dropoff_lng,item_description,vehicle_type,scheduled_for,amount,payment_method,parcel_photo)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       returning ${orderFields().replaceAll('o.', '')}
     `, [actor.id, order.pickup.label, order.pickup.lat, order.pickup.lng,
       order.dropoff.label, order.dropoff.lat, order.dropoff.lng, order.item,
-      order.vehicleType, order.scheduledFor, order.amount, order.paymentMethod]);
+      order.vehicleType, order.scheduledFor, order.amount, order.paymentMethod, order.parcelPhoto ?? null]);
     return result.rows[0];
   };
 

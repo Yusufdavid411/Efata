@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../shared/widgets/parcel_photo_dialog.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/models/efata_api_models.dart';
@@ -192,6 +193,7 @@ class TrackDeliveryScreen extends StatelessWidget {
       ),
       hasDriverLocation: driverLat != null && driverLng != null,
       isCompleted: isCompleted,
+      onPhoto: () => showParcelPhoto(context, orderId),
       onChat: () {
         Navigator.push(
           context,
@@ -436,6 +438,7 @@ class _TrackingSummary extends StatelessWidget {
     required this.hasDriverLocation,
     required this.isCompleted,
     required this.onChat,
+    required this.onPhoto,
     required this.onPaymentTap,
     required this.onPaymentIssueTap,
     required this.onCancelTap,
@@ -451,6 +454,7 @@ class _TrackingSummary extends StatelessWidget {
   final bool hasDriverLocation;
   final bool isCompleted;
   final VoidCallback onChat;
+  final VoidCallback onPhoto;
   final VoidCallback? onPaymentTap;
   final VoidCallback? onPaymentIssueTap;
   final VoidCallback? onCancelTap;
@@ -565,6 +569,11 @@ class _TrackingSummary extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          TextButton.icon(
+            onPressed: onPhoto,
+            icon: const Icon(Icons.image_outlined),
+            label: const Text('Parcel photo'),
           ),
           if (onCancelTap != null) ...[
             const SizedBox(height: 8),

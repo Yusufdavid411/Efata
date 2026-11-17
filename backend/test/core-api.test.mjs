@@ -168,6 +168,20 @@ test('order validation enforces coordinates and bounded business fields', () => 
   }), null);
 });
 
+test('parcel photos are optional and reject malformed, oversized or unsupported data', () => {
+  const order = {
+    pickup: { label: 'A', lat: 0, lng: 0 },
+    dropoff: { label: 'B', lat: 1, lng: 1 },
+    item: 'Box', vehicleType: 'Van', paymentMethod: 'Cash', amount: 10,
+  };
+  const jpeg = Buffer.from('ffd8ff010203', 'hex');
+  assert.equal(validateOrder(order).parcelPhoto, undefined);
+  assert.deepEqual(validateOrder({ ...order, parcelPhoto: jpeg.toString('base64') }).parcelPhoto, jpeg);
+  for (const parcelPhoto of ['bad!', 'PHN2Zz4=', Buffer.alloc(256 * 1024 + 1).toString('base64')]) {
+    assert.equal(validateOrder({ ...order, parcelPhoto }), null);
+  }
+});
+
 test('messages use the authenticated participant and preserve closed-chat errors', async () => {
   const calls = [];
   const handler = createMessagesHandler({

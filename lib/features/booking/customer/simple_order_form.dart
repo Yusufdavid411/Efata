@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import '../../../core/models/efata_api_models.dart';
 import '../../../shared/widgets/vehicle_illustration.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/efata_api_client.dart';
 import 'package:logistics_app/core/services/efata_session.dart';
@@ -50,6 +53,49 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
   bool isTypingLocation = false;
   bool isLocatingCurrent = false;
   bool isSubmitting = false;
+  Uint8List? _parcelPhoto;
+
+  Future<void> _chooseParcelPhoto() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 720,
+        maxHeight: 720,
+        imageQuality: 65,
+      );
+      if (picked == null || !mounted) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      final jpeg =
+          bytes.length >= 3 &&
+          bytes[0] == 255 &&
+          bytes[1] == 216 &&
+          bytes[2] == 255;
+      final png =
+          bytes.length >= 8 &&
+          const [
+            137,
+            80,
+            78,
+            71,
+            13,
+            10,
+            26,
+            10,
+          ].asMap().entries.every((part) => bytes[part.key] == part.value);
+      if (bytes.length > 256 * 1024 || !(jpeg || png)) {
+        AppNotificationBannerService.error(
+          'Choose a smaller JPEG or PNG photo.',
+        );
+        return;
+      }
+      if (!isSubmitting) setState(() => _parcelPhoto = bytes);
+    } catch (_) {
+      if (mounted) {
+        AppNotificationBannerService.error('Could not open the photo.');
+      }
+    }
+  }
 
   double? pickupLat;
   double? pickupLng;
@@ -375,9 +421,11 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
         paymentMethod: paymentMethod,
         amount: estimatedPrice,
         scheduledFor: pickupTime,
+        parcelPhoto: _parcelPhoto == null ? null : base64Encode(_parcelPhoto!),
       );
 
       if (!mounted) return;
+      setState(() => _parcelPhoto = null);
       AppNotificationBannerService.success(
         'Your delivery request has been created.',
         title: 'Request sent',
@@ -597,6 +645,31 @@ class _SimpleOrderFormState extends State<SimpleOrderForm> {
                   estimatedPrice: estimatedPrice,
                   paymentMethod: paymentMethod,
                   scheduleLabel: scheduleLabel,
+                ),
+                ListTile(
+                  leading: _parcelPhoto == null
+                      ? const Icon(Icons.add_a_photo_outlined)
+                      : Image.memory(
+                          _parcelPhoto!,
+                          width: 42,
+                          height: 42,
+                          fit: BoxFit.cover,
+                        ),
+                  title: Text(
+                    _parcelPhoto == null
+                        ? 'Add parcel photo (optional)'
+                        : 'Replace parcel photo',
+                  ),
+                  onTap: isSubmitting ? null : _chooseParcelPhoto,
+                  trailing: _parcelPhoto == null
+                      ? null
+                      : IconButton(
+                          tooltip: 'Remove parcel photo',
+                          onPressed: isSubmitting
+                              ? null
+                              : () => setState(() => _parcelPhoto = null),
+                          icon: const Icon(Icons.close),
+                        ),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton.icon(

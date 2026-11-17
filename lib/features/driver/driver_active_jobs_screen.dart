@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../shared/widgets/parcel_photo_dialog.dart';
 import 'widgets/scheduled_pickup_label.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -449,6 +450,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
                   '$paymentMethod (${formatPaymentStatus(paymentStatus)})',
               chatLabel: chatLabel,
               unreadMessages: unreadMessages,
+              onPhoto: () => showParcelPhoto(context, orderId),
               onChat: () {
                 Navigator.push(
                   context,
@@ -668,6 +670,7 @@ class _DriverJobSheet extends StatefulWidget {
     required this.chatLabel,
     required this.unreadMessages,
     required this.onChat,
+    required this.onPhoto,
     required this.primaryAction,
     this.secondaryAction,
   });
@@ -685,6 +688,7 @@ class _DriverJobSheet extends StatefulWidget {
   final String chatLabel;
   final int unreadMessages;
   final VoidCallback onChat;
+  final VoidCallback onPhoto;
   final _DriverJobAction primaryAction;
   final _DriverJobAction? secondaryAction;
 
@@ -814,6 +818,11 @@ class _DriverJobSheetState extends State<_DriverJobSheet> {
             duration: const Duration(milliseconds: 180),
           ),
           const SizedBox(height: 12),
+          TextButton.icon(
+            onPressed: widget.onPhoto,
+            icon: const Icon(Icons.image_outlined),
+            label: const Text('Parcel photo'),
+          ),
           OutlinedButton.icon(
             onPressed: widget.onChat,
             icon: _ChatBadge(count: widget.unreadMessages),
