@@ -10,6 +10,7 @@ import '../../../core/services/google_route_service.dart';
 import '../../../core/services/app_notification_banner_service.dart';
 import '../../../shared/widgets/app_live_map.dart';
 import '../driver_active_jobs_screen.dart';
+import 'scheduled_pickup_label.dart';
 
 class AvailableJobsSection extends StatefulWidget {
   final bool isOnline;
@@ -353,11 +354,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
     final item = data['item']?.toString() ?? 'No item description';
     final vehicleType = data['vehicleType']?.toString();
     final price = data['price'];
-    final scheduledAt = data['scheduledPickupAt'];
-    final localizations = MaterialLocalizations.of(context);
-    final pickupTime = scheduledAt is DateTime
-        ? '${localizations.formatMediumDate(scheduledAt.toLocal())}, ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(scheduledAt.toLocal()))}'
-        : null;
+    final pickupTime = scheduledPickupLabel(context, data['scheduledPickupAt']);
     final pickupPoint = _pointFromData(data, 'pickup');
     final dropoffPoint = _pointFromData(data, 'dropoff');
 

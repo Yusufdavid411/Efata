@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'widgets/scheduled_pickup_label.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:logistics_app/core/models/efata_api_models.dart';
@@ -288,8 +289,13 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
       'driver',
     );
     final createdAt = data['createdAt'];
-    final scheduleLabel =
-        data['pickupScheduleLabel']?.toString() ?? 'Pickup now';
+    final scheduledPickup = scheduledPickupLabel(
+      context,
+      data['scheduledPickupAt'],
+    );
+    final scheduleLabel = scheduledPickup == null
+        ? data['pickupScheduleLabel']?.toString() ?? 'Pickup now'
+        : 'Scheduled pickup: $scheduledPickup';
     final pickupLat = _toDouble(data['pickupLat']);
     final pickupLng = _toDouble(data['pickupLng']);
     final dropoffLat = _toDouble(data['dropoffLat']);
@@ -690,6 +696,13 @@ class _DriverJobSheetState extends State<_DriverJobSheet> {
           ),
           const SizedBox(height: 16),
           _RoutePoint(label: 'Pickup', value: widget.pickup),
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 8),
+            child: Text(
+              widget.scheduleLabel,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
           const SizedBox(height: 12),
           _RoutePoint(label: 'Drop-off', value: widget.dropoff),
           const SizedBox(height: 14),
@@ -737,11 +750,6 @@ class _DriverJobSheetState extends State<_DriverJobSheet> {
                 ),
                 child: Column(
                   children: [
-                    _InfoRow(
-                      icon: Icons.schedule_rounded,
-                      value: widget.scheduleLabel,
-                    ),
-                    const SizedBox(height: 9),
                     _InfoRow(
                       icon: Icons.event_note_outlined,
                       value: widget.createdAtLabel,
