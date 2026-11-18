@@ -25,9 +25,14 @@ test('auth routes registration, sign-in and refresh without allowing admin signu
   assert.deepEqual(await post({ action: 'sign_in', ...credentials }),
     [200, { accessToken: 'access', refreshToken: 'refresh', expiresIn: 3600 }]);
   assert.equal((await post({ action: 'refresh', refreshToken: 'refresh' }))[0], 200);
+  assert.equal((await post({ action: 'google_exchange', code: 'code', verifier: 'short' }))[0], 400);
+  const verifier = 'a'.repeat(43);
+  assert.deepEqual(await post({ action: 'google_exchange', code: 'code', verifier }),
+    [200, { accessToken: 'access', refreshToken: 'refresh', expiresIn: 3600 }]);
+  assert.deepEqual(calls.at(-1)[1], { auth_code: 'code', code_verifier: verifier });
   assert.deepEqual(calls.map(([path]) => path), [
     '/auth/v1/signup', '/auth/v1/token?grant_type=password',
-    '/auth/v1/token?grant_type=refresh_token',
+    '/auth/v1/token?grant_type=refresh_token', '/auth/v1/token?grant_type=pkce',
   ]);
 });
 
