@@ -56,3 +56,14 @@ test('Google exchange uses the trusted provider and rejects malformed tokens', a
   assert.equal((await post({ action: 'google', idToken: token, provider: 'untrusted', role: 'admin' }))[0], 200);
   assert.deepEqual(calls, [['/auth/v1/token?grant_type=id_token', { provider: 'google', id_token: token }]]);
 });
+
+test('failed Google identity verification never creates an application session', async () => {
+  const handler = createAuthHandler({ url: 'https://example.test', key: 'test-key',
+    fetcher: async () => Response.json({ code: 'provider_disabled', message: 'internal provider detail' }, { status: 400 }),
+  });
+  let body;
+  const res = { setHeader() {}, end(raw) { body = JSON.parse(raw); } };
+  await handler({ method: 'POST', headers: {}, body: { action: 'google', idToken: 'a'.repeat(200) } }, res);
+  assert.equal(res.statusCode, 401);
+  assert.deepEqual(body, { error: 'google_not_configured' });
+});

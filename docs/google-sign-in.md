@@ -6,6 +6,10 @@ The backend delegates token verification to the configured Google provider and
 returns the same session format used by email sign-in. No client secret belongs
 in the APK. Supabase remains the server-side identity provider.
 
+The existing browser OAuth flow is retained as a PKCE fallback when native
+client configuration is unavailable. It also requests account selection. Both
+flows exchange credentials through EFATA's API and share the same bootstrap path.
+
 Build with `--dart-define=GOOGLE_SIGN_IN_WEB_CLIENT_ID=<web-client-id>`.
 The ID must appear in the production Google provider's accepted client IDs.
 Keep the existing first client ID and its secret when adding a native audience.
