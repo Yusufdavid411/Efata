@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/efata_api_client.dart';
 import 'package:logistics_app/core/services/efata_session.dart';
@@ -221,22 +220,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Text(isLoading ? 'Signing in...' : 'Sign In'),
                         ),
                       ),
-                      if (!kIsWeb &&
-                          defaultTargetPlatform == TargetPlatform.android) ...[
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton(
-                            onPressed: isLoading
-                                ? null
-                                : () => _signIn(
-                                    EfataSession.instance.signInWithGoogle,
-                                    google: true,
-                                  ),
-                            child: const Text('Continue with Google'),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),

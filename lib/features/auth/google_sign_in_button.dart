@@ -25,27 +25,38 @@ class _GoogleSignInButtonState extends State<GoogleSignInButton> {
   static Future<void>? _initialization;
   bool _busy = false;
 
+  Future<void> _authenticate() async {
+    const clientId = String.fromEnvironment('GOOGLE_SIGN_IN_WEB_CLIENT_ID');
+    if (clientId.isEmpty) {
+      await EfataSession.instance.signInWithGoogle();
+      return;
+    }
+    try {
+      _initialization ??= GoogleSignIn.instance.initialize(
+        serverClientId: clientId,
+      );
+      await _initialization;
+      // Allow account selection for every explicit sign-in attempt.
+      await GoogleSignIn.instance.signOut();
+      final google = await GoogleSignIn.instance.authenticate();
+      final token = google.authentication.idToken;
+      if (token == null) throw StateError('Missing Google identity token');
+      await EfataSession.instance.signInWithGoogleToken(token);
+    } on GoogleSignInException catch (error) {
+      if (error.code != GoogleSignInExceptionCode.clientConfigurationError &&
+          error.code != GoogleSignInExceptionCode.providerConfigurationError)
+        rethrow;
+      // Preserve the existing PKCE flow if native OAuth is unavailable on this build.
+      await EfataSession.instance.signInWithGoogle();
+    }
+  }
+
   Future<void> _signIn() async {
     if (_busy) return;
     setState(() => _busy = true);
     widget.onBusyChanged?.call(true);
     try {
-      const clientId = String.fromEnvironment('GOOGLE_SIGN_IN_WEB_CLIENT_ID');
-      if (clientId.isEmpty) {
-        throw const EfataApiException('google_not_configured', statusCode: 503);
-      }
-      _initialization ??= GoogleSignIn.instance.initialize(
-        serverClientId: clientId,
-      );
-      await _initialization;
-      // Clear the SDK's selection so every explicit tap can choose an account.
-      await GoogleSignIn.instance.signOut();
-      final google = await GoogleSignIn.instance.authenticate();
-      final token = google.authentication.idToken;
-      if (token == null) {
-        throw StateError('Google did not return an identity token');
-      }
-      await EfataSession.instance.signInWithGoogleToken(token);
+      await _authenticate();
       try {
         await _openAccount();
       } on EfataApiException catch (error) {

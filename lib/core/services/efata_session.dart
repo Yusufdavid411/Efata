@@ -63,6 +63,45 @@ class EfataSession {
     await _exchange('google', {'idToken': idToken}, _generation);
   }
 
+  Future<void> signInWithGoogle() async {
+    clear();
+    final generation = _generation;
+    final random = Random.secure();
+    final verifier = base64UrlEncode(
+      List<int>.generate(32, (_) => random.nextInt(256)),
+    ).replaceAll('=', '');
+    final challenge = base64UrlEncode(
+      sha256.convert(ascii.encode(verifier)).bytes,
+    ).replaceAll('=', '');
+    const scheme = 'io.efata.auth';
+    final authorization =
+        Uri.https('fwjxmutbsiokeevgvbat.supabase.co', '/auth/v1/authorize', {
+          'provider': 'google',
+          'redirect_to': '$scheme://google',
+          'code_challenge': challenge,
+          'code_challenge_method': 's256',
+          'prompt': 'select_account',
+        });
+    final callback = Uri.parse(
+      await FlutterWebAuth2.authenticate(
+        url: authorization.toString(),
+        callbackUrlScheme: scheme,
+      ),
+    );
+    final code = callback.queryParameters['code'];
+    if (callback.scheme != scheme ||
+        callback.authority != 'google' ||
+        code == null ||
+        code.isEmpty ||
+        generation != _generation) {
+      throw const EfataApiException('google_sign_in_failed', statusCode: 400);
+    }
+    await _exchange('google_exchange', {
+      'code': code,
+      'verifier': verifier,
+    }, generation);
+  }
+
   Future<String?> token({required bool refresh}) async {
     final credential = _refresh;
     if (!refresh || credential == null) return _access;
