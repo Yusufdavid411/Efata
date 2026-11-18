@@ -44,8 +44,9 @@ class _GoogleSignInButtonState extends State<GoogleSignInButton> {
       await EfataSession.instance.signInWithGoogleToken(token);
     } on GoogleSignInException catch (error) {
       if (error.code != GoogleSignInExceptionCode.clientConfigurationError &&
-          error.code != GoogleSignInExceptionCode.providerConfigurationError)
+          error.code != GoogleSignInExceptionCode.providerConfigurationError) {
         rethrow;
+      }
       // Preserve the existing PKCE flow if native OAuth is unavailable on this build.
       await EfataSession.instance.signInWithGoogle();
     }
