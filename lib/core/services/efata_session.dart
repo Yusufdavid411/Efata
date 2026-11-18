@@ -55,6 +55,11 @@ class EfataSession {
     _refreshing = null;
   }
 
+  Future<void> signInWithGoogleToken(String idToken) async {
+    clear();
+    await _exchange('google', {'idToken': idToken}, _generation);
+  }
+
   Future<String?> token({required bool refresh}) async {
     final credential = _refresh;
     if (!refresh || credential == null) return _access;

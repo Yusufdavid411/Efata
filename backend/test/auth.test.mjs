@@ -30,3 +30,24 @@ test('auth routes registration, sign-in and refresh without allowing admin signu
     '/auth/v1/token?grant_type=refresh_token',
   ]);
 });
+
+test('Google exchange uses the trusted provider and rejects malformed tokens', async () => {
+  const calls = [];
+  const handler = createAuthHandler({ url: 'https://example.test', key: 'test-key',
+    fetcher: async (url, options) => {
+      calls.push([url.pathname + url.search, JSON.parse(options.body)]);
+      return Response.json({ access_token: 'access', refresh_token: 'refresh', expires_in: 3600 });
+    },
+  });
+  const post = async (body) => {
+    let result;
+    const res = { setHeader() {}, end(raw) { result = JSON.parse(raw); } };
+    await handler({ method: 'POST', headers: {}, body }, res);
+    return [res.statusCode, result];
+  };
+  assert.equal((await post({ action: 'google', idToken: 'short' }))[0], 400);
+  assert.equal(calls.length, 0);
+  const token = 'a'.repeat(200);
+  assert.equal((await post({ action: 'google', idToken: token, provider: 'untrusted', role: 'admin' }))[0], 200);
+  assert.deepEqual(calls, [['/auth/v1/token?grant_type=id_token', { provider: 'google', id_token: token }]]);
+});

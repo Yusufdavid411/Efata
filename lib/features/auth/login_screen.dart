@@ -5,6 +5,7 @@ import 'package:logistics_app/core/services/efata_session.dart';
 
 import '../../core/services/account_access_service.dart';
 import 'role_selection_screen.dart';
+import 'google_sign_in_button.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -120,6 +121,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 30),
+              GoogleSignInButton(
+                enabled: !isLoading,
+                onBusyChanged: (busy) => setState(() => isLoading = busy),
+              ),
+              const SizedBox(height: 18),
+              const Row(
+                children: [
+                  Expanded(child: Divider()),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('or sign in with email'),
+                  ),
+                  Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 18),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(18),

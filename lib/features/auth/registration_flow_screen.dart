@@ -4,6 +4,7 @@ import '../../core/services/app_notification_banner_service.dart';
 import '../../core/services/password_strength_service.dart';
 import '../../core/services/efata_session.dart';
 import 'login_screen.dart';
+import 'google_sign_in_button.dart';
 
 class RegistrationFlowScreen extends StatefulWidget {
   const RegistrationFlowScreen({
@@ -137,6 +138,16 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 26),
           children: [
+            if (step == 0) ...[
+              GoogleSignInButton(
+                role: widget.role,
+                enabled: !isLoading,
+                onBusyChanged: (busy) => setState(() => isLoading = busy),
+              ),
+              const SizedBox(height: 20),
+              const Center(child: Text('or register with email')),
+              const SizedBox(height: 20),
+            ],
             Row(
               children: List.generate(2, (index) {
                 final active = index <= step;

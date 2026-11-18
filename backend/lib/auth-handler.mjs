@@ -34,7 +34,12 @@ export function createAuthHandler({
             { error: 'password_change_failed' });
       }
       let path, body;
-      if (action === 'refresh') {
+      if (action === 'google') {
+        if (typeof input.idToken !== 'string' || input.idToken.length < 100 ||
+            input.idToken.length > 7000) return send(400, { error: 'invalid_request' });
+        path = '/auth/v1/token?grant_type=id_token';
+        body = { provider: 'google', id_token: input.idToken };
+      } else if (action === 'refresh') {
         if (typeof refreshToken !== 'string' || !refreshToken || refreshToken.length > 4096) {
           return send(400, { error: 'invalid_request' });
         }
@@ -66,6 +71,10 @@ export function createAuthHandler({
       const result = await response.json();
       if (!response.ok) {
         if (response.status >= 500) return send(503, { error: 'auth_unavailable' });
+        if (action === 'google') return send(401, {
+          error: result.code === 'provider_disabled' || result.code === 'validation_failed'
+            ? 'google_not_configured' : 'google_sign_in_failed',
+        });
         return send(action === 'register' ? 400 : 401, {
           error: action === 'register' ? 'registration_failed'
             : result.code === 'email_not_confirmed' ? 'email_not_confirmed' : 'invalid_credentials',
