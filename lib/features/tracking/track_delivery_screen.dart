@@ -56,7 +56,7 @@ class TrackDeliveryScreen extends StatelessWidget {
       case 'paid':
         return 'Paid';
       case 'customersent':
-        return 'Customer Sent';
+        return 'Passenger sent payment';
       case 'cashdue':
         return 'Cash Due';
       case 'pending':

@@ -5,6 +5,7 @@ import '../../core/services/password_strength_service.dart';
 import '../../core/services/efata_session.dart';
 import 'login_screen.dart';
 import 'google_sign_in_button.dart';
+import 'auth_heading.dart';
 
 class RegistrationFlowScreen extends StatefulWidget {
   const RegistrationFlowScreen({
@@ -139,6 +140,11 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 26),
           children: [
             if (step == 0) ...[
+              const AuthHeading(
+                title: 'Create your account',
+                subtitle: 'Continue with Google or register with your email.',
+              ),
+              const SizedBox(height: 18),
               GoogleSignInButton(
                 role: widget.role,
                 enabled: !isLoading,
@@ -180,7 +186,6 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
               child: switch (step) {
                 0 => _EmailStep(
                   key: const ValueKey('email'),
-                  role: widget.role,
                   subtitle: widget.subtitle,
                   controller: emailController,
                   isLoading: isLoading,
@@ -217,14 +222,12 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
 class _EmailStep extends StatelessWidget {
   const _EmailStep({
     super.key,
-    required this.role,
     required this.subtitle,
     required this.controller,
     required this.isLoading,
     required this.onContinue,
   });
 
-  final String role;
   final String subtitle;
   final TextEditingController controller;
   final bool isLoading;
@@ -270,7 +273,7 @@ class _EmailStep extends StatelessWidget {
         _InfoPanel(
           icon: Icons.verified_user_outlined,
           title: 'Email verification',
-          body: 'EFATA will email a confirmation link for this $role account.',
+          body: 'EFATA will email a confirmation link for your account.',
         ),
         const SizedBox(height: 28),
         ElevatedButton(

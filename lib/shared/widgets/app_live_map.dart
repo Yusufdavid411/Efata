@@ -17,6 +17,7 @@ class AppLiveMap extends StatefulWidget {
     required this.pickupPoint,
     required this.dropoffPoint,
     required this.driverPoint,
+    this.isDriverMap = false,
     this.followDriver = false,
     this.activeTargetPoint,
     this.activeTargetLabel,
@@ -28,6 +29,7 @@ class AppLiveMap extends StatefulWidget {
   final LatLng pickupPoint;
   final LatLng dropoffPoint;
   final LatLng? driverPoint;
+  final bool isDriverMap;
   final bool followDriver;
   final LatLng? activeTargetPoint;
   final String? activeTargetLabel;
@@ -60,7 +62,6 @@ class _AppLiveMapState extends State<AppLiveMap> {
   MapType mapType = MapType.hybrid;
   BitmapDescriptor? pickupMarkerIcon;
   BitmapDescriptor? dropoffMarkerIcon;
-  BitmapDescriptor? driverMarkerIcon;
 
   @override
   void initState() {
@@ -261,7 +262,6 @@ class _AppLiveMapState extends State<AppLiveMap> {
     final icons = await Future.wait([
       _buildPickupMarkerIcon(),
       _buildDropoffMarkerIcon(),
-      _buildDriverMarkerIcon(),
     ]);
 
     if (!mounted) return;
@@ -269,7 +269,6 @@ class _AppLiveMapState extends State<AppLiveMap> {
     setState(() {
       pickupMarkerIcon = icons[0];
       dropoffMarkerIcon = icons[1];
-      driverMarkerIcon = icons[2];
     });
   }
 
@@ -410,119 +409,6 @@ class _AppLiveMapState extends State<AppLiveMap> {
     return _bitmapFromRecorder(recorder, markerSize, 34);
   }
 
-  Future<BitmapDescriptor> _buildDriverMarkerIcon() async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    const markerSize = Size(92, 92);
-    const center = Offset(46, 46);
-
-    final shadow = Paint()
-      ..color = Colors.black.withValues(alpha: 0.24)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9);
-    canvas.drawOval(const Rect.fromLTWH(21, 68, 50, 11), shadow);
-
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-
-    final body = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          const Rect.fromLTWH(-22, -35, 44, 73),
-          const Radius.circular(12),
-        ),
-      );
-    canvas.drawPath(
-      body.shift(const Offset(0, 4)),
-      Paint()..color = const Color(0xFF065F46),
-    );
-    canvas.drawPath(
-      body,
-      Paint()
-        ..shader = ui.Gradient.linear(
-          const Offset(-18, -30),
-          const Offset(18, 34),
-          const [Color(0xFF9AF5D0), Color(0xFF0F766E)],
-        ),
-    );
-
-    final bonnet = Path()
-      ..moveTo(0, -31)
-      ..lineTo(14, -13)
-      ..lineTo(8, -4)
-      ..lineTo(-8, -4)
-      ..lineTo(-14, -13)
-      ..close();
-    canvas.drawPath(bonnet, Paint()..color = const Color(0xFF34D399));
-
-    final windshield = Path()
-      ..moveTo(-9, -2)
-      ..lineTo(9, -2)
-      ..lineTo(14, 13)
-      ..lineTo(-14, 13)
-      ..close();
-    canvas.drawPath(
-      windshield,
-      Paint()
-        ..shader = ui.Gradient.linear(
-          const Offset(-12, -3),
-          const Offset(12, 14),
-          const [Color(0xFFE0F2FE), Color(0xFF7DD3FC)],
-        ),
-    );
-
-    final rearWindow = RRect.fromRectAndRadius(
-      const Rect.fromLTWH(-10, 19, 20, 9),
-      const Radius.circular(4),
-    );
-    canvas.drawRRect(rearWindow, Paint()..color = const Color(0xFFBAE6FD));
-
-    final sideWindowPaint = Paint()..color = const Color(0xFFCFFAFE);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        const Rect.fromLTWH(-18, 4, 7, 18),
-        const Radius.circular(3),
-      ),
-      sideWindowPaint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        const Rect.fromLTWH(11, 4, 7, 18),
-        const Radius.circular(3),
-      ),
-      sideWindowPaint,
-    );
-
-    final wheelPaint = Paint()..color = const Color(0xFF111827);
-    for (final rect in const [
-      Rect.fromLTWH(-27, -13, 7, 17),
-      Rect.fromLTWH(20, -13, 7, 17),
-      Rect.fromLTWH(-26, 15, 7, 16),
-      Rect.fromLTWH(19, 15, 7, 16),
-    ]) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(3)),
-        wheelPaint,
-      );
-    }
-
-    canvas.drawCircle(
-      const Offset(-9, -27),
-      2.6,
-      Paint()..color = Colors.white,
-    );
-    canvas.drawCircle(const Offset(9, -27), 2.6, Paint()..color = Colors.white);
-    canvas.drawPath(
-      body,
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.35)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4,
-    );
-    canvas.restore();
-
-    return _bitmapFromRecorder(recorder, markerSize, 44);
-  }
-
   Future<BitmapDescriptor> _bitmapFromRecorder(
     ui.PictureRecorder recorder,
     Size markerSize,
@@ -539,19 +425,10 @@ class _AppLiveMapState extends State<AppLiveMap> {
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(), width: width);
   }
 
-  double _bearingBetween(LatLng from, LatLng to) {
-    final fromLat = from.latitude * math.pi / 180;
-    final toLat = to.latitude * math.pi / 180;
-    final deltaLng = (to.longitude - from.longitude) * math.pi / 180;
-    final y = math.sin(deltaLng) * math.cos(toLat);
-    final x =
-        math.cos(fromLat) * math.sin(toLat) -
-        math.sin(fromLat) * math.cos(toLat) * math.cos(deltaLng);
-    return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
-  }
-
   void _fitRouteAfterFrame() {
-    WidgetsBinding.instance.addPostFrameCallback((_) => _fitRoute());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_fitRoute());
+    });
   }
 
   Future<void> _fitRoute() async {
@@ -731,19 +608,14 @@ class _AppLiveMapState extends State<AppLiveMap> {
         icon: dropoffMarkerIcon ?? BitmapDescriptor.defaultMarker,
         anchor: Offset(0.5, dropoffMarkerIcon == null ? 1 : 0.86),
       ),
-      if (widget.driverPoint != null)
+      if (!widget.isDriverMap && widget.driverPoint != null)
         Marker(
           markerId: const MarkerId('driver'),
           position: widget.driverPoint!,
           infoWindow: const InfoWindow(title: 'Driver'),
-          icon:
-              driverMarkerIcon ??
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-          anchor: Offset(0.5, driverMarkerIcon == null ? 1 : 0.5),
-          flat: driverMarkerIcon != null,
-          rotation: driverMarkerIcon != null && activeTargetPoint != null
-              ? _bearingBetween(widget.driverPoint!, activeTargetPoint)
-              : 0,
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueAzure,
+          ),
         ),
     };
 

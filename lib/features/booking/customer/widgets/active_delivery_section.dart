@@ -7,18 +7,20 @@ import '../../../../core/services/google_route_service.dart';
 import '../../../tracking/track_delivery_screen.dart';
 
 class ActiveDeliverySection extends StatelessWidget {
-  const ActiveDeliverySection({super.key});
+  const ActiveDeliverySection({super.key, this.onOpenOrders});
+  final VoidCallback? onOpenOrders;
 
   bool isCurrentOrder(String status) => _isCurrentOrder(status);
 
   @override
   Widget build(BuildContext context) {
-    return const _ApiActiveDeliverySection();
+    return _ApiActiveDeliverySection(onOpenOrders: onOpenOrders);
   }
 }
 
 class _ApiActiveDeliverySection extends StatefulWidget {
-  const _ApiActiveDeliverySection();
+  const _ApiActiveDeliverySection({this.onOpenOrders});
+  final VoidCallback? onOpenOrders;
 
   @override
   State<_ApiActiveDeliverySection> createState() =>
@@ -54,7 +56,10 @@ class _ApiActiveDeliverySectionState extends State<_ApiActiveDeliverySection> {
         }
         final orders = snapshot.data?.orders ?? const <EfataOrder>[];
         if (orders.isEmpty) return const _EmptyOrdersCard();
-        final latest = orders.first;
+        final latest = orders.firstWhere(
+          (order) => _isCurrentOrder(order.status),
+          orElse: () => orders.first,
+        );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -76,7 +81,9 @@ class _ApiActiveDeliverySectionState extends State<_ApiActiveDeliverySection> {
                   icon: const Icon(Icons.refresh_rounded),
                 ),
                 TextButton(
-                  onPressed: () => Navigator.pushNamed(context, '/orders'),
+                  onPressed:
+                      widget.onOpenOrders ??
+                      () => Navigator.pushNamed(context, '/orders'),
                   child: const Text('See more'),
                 ),
               ],
@@ -118,11 +125,12 @@ class OrderPreviewCard extends StatelessWidget {
     final unreadMessages = (data['unreadForCustomer'] as num?)?.toInt() ?? 0;
     final current = _isCurrentOrder(status);
     final normalizedStatus = _normalizeStatus(status);
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
 
     return Card(
-      color: Colors.white,
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
         onTap: () {
           if (current) {
             Navigator.push(
@@ -147,9 +155,8 @@ class OrderPreviewCard extends StatelessWidget {
                   if (title != null) ...[
                     Text(
                       title!,
-                      style: const TextStyle(
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w800,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -161,14 +168,14 @@ class OrderPreviewCard extends StatelessWidget {
                         width: 42,
                         height: 42,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEFFDF6),
-                          borderRadius: BorderRadius.circular(14),
+                          color: colors.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
                           current
                               ? Icons.route_rounded
                               : Icons.check_circle_outline_rounded,
-                          color: const Color(0xFF0F766E),
+                          color: colors.onPrimaryContainer,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -180,20 +187,14 @@ class OrderPreviewCard extends StatelessWidget {
                               dropoff,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF0F172A),
-                                fontWeight: FontWeight.w900,
-                              ),
+                              style: theme.textTheme.titleMedium,
                             ),
                             const SizedBox(height: 4),
                             Text(
                               'From $pickup',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF64748B),
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: TextStyle(color: colors.onSurfaceVariant),
                             ),
                             const SizedBox(height: 6),
                             Text(

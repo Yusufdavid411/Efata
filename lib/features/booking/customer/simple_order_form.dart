@@ -730,10 +730,12 @@ class _RouteSearchHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      elevation: 6,
-      shadowColor: Colors.black.withValues(alpha: 0.08),
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
         child: Column(
@@ -748,7 +750,7 @@ class _RouteSearchHeader extends StatelessWidget {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
+                  color: colors.primaryContainer,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Row(
@@ -756,11 +758,14 @@ class _RouteSearchHeader extends StatelessWidget {
                   children: [
                     const Icon(Icons.schedule_rounded, size: 19),
                     const SizedBox(width: 8),
-                    Text(
-                      scheduleLabel,
-                      style: const TextStyle(
-                        color: Color(0xFF0F172A),
-                        fontWeight: FontWeight.w800,
+                    Flexible(
+                      child: Text(
+                        scheduleLabel,
+                        maxLines: 2,
+                        style: TextStyle(
+                          color: colors.onPrimaryContainer,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -1073,24 +1078,26 @@ class _ShipmentDetailsSection extends StatelessWidget {
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
               initialValue: vehicleType,
-              decoration: const InputDecoration(
-                labelText: 'Vehicle type',
-                prefixIcon: Icon(Icons.local_shipping_outlined),
-              ),
+              decoration: const InputDecoration(labelText: 'Vehicle type'),
               items: [
-                for (final type in efataVehicleTypes)
-                  DropdownMenuItem(
-                    value: type,
-                    child: Row(
-                      children: [
-                        VehicleIllustration(type),
-                        const SizedBox(width: 8),
-                        Text(type),
-                      ],
-                    ),
-                  ),
+                for (final type in efataVehicleTypes.where(
+                  (type) => type != 'Mixer' || type == vehicleType,
+                ))
+                  DropdownMenuItem(value: type, child: Text(type)),
               ],
               onChanged: onVehicleChanged,
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Semantics(
+                label: '$vehicleType preview',
+                child: SizedBox(
+                  width: 90,
+                  height: 48,
+                  child: VehicleIllustration(vehicleType),
+                ),
+              ),
             ),
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(

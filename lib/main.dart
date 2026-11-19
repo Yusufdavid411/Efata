@@ -15,6 +15,7 @@ import 'package:logistics_app/core/controllers/app_settings_controller.dart';
 import 'package:logistics_app/core/services/app_notification_banner_service.dart';
 import 'package:logistics_app/core/services/chat_notification_service.dart';
 import 'package:logistics_app/core/services/voice_navigation_control_service.dart';
+import 'shared/theme/efata_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,86 +28,6 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  ThemeData lightTheme() {
-    const seed = Color(0xFF0F766E);
-
-    return ThemeData(
-      brightness: Brightness.light,
-      colorScheme: ColorScheme.fromSeed(seedColor: seed),
-      scaffoldBackgroundColor: Colors.white,
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.white,
-        foregroundColor: Color(0xFF0F172A),
-        elevation: 0,
-        centerTitle: false,
-        titleTextStyle: TextStyle(
-          color: Color(0xFF0F172A),
-          fontSize: 19,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-      cardTheme: CardThemeData(
-        color: Colors.white,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Color(0xFFE2E8F0)),
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 15,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: seed, width: 1.6),
-        ),
-        labelStyle: const TextStyle(color: Color(0xFF475569)),
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-        ),
-      ),
-    );
-  }
-
-  ThemeData darkTheme() {
-    return ThemeData(
-      brightness: Brightness.dark,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF2DD4BF),
-        brightness: Brightness.dark,
-      ),
-      scaffoldBackgroundColor: const Color(0xFF0F172A),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF0F172A),
-        foregroundColor: Color(0xFFF8FAFC),
-        elevation: 0,
-      ),
-      cardTheme: CardThemeData(
-        color: const Color(0xFF111827),
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -115,8 +36,8 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           navigatorKey: AppNotificationBannerService.navigatorKey,
           debugShowCheckedModeBanner: false,
-          theme: lightTheme(),
-          darkTheme: darkTheme(),
+          theme: EfataTheme.build(Brightness.light),
+          darkTheme: EfataTheme.build(Brightness.dark),
           themeMode: appSettingsController.themeMode,
           initialRoute: '/',
           onGenerateRoute: (settings) {

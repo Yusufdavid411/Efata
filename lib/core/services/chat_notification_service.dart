@@ -66,7 +66,7 @@ class ChatNotificationService {
         if (EfataSession.instance.accountUid != uid) return;
         await showChatNotification(
           orderId: order.id,
-          title: account.role == 'driver' ? 'Customer' : 'Driver',
+          title: account.role == 'driver' ? 'Passenger' : 'Driver',
           body: message,
         );
       }
@@ -95,7 +95,7 @@ class ChatNotificationService {
       'delivery_chat_messages',
       'EFATA chat',
       channelDescription:
-          'Messages from drivers and customers during active deliveries',
+          'Messages from drivers and passengers during active deliveries',
       importance: Importance.high,
       priority: Priority.high,
       category: AndroidNotificationCategory.message,

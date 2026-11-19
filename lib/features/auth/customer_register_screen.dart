@@ -9,7 +9,7 @@ class CustomerRegisterScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const RegistrationFlowScreen(
       role: 'customer',
-      title: 'Customer Registration',
+      title: 'Passenger registration',
       subtitle:
           'Enter your email so EFATA can confirm your account before you book deliveries.',
       onboardingRoute: '/customerOnboarding',

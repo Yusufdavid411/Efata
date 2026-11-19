@@ -36,6 +36,22 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   Position? _mapPosition;
   GoogleMapController? _dashboardMap;
   bool _changingAvailability = false;
+  final _profileEarningsKey = GlobalKey();
+
+  void _openEarnings() {
+    setState(() => currentIndex = 2);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final earnings = _profileEarningsKey.currentContext;
+      if (earnings != null) {
+        unawaited(
+          Scrollable.ensureVisible(
+            earnings,
+            duration: const Duration(milliseconds: 220),
+          ),
+        );
+      }
+    });
+  }
 
   LatLng? get _driverPoint {
     final position = _mapPosition;
@@ -194,7 +210,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     if (access == LocationAccessStatus.serviceDisabled) {
       AppNotificationBannerService.error(
-        'Turn on location so customers can see where their driver is coming from.',
+        'Turn on location so passengers can track their delivery.',
         title: 'Location required',
       );
       await LocationService.openLocationSettings();
@@ -313,7 +329,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         : 'Your account must be approved before you can receive delivery requests.';
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(top: 12),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -396,26 +412,38 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
-  String get title => switch (currentIndex) {
-    0 => 'Driver Dashboard',
-    1 => 'Jobs',
-    2 => 'Profile',
-    _ => 'Driver Dashboard',
-  };
-
   Widget dashboardTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (currentIndex == 0)
-          SizedBox(
-            height: (MediaQuery.sizeOf(context).height * 0.46)
-                .clamp(240.0, 440.0)
-                .toDouble(),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: ClipRRect(
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final approved = verificationStatus == 'approved';
+    return RefreshIndicator(
+      onRefresh: _loadApiDriverAvailability,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+        children: [
+          if (isLoadingAvailability)
+            const LinearProgressIndicator()
+          else ...[
+            DriverStatusToggle(
+              isOnline: isOnline,
+              isLoading: _changingAvailability,
+              canGoOnline: approved,
+              onChanged: handleStatusChange,
+            ),
+            verificationCard(),
+          ],
+          const SizedBox(height: 16),
+          DriverEarningsSummary(compact: true, onOpenDetails: _openEarnings),
+          const SizedBox(height: 16),
+          const DriverCurrentJobCard(),
+          if (isOnline)
+            SizedBox(
+              height: 176,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: GoogleMap(
                       initialCameraPosition: CameraPosition(
@@ -431,137 +459,61 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       zoomControlsEnabled: false,
                     ),
                   ),
-                ),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Material(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    child: IconButton(
-                      tooltip: 'Center on my location',
-                      onPressed: _driverPoint == null ? null : _centerMap,
-                      icon: const Icon(Icons.my_location),
+                  if (_driverPoint != null)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: IconButton.filledTonal(
+                        tooltip: 'Center on my location',
+                        onPressed: _centerMap,
+                        icon: const Icon(Icons.my_location),
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        const SizedBox(height: 12),
-
-        if (isLoadingAvailability)
-          const _DriverDashboardLoading()
-        else ...[
-          verificationCard(),
-
-          DriverStatusToggle(
-            isOnline: isOnline,
-            isLoading: _changingAvailability,
-            onChanged: handleStatusChange,
-          ),
-
-          const SizedBox(height: 20),
-
-          const DriverCurrentJobCard(),
-
-          const Text(
-            "Available Jobs",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-
-          const SizedBox(height: 10),
-
-          AvailableJobsSection(isOnline: isOnline),
-
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.account_balance_wallet_outlined),
-            title: const Text('Earnings'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              useSafeArea: true,
-              showDragHandle: true,
-              builder: (_) => const SingleChildScrollView(
-                padding: EdgeInsets.all(16),
-                child: DriverEarningsSummary(),
+                ],
               ),
             ),
-          ),
+          const SizedBox(height: 18),
+          Text('Available jobs', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 10),
+          if (!isLoadingAvailability)
+            AvailableJobsSection(isOnline: isOnline, canGoOnline: approved)
+          else
+            Text(
+              'Checking availability',
+              style: TextStyle(color: colors.onSurfaceVariant),
+            ),
         ],
-      ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title), automaticallyImplyLeading: false),
+      appBar: currentIndex == 0
+          ? AppBar(title: const Text('EFATA'), automaticallyImplyLeading: false)
+          : currentIndex == 1
+          ? AppBar(title: const Text('Jobs'), automaticallyImplyLeading: false)
+          : null,
       bottomNavigationBar: AppBottomNavigation(
         isDriver: true,
         currentIndex: currentIndex,
-        onDestinationSelected: (index) => setState(() {
-          if (index != 0) _dashboardMap = null;
-          currentIndex = index;
-        }),
+        onDestinationSelected: (index) => setState(() => currentIndex = index),
       ),
       body: IndexedStack(
         index: currentIndex,
         children: [
           dashboardTab(),
           const DriverJobsContent(),
-          DriverProfileScreen(
-            embedded: true,
-            onOpenJobs: () => setState(() {
-              _dashboardMap = null;
-              currentIndex = 1;
-            }),
+          SafeArea(
+            bottom: false,
+            child: DriverProfileScreen(
+              embedded: true,
+              earningsKey: _profileEarningsKey,
+              onOpenJobs: () => setState(() => currentIndex = 1),
+            ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _DriverDashboardLoading extends StatelessWidget {
-  const _DriverDashboardLoading();
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Row(
-          children: [
-            const SizedBox(
-              width: 26,
-              height: 26,
-              child: CircularProgressIndicator(strokeWidth: 2.6),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'Preparing dashboard',
-                    style: TextStyle(
-                      color: Color(0xFF0F172A),
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Checking your driver status behind the scenes.',
-                    style: TextStyle(color: Color(0xFF64748B)),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

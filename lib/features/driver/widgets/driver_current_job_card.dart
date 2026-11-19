@@ -123,8 +123,6 @@ class _CurrentJobDetailsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final pickup = data['pickup']?.toString() ?? 'Pickup location';
     final dropoff = data['dropoff']?.toString() ?? 'Drop-off location';
-    final vehicleType = data['vehicleType']?.toString();
-
     void openJob() {
       Navigator.push(
         context,
@@ -134,96 +132,44 @@ class _CurrentJobDetailsCard extends StatelessWidget {
       );
     }
 
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     return Card(
-      color: const Color(0xFFEFF8FF),
-      margin: const EdgeInsets.only(bottom: 20),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: Color(0xFFBFDBFE)),
-      ),
+      margin: const EdgeInsets.only(bottom: 16),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
         onTap: openJob,
         child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.all(14),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.route_rounded, color: Color(0xFF0F766E)),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Current Job',
-                      style: TextStyle(
-                        color: Color(0xFF0F172A),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  _StatusPill(label: status),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                pickup,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF0F172A),
-                  fontWeight: FontWeight.w800,
-                  height: 1.3,
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Icon(
-                  Icons.arrow_downward_rounded,
-                  color: Color(0xFF64748B),
-                  size: 20,
-                ),
-              ),
-              Text(
-                dropoff,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF0F172A),
-                  fontWeight: FontWeight.w800,
-                  height: 1.3,
-                ),
-              ),
-              if (vehicleType != null && vehicleType.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Row(
+              Icon(Icons.route_rounded, color: colors.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.local_shipping_outlined,
-                      size: 18,
-                      color: Color(0xFF64748B),
-                    ),
-                    const SizedBox(width: 8),
+                    Text('Current job', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 4),
                     Text(
-                      vehicleType,
-                      style: const TextStyle(
-                        color: Color(0xFF475569),
-                        fontWeight: FontWeight.w700,
-                      ),
+                      dropoff,
+                      style: theme.textTheme.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                    Text(
+                      'From $pickup',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: colors.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 6),
+                    _StatusPill(label: status),
                   ],
                 ),
-              ],
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: openJob,
-                  icon: const Icon(Icons.open_in_new_rounded),
-                  label: const Text('View Job'),
-                ),
               ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
             ],
           ),
         ),

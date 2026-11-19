@@ -9,7 +9,7 @@ class DriverRegisterScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const RegistrationFlowScreen(
       role: 'driver',
-      title: 'Driver Registration',
+      title: 'Driver registration',
       subtitle:
           'Enter your email so EFATA can confirm your driver account before profile setup.',
       onboardingRoute: '/driverOnboarding',

@@ -24,12 +24,12 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
   }
 
   Future<void> loadSavedProfile() async {
-
     try {
       final account = await EfataApiClient.instance.getMe();
       final savedName = account.displayName;
       final savedPhone = account.phone ?? '';
-      final savedAddress = account.customerProfile?['defaultPickupAddress']?.toString() ?? '';
+      final savedAddress =
+          account.customerProfile?['defaultPickupAddress']?.toString() ?? '';
 
       if (!mounted) return;
       nameController.text = savedName;
@@ -50,7 +50,6 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
   }
 
   Future<void> submit() async {
-
     final name = nameController.text.trim();
     final phone = phoneController.text.trim();
     final address = addressController.text.trim();
@@ -67,12 +66,14 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
 
     try {
       await EfataApiClient.instance.updateProfile({
-        'name': name, 'phone': phone, 'address': address,
+        'name': name,
+        'phone': phone,
+        'address': address,
       });
 
       if (!mounted) return;
       AppNotificationBannerService.success(
-        'Your customer profile is ready.',
+        'Your passenger profile is ready.',
         title: 'Profile completed',
       );
       Navigator.pushNamedAndRemoveUntil(context, '/customerHome', (_) => false);
@@ -98,7 +99,7 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Customer Setup'),
+        title: const Text('Passenger setup'),
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
@@ -116,7 +117,7 @@ class _CustomerOnboardingScreenState extends State<CustomerOnboardingScreen> {
             ),
             const SizedBox(height: 22),
             const Text(
-              'Set up your customer profile',
+              'Set up your passenger profile',
               style: TextStyle(
                 color: Color(0xFF0F172A),
                 fontSize: 28,

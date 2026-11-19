@@ -12,16 +12,19 @@ import '../../core/services/app_notification_banner_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../shared/widgets/app_bottom_navigation.dart';
 import 'driver_onboarding_screen.dart';
+import 'widgets/driver_earnings_summary.dart';
 
 class DriverProfileScreen extends StatefulWidget {
   const DriverProfileScreen({
     super.key,
     this.embedded = false,
     this.onOpenJobs,
+    this.earningsKey,
   });
 
   final bool embedded;
   final VoidCallback? onOpenJobs;
+  final GlobalKey? earningsKey;
 
   @override
   State<DriverProfileScreen> createState() => _DriverProfileScreenState();
@@ -199,16 +202,17 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                 labelText: "Vehicle Type",
                 border: OutlineInputBorder(),
               ),
-              items: const [
-                DropdownMenuItem(value: 'Truck', child: Text('Truck')),
-                DropdownMenuItem(value: 'Tipper', child: Text('Tipper')),
-                DropdownMenuItem(
+              items: [
+                const DropdownMenuItem(value: 'Truck', child: Text('Truck')),
+                const DropdownMenuItem(value: 'Tipper', child: Text('Tipper')),
+                const DropdownMenuItem(
                   value: 'Petrol Tanker',
                   child: Text('Petrol Tanker'),
                 ),
-                DropdownMenuItem(value: 'Van', child: Text('Van')),
-                DropdownMenuItem(value: 'Pickup', child: Text('Pickup')),
-                DropdownMenuItem(value: 'Mixer', child: Text('Mixer')),
+                const DropdownMenuItem(value: 'Van', child: Text('Van')),
+                const DropdownMenuItem(value: 'Pickup', child: Text('Pickup')),
+                if (currentValue == 'Mixer')
+                  const DropdownMenuItem(value: 'Mixer', child: Text('Mixer')),
               ],
               onChanged: (value) {
                 if (value != null) {
@@ -444,7 +448,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   Stack(
                     children: [
                       CircleAvatar(
-                        radius: 50,
+                        radius: 42,
                         backgroundImage: photoUrl != null
                             ? NetworkImage(photoUrl)
                             : null,
@@ -456,7 +460,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                         right: 0,
                         bottom: 0,
                         child: CircleAvatar(
-                          backgroundColor: Colors.deepPurple,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
                           child: IconButton(
                             icon: isUploading
                                 ? const SizedBox(
@@ -523,6 +529,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             ),
 
             const SizedBox(height: 20),
+            DriverEarningsSummary(key: widget.earningsKey),
+            const SizedBox(height: 16),
 
             if (!profileCompleted) ...[
               setupRequiredCard(),
@@ -607,6 +615,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       : 'Update review documents',
                 ),
               ),
+            const SizedBox(height: 16),
             _ProfileActionCard(
               children: [
                 _ProfileActionTile(
@@ -648,10 +657,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     if (widget.embedded) return content;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Driver Profile"),
-        automaticallyImplyLeading: false,
-      ),
+      appBar: AppBar(automaticallyImplyLeading: false),
       bottomNavigationBar: const AppBottomNavigation(
         isDriver: true,
         currentIndex: 2,

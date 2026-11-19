@@ -13,7 +13,7 @@ class SettingsScreen extends StatelessWidget {
       animation: appSettingsController,
       builder: (context, _) {
         return Scaffold(
-          appBar: AppBar(title: const Text("Settings"), centerTitle: true),
+          appBar: AppBar(title: const Text('Settings')),
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -41,12 +41,6 @@ class SettingsScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-              const Text(
-                "Password & sign-in",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
               const SizedBox(height: 20),
               const Text(
                 "Account",

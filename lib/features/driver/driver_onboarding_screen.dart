@@ -262,22 +262,32 @@ class _DriverOnboardingScreenState extends State<DriverOnboardingScreen> {
                         labelText: 'Vehicle type',
                         prefixIcon: Icon(Icons.local_shipping_outlined),
                       ),
-                      items: const [
-                        DropdownMenuItem(value: 'Truck', child: Text('Truck')),
-                        DropdownMenuItem(
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'Truck',
+                          child: Text('Truck'),
+                        ),
+                        const DropdownMenuItem(
                           value: 'Tipper',
                           child: Text('Tipper'),
                         ),
-                        DropdownMenuItem(
+                        const DropdownMenuItem(
                           value: 'Petrol Tanker',
                           child: Text('Petrol Tanker'),
                         ),
-                        DropdownMenuItem(value: 'Van', child: Text('Van')),
-                        DropdownMenuItem(
+                        const DropdownMenuItem(
+                          value: 'Van',
+                          child: Text('Van'),
+                        ),
+                        const DropdownMenuItem(
                           value: 'Pickup',
                           child: Text('Pickup'),
                         ),
-                        DropdownMenuItem(value: 'Mixer', child: Text('Mixer')),
+                        if (vehicleType == 'Mixer')
+                          const DropdownMenuItem(
+                            value: 'Mixer',
+                            child: Text('Mixer'),
+                          ),
                       ],
                       onChanged: (v) => setState(() => vehicleType = v!),
                     ),

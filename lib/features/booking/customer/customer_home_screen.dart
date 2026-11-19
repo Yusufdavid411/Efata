@@ -19,36 +19,46 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   int currentIndex = 0;
 
   String get title => switch (currentIndex) {
-    0 => 'Passenger Dashboard',
+    0 => 'EFATA',
     1 => 'Send Goods',
     2 => 'Orders',
-    3 => 'Profile',
-    _ => 'Passenger Dashboard',
+    _ => 'EFATA',
   };
 
   Widget dashboardTab() {
     return Stack(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
           child: ListView(
+            padding: const EdgeInsets.only(bottom: 88),
             children: [
+              Text(
+                'Send a delivery',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 12),
               CustomerPrimaryAction(
                 onPressed: () => setState(() => currentIndex = 1),
               ),
               const SizedBox(height: 8),
-              ListTile(
-                leading: const Icon(Icons.calendar_month_outlined),
-                title: const Text('Schedule a goods pickup'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const SimpleOrderForm(scheduleOnOpen: true),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.calendar_month_outlined),
+                  title: const Text('Schedule pickup'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          const SimpleOrderForm(scheduleOnOpen: true),
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: 20),
-              const ActiveDeliverySection(),
+              ActiveDeliverySection(
+                onOpenOrders: () => setState(() => currentIndex = 2),
+              ),
               const SizedBox(height: 20),
               const CustomerSummaryCard(),
             ],
@@ -62,7 +72,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title), automaticallyImplyLeading: false),
+      appBar: currentIndex == 3
+          ? null
+          : AppBar(title: Text(title), automaticallyImplyLeading: false),
       bottomNavigationBar: AppBottomNavigation(
         isDriver: false,
         currentIndex: currentIndex,
@@ -74,7 +86,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           dashboardTab(),
           const SimpleOrderForm(embedded: true),
           const OrderHistoryContent(),
-          const CustomerProfileScreen(embedded: true),
+          const SafeArea(
+            bottom: false,
+            child: CustomerProfileScreen(embedded: true),
+          ),
         ],
       ),
     );

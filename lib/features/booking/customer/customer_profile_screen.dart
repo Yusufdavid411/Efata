@@ -89,7 +89,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   Future<void> showEditProfileForm(Map<String, dynamic> data) async {
     final savedName = _customerNameFromData(data);
     final nameController = TextEditingController(
-      text: savedName == 'Customer' ? '' : savedName,
+      text: savedName == 'Passenger' ? '' : savedName,
     );
 
     await showModalBottomSheet(
@@ -281,7 +281,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     final name = data['name']?.toString().trim();
     if (name != null && name.isNotEmpty) return name;
 
-    return 'Customer';
+    return 'Passenger';
   }
 
   Future<void> confirmLogout() async {
@@ -370,19 +370,21 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                   Stack(
                     children: [
                       CircleAvatar(
-                        radius: 52,
+                        radius: 42,
                         backgroundImage: photoUrl != null
                             ? NetworkImage(photoUrl)
                             : null,
                         child: photoUrl == null
-                            ? const Icon(Icons.person, size: 52)
+                            ? const Icon(Icons.person_outline, size: 38)
                             : null,
                       ),
                       Positioned(
                         right: 0,
                         bottom: 0,
                         child: CircleAvatar(
-                          backgroundColor: Colors.deepPurple,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
                           child: IconButton(
                             icon: isUploading
                                 ? const SizedBox(
@@ -519,10 +521,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     if (widget.embedded) return content;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Customer Profile"),
-        automaticallyImplyLeading: false,
-      ),
+      appBar: AppBar(automaticallyImplyLeading: false),
       bottomNavigationBar: const AppBottomNavigation(
         isDriver: false,
         currentIndex: 3,

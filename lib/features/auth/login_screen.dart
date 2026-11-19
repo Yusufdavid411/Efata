@@ -6,6 +6,7 @@ import 'package:logistics_app/core/services/efata_session.dart';
 import '../../core/services/account_access_service.dart';
 import 'role_selection_screen.dart';
 import 'google_sign_in_button.dart';
+import 'auth_heading.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -40,46 +41,11 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    await _signIn(() => EfataSession.instance.signIn(email, password));
-  }
-
-  Future<void> _signIn(
-    Future<void> Function() authenticate, {
-    bool google = false,
-  }) async {
-    setState(() {
-      isLoading = true;
-    });
-
+    if (isLoading) return;
+    setState(() => isLoading = true);
     try {
-      await authenticate();
-      final client = EfataApiClient.instance;
-      final account = await client
-          .bootstrapAccount()
-          .onError<EfataApiException>((error, stack) async {
-            if (!google || error.code != 'account_role_required') throw error;
-            if (!mounted) throw error;
-            final role = await showDialog<String>(
-              context: context,
-              builder: (context) => SimpleDialog(
-                title: const Text('Choose your account type'),
-                children: [
-                  for (final role in ['customer', 'driver'])
-                    SimpleDialogOption(
-                      onPressed: () => Navigator.pop(context, role),
-                      child: Text(role == 'customer' ? 'Customer' : 'Driver'),
-                    ),
-                ],
-              ),
-            );
-            if (role == null || !mounted) {
-              throw const EfataApiException(
-                'sign_in_cancelled',
-                statusCode: 400,
-              );
-            }
-            return client.bootstrapAccount(role: role);
-          });
+      await EfataSession.instance.signIn(email, password);
+      final account = await EfataApiClient.instance.bootstrapAccount();
       final access = AccountAccess.fromApi(account);
       if (access.isBlocked || !['customer', 'driver'].contains(access.role)) {
         throw const EfataApiException('account_unavailable', statusCode: 403);
@@ -116,8 +82,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -125,39 +89,12 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 58,
-                height: 58,
-                decoration: BoxDecoration(
-                  color: colors.primary,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Icon(
-                  Icons.local_shipping_rounded,
-                  color: Colors.white,
-                  size: 30,
-                ),
+              const AuthHeading(
+                title: 'Sign in',
+                subtitle:
+                    'Book deliveries, track trips, and manage your EFATA account.',
               ),
-              const SizedBox(height: 30),
-              const Text(
-                'Welcome back',
-                style: TextStyle(
-                  color: Color(0xFF0F172A),
-                  fontSize: 32,
-                  height: 1.06,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Sign in to book deliveries, track trips, and manage your EFATA account.',
-                style: TextStyle(
-                  color: Color(0xFF64748B),
-                  fontSize: 15,
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 24),
               GoogleSignInButton(
                 enabled: !isLoading,
                 onBusyChanged: (busy) => setState(() => isLoading = busy),
@@ -240,67 +177,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: const Text('Create a new EFATA account'),
                 ),
               ),
-              const SizedBox(height: 18),
-              const _TrustStrip(),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _TrustStrip extends StatelessWidget {
-  const _TrustStrip();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        Expanded(
-          child: _TrustItem(icon: Icons.route_rounded, label: 'Live tracking'),
-        ),
-        SizedBox(width: 10),
-        Expanded(
-          child: _TrustItem(
-            icon: Icons.verified_user_outlined,
-            label: 'Verified drivers',
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TrustItem extends StatelessWidget {
-  const _TrustItem({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 19, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF334155),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

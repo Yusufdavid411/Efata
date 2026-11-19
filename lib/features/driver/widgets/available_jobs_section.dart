@@ -14,8 +14,13 @@ import 'scheduled_pickup_label.dart';
 
 class AvailableJobsSection extends StatefulWidget {
   final bool isOnline;
+  final bool canGoOnline;
 
-  const AvailableJobsSection({super.key, required this.isOnline});
+  const AvailableJobsSection({
+    super.key,
+    required this.isOnline,
+    required this.canGoOnline,
+  });
 
   @override
   State<AvailableJobsSection> createState() => _AvailableJobsSectionState();
@@ -286,6 +291,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
                       top: Radius.circular(18),
                     ),
                     child: AppLiveMap(
+                      isDriverMap: true,
                       pickupPoint: pickupPoint,
                       dropoffPoint: dropoffPoint,
                       driverPoint: driverPoint,
@@ -318,26 +324,15 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
   }
 
   Widget _buildOfflineNotice() {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.orange),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              "You are offline. You can still view already loaded jobs, but you will not receive the latest available jobs until you go online again.",
-            ),
-          ),
-        ],
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.wifi_off_outlined),
+        title: const Text('New requests are paused'),
+        subtitle: Text(
+          widget.canGoOnline
+              ? 'Go online to see available jobs.'
+              : 'Driver approval is required to go online.',
+        ),
       ),
     );
   }
@@ -521,26 +516,7 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
   }
 
   Widget _buildApiJobs(String driverId) {
-    if (!widget.isOnline) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildOfflineNotice(),
-          if (_cachedApiJobs.isEmpty)
-            const Text('Go online to load available jobs')
-          else
-            ..._cachedApiJobs.map(
-              (order) => _buildJobCard(
-                context,
-                order.id,
-                order.toLegacyMap(),
-                driverId,
-                _apiDriverPoint,
-              ),
-            ),
-        ],
-      );
-    }
+    if (!widget.isOnline) return _buildOfflineNotice();
     if (_apiLoading && _cachedApiJobs.isEmpty && _apiError == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -548,7 +524,13 @@ class _AvailableJobsSectionState extends State<AvailableJobsSection> {
       return _AvailableJobsError(onRetry: _loadApiJobs);
     }
     if (_cachedApiJobs.isEmpty) {
-      return const Text('No available jobs');
+      return const Card(
+        child: ListTile(
+          leading: Icon(Icons.inbox_outlined),
+          title: Text('No jobs right now'),
+          subtitle: Text('You are online. New requests will appear here.'),
+        ),
+      );
     }
     return Column(
       children: _cachedApiJobs

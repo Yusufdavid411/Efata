@@ -38,7 +38,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
       builder: (dialog) => AlertDialog(
         title: const Text('Withdraw from this delivery?'),
         content: const Text(
-          'This cancels the order so the customer can rebook.',
+          'This cancels the order so the passenger can rebook.',
         ),
         actions: [
           TextButton(
@@ -177,7 +177,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
       case 'paid':
         return 'Paid';
       case 'customersent':
-        return 'Customer Sent';
+        return 'Passenger sent payment';
       case 'cashdue':
         return 'Cash Due';
       case 'pending':
@@ -193,7 +193,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
     if (access == LocationAccessStatus.serviceDisabled) {
       if (mounted) {
         AppNotificationBannerService.error(
-          'Turn on location so EFATA can guide you to the pickup and keep the customer updated.',
+          'Turn on location so EFATA can guide you to pickup and keep the passenger updated.',
           title: 'Location needed',
         );
       }
@@ -399,6 +399,7 @@ class _DriverActiveJobsScreenState extends State<DriverActiveJobsScreen> {
         Positioned.fill(
           child: hasRoute
               ? AppLiveMap(
+                  isDriverMap: true,
                   pickupPoint: pickupPoint!,
                   dropoffPoint: dropoffPoint!,
                   driverPoint: driverPoint,
@@ -640,7 +641,7 @@ String _chatButtonLabel(
   if (unreadMessages > 1) return '$unreadMessages new messages';
   if (lastMessageSenderRole == viewerRole) return 'Message sent';
   if (lastMessageSenderRole.isNotEmpty) return 'Chat updated';
-  return 'Chat With Customer';
+  return 'Chat with passenger';
 }
 
 class _DriverJobAction {
